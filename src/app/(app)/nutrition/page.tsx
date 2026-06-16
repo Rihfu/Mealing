@@ -46,13 +46,13 @@ export default async function NutritionPage() {
 
       <section>
         <h2 className="mb-2 text-sm font-semibold">Aujourd’hui ({today})</h2>
-        <p className="mb-2 text-xs text-gray-500">
+        <p className="mb-2 text-xs text-ink-soft">
           Estimation sur la base d’une portion par repas planifié. « Réel estimé » tient compte des
           écarts signalés (sauté / différent).
         </p>
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-gray-500">
+            <tr className="text-left text-ink-soft">
               <th className="py-1">Nutriment</th>
               <th className="py-1 text-right">Planifié</th>
               <th className="py-1 text-right">Réel estimé</th>
@@ -66,15 +66,15 @@ export default async function NutritionPage() {
               const goal = goalByCode.get(t.code);
               const over = goal != null && real > goal;
               return (
-                <tr key={t.code} className="border-t border-gray-100 dark:border-gray-800">
+                <tr key={t.code} className="border-t border-line dark:border-gray-800">
                   <td className="py-1">
-                    {t.name} <span className="text-gray-400">({t.unit})</span>
+                    {t.name} <span className="text-ink-soft">({t.unit})</span>
                   </td>
-                  <td className="py-1 text-right text-gray-500">{r1(planned)}</td>
-                  <td className={`py-1 text-right font-medium ${over ? 'text-red-600' : ''}`}>
+                  <td className="py-1 text-right text-ink-soft">{r1(planned)}</td>
+                  <td className={`py-1 text-right font-medium ${over ? 'text-red-strong' : ''}`}>
                     {r1(real)}
                   </td>
-                  <td className="py-1 text-right text-gray-500">{goal != null ? goal : '—'}</td>
+                  <td className="py-1 text-right text-ink-soft">{goal != null ? goal : '—'}</td>
                 </tr>
               );
             })}
@@ -88,7 +88,7 @@ export default async function NutritionPage() {
         </h2>
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-gray-500">
+            <tr className="text-left text-ink-soft">
               <th className="py-1">Nutriment</th>
               <th className="py-1 text-right">Planifié</th>
               <th className="py-1 text-right">Réel estimé</th>
@@ -96,11 +96,11 @@ export default async function NutritionPage() {
           </thead>
           <tbody>
             {types.map((t) => (
-              <tr key={t.code} className="border-t border-gray-100 dark:border-gray-800">
+              <tr key={t.code} className="border-t border-line dark:border-gray-800">
                 <td className="py-1">
-                  {t.name} <span className="text-gray-400">({t.unit})</span>
+                  {t.name} <span className="text-ink-soft">({t.unit})</span>
                 </td>
-                <td className="py-1 text-right text-gray-500">{r1(weekAgg.planned[t.code] ?? 0)}</td>
+                <td className="py-1 text-right text-ink-soft">{r1(weekAgg.planned[t.code] ?? 0)}</td>
                 <td className="py-1 text-right font-medium">{r1(weekAgg.real[t.code] ?? 0)}</td>
               </tr>
             ))}
@@ -114,7 +114,7 @@ export default async function NutritionPage() {
           {types.map((t) => (
             <label key={t.code} className="flex items-center justify-between gap-2 text-sm">
               <span>
-                {t.name} <span className="text-gray-400">({t.unit})</span>
+                {t.name} <span className="text-ink-soft">({t.unit})</span>
               </span>
               <input
                 name={`goal_${t.code}`}
@@ -122,13 +122,13 @@ export default async function NutritionPage() {
                 step="any"
                 min="0"
                 defaultValue={goalByCode.get(t.code) ?? ''}
-                className="w-28 rounded border border-gray-300 px-2 py-1 dark:border-gray-700 dark:bg-gray-900"
+                className="w-28 rounded border border-line-strong px-2 py-1 dark:border-gray-700 dark:bg-gray-900"
               />
             </label>
           ))}
           <button
             type="submit"
-            className="self-start rounded bg-black px-3 py-1.5 text-sm text-white dark:bg-white dark:text-black"
+            className="self-start rounded bg-green-strong px-3 py-1.5 text-sm text-white dark:bg-white dark:text-black"
           >
             Enregistrer mes objectifs
           </button>

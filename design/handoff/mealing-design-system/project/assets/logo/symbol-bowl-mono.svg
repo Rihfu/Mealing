@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="Mealing bowl and sprout (monochrome)">
+  <path d="M32 34 C31.6 28 32.2 23.5 32 19.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path>
+  <path d="M32 24.5 C27 24.8 22.6 22 21.3 16.4 C27.2 15.2 31.6 18.6 32 24.5 Z" fill="currentColor"></path>
+  <path d="M32 21 C36.6 20.6 41.2 17.4 42.4 11.8 C36.6 11 32.2 14.8 32 21 Z" fill="currentColor" opacity="0.55"></path>
+  <path d="M12.5 33 C20 30.6 44 30.4 51.5 33.2" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"></path>
+  <path d="M14.5 34 C16 46 23.5 52.5 32 52.5 C40.5 52.5 48 46 49.5 34" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>

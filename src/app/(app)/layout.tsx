@@ -3,6 +3,16 @@ import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
 import { signOut } from '@/app/auth/actions';
 
+const NAV = [
+  ['/planning', 'Planning'],
+  ['/recettes', 'Recettes'],
+  ['/nutrition', 'Nutrition'],
+  ['/stock', 'Stock'],
+  ['/courses', 'Courses'],
+  ['/foyer', 'Foyer'],
+  ['/assistant', 'Assistant'],
+] as const;
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { userId, profile, email } = await getAuthContext();
   if (!userId) redirect('/login');
@@ -10,38 +20,29 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="mx-auto flex min-h-screen max-w-4xl flex-col">
-      <header className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-        <nav className="flex items-center gap-4 text-sm font-medium">
-          <Link href="/planning" className="hover:underline">
-            Planning
+      <header className="sticky top-0 z-10 border-b border-line bg-surface/90 backdrop-blur">
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+          <Link href="/planning" className="flex items-center gap-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.svg" alt="" width={28} height={28} aria-hidden="true" />
+            <span className="font-display text-lg font-semibold text-ink">Mealing</span>
           </Link>
-          <Link href="/recettes" className="hover:underline">
-            Recettes
-          </Link>
-          <Link href="/nutrition" className="hover:underline">
-            Nutrition
-          </Link>
-          <Link href="/stock" className="hover:underline">
-            Stock
-          </Link>
-          <Link href="/courses" className="hover:underline">
-            Courses
-          </Link>
-          <Link href="/foyer" className="hover:underline">
-            Foyer
-          </Link>
-          <Link href="/assistant" className="hover:underline">
-            Assistant
-          </Link>
-        </nav>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-gray-500">{profile.display_name || email}</span>
-          <form action={signOut}>
-            <button type="submit" className="text-gray-500 underline">
-              Déconnexion
-            </button>
-          </form>
+          <div className="flex items-center gap-3 text-sm">
+            <span className="hidden text-ink-soft sm:inline">{profile.display_name || email}</span>
+            <form action={signOut}>
+              <button type="submit" className="nav-link underline-offset-2 hover:underline">
+                Déconnexion
+              </button>
+            </form>
+          </div>
         </div>
+        <nav className="flex items-center gap-4 overflow-x-auto px-4 pb-2">
+          {NAV.map(([href, label]) => (
+            <Link key={href} href={href} className="nav-link whitespace-nowrap hover:underline">
+              {label}
+            </Link>
+          ))}
+        </nav>
       </header>
       <main className="flex-1 p-4">{children}</main>
     </div>

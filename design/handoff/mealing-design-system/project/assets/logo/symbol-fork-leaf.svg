@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="Mealing fork-leaf">
+  
+  <path d="M32 53 L32 30" stroke="#5E7E58" stroke-width="2.8" stroke-linecap="round"></path>
+  
+  <path d="M25 12 L25.4 27 C25.6 30 28.6 31.5 32 31.5 C35.4 31.5 38.4 30 38.6 27 L39 12" stroke="#5E7E58" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path>
+  <path d="M28.7 12 L28.9 25" stroke="#5E7E58" stroke-width="2.2" stroke-linecap="round"></path>
+  <path d="M32 12 L32 25.5" stroke="#5E7E58" stroke-width="2.2" stroke-linecap="round"></path>
+  <path d="M35.3 12 L35.1 25" stroke="#5E7E58" stroke-width="2.2" stroke-linecap="round"></path>
+  
+  <path d="M32 40 C39 39.5 45 35 46.5 28 C39.5 27.2 33 31.5 32 40 Z" fill="#45A35E"></path>
+  <path d="M33 38.5 C37 36 41 33.5 44.5 30.5" stroke="#FFFDFA" stroke-width="1.5" stroke-linecap="round" opacity="0.8"></path>
+</svg>

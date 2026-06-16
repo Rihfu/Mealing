@@ -1,26 +1,151 @@
 @import "tailwindcss";
+/* Les webfonts (Fraunces / Nunito / Caveat) sont chargées via un <link> dans le
+   layout racine — Tailwind v4 développe @import "tailwindcss" sur place, ce qui
+   interdit tout @import url() ici. */
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Mealing est un thème clair chaud unique : on désactive le dark mode auto de l'OS.
+   Les classes `dark:` existantes deviennent inertes (aucun ancêtre `.dark`). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Neutres — papier & encre */
+  --color-paper: #fbf7ef;
+  --color-surface: #fffdfa;
+  --color-line: #e7e0d2;
+  --color-line-strong: #d7cdb9;
+  --color-ink: #34322c;
+  --color-ink-soft: #6f6b61;
+
+  /* Base fanée */
+  --color-sage: #9cbe96;
+  --color-sage-tint: #dce8d4;
+  --color-sage-deep: #5e7e58;
+  --color-butter: #e9dfa3;
+  --color-butter-tint: #f5efcf;
+  --color-clay: #d9a98c;
+  --color-clay-tint: #f0ddd0;
+
+  /* Accents vifs */
+  --color-green: #45a35e;
+  --color-green-strong: #2f8049;
+  --color-yellow: #f4c430;
+  --color-orange: #ef8a3c;
+  --color-red: #dd5240;
+  --color-red-strong: #c23e2e;
+
+  /* Typographie (variables fournies par next/font dans le layout racine) */
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-nunito), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-hand: var(--font-caveat), "Patrick Hand", ui-sans-serif, cursive;
+
+  /* Rayons */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  a {
+    color: var(--color-green-strong);
+  }
+  ::selection {
+    background: var(--color-sage-tint);
+    color: var(--color-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-green);
+    outline-offset: 2px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  /* Boutons */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-md);
+    background: var(--color-green-strong);
+    color: #fff;
+    padding: 0.5rem 1rem;
+    font-weight: 700;
+    font-size: 0.875rem;
+    transition: background-color 0.15s ease;
+  }
+  .btn-primary:hover { background: #2a7342; }
+  .btn-primary:disabled { opacity: 0.5; }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-md);
+    border: 1.5px solid var(--color-sage);
+    background: transparent;
+    color: var(--color-sage-deep);
+    padding: calc(0.5rem - 1.5px) calc(1rem - 1.5px);
+    font-weight: 600;
+    font-size: 0.875rem;
+    transition: background-color 0.15s ease;
+  }
+  .btn-secondary:hover { background: var(--color-sage-tint); }
+
+  .btn-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    background: var(--color-red-strong);
+    color: #fff;
+    padding: 0.5rem 1rem;
+    font-weight: 700;
+    font-size: 0.875rem;
+  }
+
+  /* Carte / panneau */
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 1px 2px rgba(52, 50, 44, 0.06);
+  }
+
+  /* Champ de formulaire */
+  .field-input {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-md);
+    padding: 0.5rem 0.75rem;
+    color: var(--color-ink);
+    font-size: 0.875rem;
+  }
+  .field-input:focus {
+    outline: 2px solid var(--color-green);
+    outline-offset: 1px;
+    border-color: var(--color-sage);
+  }
+
+  /* Lien de navigation */
+  .nav-link {
+    color: var(--color-ink-soft);
+    font-weight: 600;
+    font-size: 0.875rem;
+  }
+  .nav-link:hover { color: var(--color-ink); }
 }

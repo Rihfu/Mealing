@@ -30,7 +30,7 @@ export default async function FoyerPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-bold">Foyer — {household?.name}</h1>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-ink-soft">
           Stock, courses et repas planifiés sont partagés. Vos données nutritionnelles restent
           privées par défaut : choisissez avec qui les partager.
         </p>
@@ -38,20 +38,20 @@ export default async function FoyerPage() {
 
       <section>
         <h2 className="mb-2 text-sm font-semibold">Membres</h2>
-        <ul className="flex flex-col divide-y divide-gray-200 text-sm dark:divide-gray-800">
+        <ul className="flex flex-col divide-y divide-line text-sm dark:divide-gray-800">
           {(members ?? []).map((m) => {
             const isMe = m.id === me;
             const shared = sharedWith.has(m.id);
             return (
               <li key={m.id} className="flex items-center justify-between py-2">
                 <span>
-                  {m.display_name || '(sans nom)'} {isMe && <span className="text-gray-400">— moi</span>}
+                  {m.display_name || '(sans nom)'} {isMe && <span className="text-ink-soft">— moi</span>}
                 </span>
                 {!isMe && (
                   <form action={toggleNutritionShareAction}>
                     <input type="hidden" name="viewer_id" value={m.id} />
                     <input type="hidden" name="share" value={(!shared).toString()} />
-                    <button className={`text-xs underline ${shared ? 'text-green-600' : 'text-gray-500'}`}>
+                    <button className={`text-xs underline ${shared ? 'text-green-strong' : 'text-ink-soft'}`}>
                       {shared ? 'nutrition partagée ✓' : 'partager ma nutrition'}
                     </button>
                   </form>
@@ -70,9 +70,9 @@ export default async function FoyerPage() {
             type="email"
             required
             placeholder="email@exemple.com"
-            className="flex-1 rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900"
+            className="flex-1 rounded border border-line-strong px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900"
           />
-          <button className="rounded bg-black px-3 py-1.5 text-white dark:bg-white dark:text-black">
+          <button className="rounded bg-green-strong px-3 py-1.5 text-white dark:bg-white dark:text-black">
             Inviter
           </button>
         </form>
@@ -80,22 +80,22 @@ export default async function FoyerPage() {
         {(invitations ?? []).length > 0 && (
           <ul className="mt-3 flex flex-col gap-2 text-sm">
             {(invitations ?? []).map((inv) => (
-              <li key={inv.id} className="rounded border border-gray-200 p-2 dark:border-gray-800">
+              <li key={inv.id} className="rounded border border-line p-2 dark:border-gray-800">
                 <div className="flex items-center justify-between">
                   <span>{inv.email}</span>
                   <form action={cancelInvitationAction}>
                     <input type="hidden" name="id" value={inv.id} />
-                    <button className="text-xs text-red-500">annuler</button>
+                    <button className="text-xs text-red-strong">annuler</button>
                   </form>
                 </div>
-                <p className="mt-1 break-all text-xs text-gray-500">
+                <p className="mt-1 break-all text-xs text-ink-soft">
                   Lien d’invitation (à transmettre) : {baseUrl}/invitations/accept?token={inv.token}
                 </p>
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-ink-soft">
           L’envoi automatique d’email n’est pas encore configuré : transmettez le lien ci-dessus à la
           personne. Elle l’ouvre une fois connectée pour rejoindre le foyer.
         </p>

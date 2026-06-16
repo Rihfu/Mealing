@@ -1,0 +1,19 @@
+<!-- @dsCard group="Spacing" viewport="760x200" name="Corner radii" subtitle="Pebble-soft · sm 8 / md 12 / lg 16 / xl 24 / pill" -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--color-paper);font-family:var(--font-sans);color:var(--color-ink);padding:24px}
+  .row{display:flex;gap:20px;flex-wrap:wrap}
+  .item{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .box{width:84px;height:64px;background:var(--color-sage-tint);border:1.5px solid var(--color-sage)}
+  .tok{font-size:11px;font-weight:700;color:var(--color-ink-soft)}
+</style></head><body>
+  <div class="row">
+    <div class="item"><div class="box" style="border-radius:var(--radius-sm)"></div><div class="tok">sm · 8px</div></div>
+    <div class="item"><div class="box" style="border-radius:var(--radius-md)"></div><div class="tok">md · 12px</div></div>
+    <div class="item"><div class="box" style="border-radius:var(--radius-lg)"></div><div class="tok">lg · 16px</div></div>
+    <div class="item"><div class="box" style="border-radius:var(--radius-xl)"></div><div class="tok">xl · 24px</div></div>
+    <div class="item"><div class="box" style="width:120px;border-radius:var(--radius-pill)"></div><div class="tok">pill · 999px</div></div>
+  </div>
+</body></html>

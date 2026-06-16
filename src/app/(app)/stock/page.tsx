@@ -27,7 +27,7 @@ function foodName(food: StockRow['food']): string | null {
 function ExpiryBadge({ e }: { e: StockExpiry | undefined }) {
   if (!e || e.daysRemaining == null) return null;
   const d = e.daysRemaining;
-  const cls = d < 0 ? 'text-red-600' : d <= 3 ? 'text-amber-600' : 'text-gray-500';
+  const cls = d < 0 ? 'text-red-strong' : d <= 3 ? 'text-amber-600' : 'text-ink-soft';
   const txt = d < 0 ? `périmé (${-d} j)` : d === 0 ? "aujourd'hui" : `${d} j`;
   return (
     <span className={`text-xs ${cls}`} title={`Péremption estimée : ${e.expiry}`}>
@@ -69,28 +69,28 @@ export default async function StockPage() {
               <li key={e.id} className="flex items-center justify-between">
                 <span>
                   {e.name}
-                  {e.opened && <span className="ml-1 text-xs text-gray-500">(ouvert)</span>}
+                  {e.opened && <span className="ml-1 text-xs text-ink-soft">(ouvert)</span>}
                 </span>
                 <span className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">{e.expiry}</span>
+                  <span className="text-xs text-ink-soft">{e.expiry}</span>
                   <ExpiryBadge e={e} />
                 </span>
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-2 text-xs text-ink-soft">
             Tri par péremption estimée croissante (déterministe, sans IA). Estimation indicative
             selon la catégorie et la date d’ouverture.
           </p>
         </section>
       )}
 
-      <section className="rounded border border-gray-200 p-3 dark:border-gray-800">
+      <section className="rounded border border-line p-3 dark:border-gray-800">
         <h2 className="mb-2 text-sm font-semibold">Ajouter un article</h2>
         <form action={addStockAction} className="flex flex-wrap items-end gap-2 text-sm">
           <label className="flex flex-col gap-1">
             Aliment
-            <select name="food_id" className="rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900">
+            <select name="food_id" className="rounded border border-line-strong px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900">
               <option value="">— libellé libre —</option>
               {(foods ?? []).map((f) => (
                 <option key={f.id} value={f.id}>{f.name}</option>
@@ -99,11 +99,11 @@ export default async function StockPage() {
           </label>
           <label className="flex flex-col gap-1">
             ou libellé
-            <input name="label" className="rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900" />
+            <input name="label" className="rounded border border-line-strong px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900" />
           </label>
           <label className="flex flex-col gap-1">
             Conservation
-            <select name="conservation_rule_id" className="rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900">
+            <select name="conservation_rule_id" className="rounded border border-line-strong px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900">
               <option value="">— aucune —</option>
               {ruleOptions.map((r) => (
                 <option key={r.id} value={r.id}>{r.food_category}</option>
@@ -112,41 +112,41 @@ export default async function StockPage() {
           </label>
           <label className="flex flex-col gap-1">
             Suivi
-            <select name="tracking_mode" className="rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900">
+            <select name="tracking_mode" className="rounded border border-line-strong px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900">
               <option value="presence">Présence</option>
               <option value="quantity">Quantité</option>
             </select>
           </label>
           <label className="flex flex-col gap-1">
             Qté
-            <input name="quantity" type="number" step="any" className="w-20 rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900" />
+            <input name="quantity" type="number" step="any" className="w-20 rounded border border-line-strong px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900" />
           </label>
           <label className="flex flex-col gap-1">
             Unité
-            <input name="unit" className="w-20 rounded border border-gray-300 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900" />
+            <input name="unit" className="w-20 rounded border border-line-strong px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900" />
           </label>
-          <button type="submit" className="rounded bg-black px-3 py-1.5 text-white dark:bg-white dark:text-black">Ajouter</button>
+          <button type="submit" className="rounded bg-green-strong px-3 py-1.5 text-white dark:bg-white dark:text-black">Ajouter</button>
         </form>
       </section>
 
-      <ul className="flex flex-col divide-y divide-gray-200 text-sm dark:divide-gray-800">
+      <ul className="flex flex-col divide-y divide-line text-sm dark:divide-gray-800">
         {rows.map((s) => (
           <li key={s.id} className="flex flex-wrap items-center gap-2 py-2">
             <span className="font-medium">{foodName(s.food) ?? s.label}</span>
             {s.tracking_mode === 'quantity' ? (
               <>
-                <span className="text-gray-500">{s.quantity ?? 0} {s.unit ?? ''}</span>
+                <span className="text-ink-soft">{s.quantity ?? 0} {s.unit ?? ''}</span>
                 <form action={decrementStockAction} className="flex items-center gap-1">
                   <input type="hidden" name="stock_id" value={s.id} />
-                  <input name="amount" type="number" step="any" placeholder="−" className="w-16 rounded border border-gray-300 px-1.5 py-1 dark:border-gray-700 dark:bg-gray-900" />
-                  <button className="text-gray-500 underline">retirer</button>
+                  <input name="amount" type="number" step="any" placeholder="−" className="w-16 rounded border border-line-strong px-1.5 py-1 dark:border-gray-700 dark:bg-gray-900" />
+                  <button className="text-ink-soft underline">retirer</button>
                 </form>
               </>
             ) : (
               <form action={toggleStockPresenceAction}>
                 <input type="hidden" name="stock_id" value={s.id} />
                 <input type="hidden" name="present" value={(!s.present).toString()} />
-                <button className={s.present ? 'text-green-600 underline' : 'text-gray-400 underline'}>
+                <button className={s.present ? 'text-green-strong underline' : 'text-ink-soft underline'}>
                   {s.present ? 'présent' : 'absent'}
                 </button>
               </form>
@@ -154,24 +154,24 @@ export default async function StockPage() {
             <ExpiryBadge e={expiryById.get(s.id)} />
             <form action={setConservationAction} className="flex items-center gap-1">
               <input type="hidden" name="stock_id" value={s.id} />
-              <select name="conservation_rule_id" defaultValue={s.conservation_rule_id ?? ''} className="rounded border border-gray-300 px-1.5 py-1 text-xs dark:border-gray-700 dark:bg-gray-900">
+              <select name="conservation_rule_id" defaultValue={s.conservation_rule_id ?? ''} className="rounded border border-line-strong px-1.5 py-1 text-xs dark:border-gray-700 dark:bg-gray-900">
                 <option value="">conservation…</option>
                 {ruleOptions.map((r) => (
                   <option key={r.id} value={r.id}>{r.food_category}</option>
                 ))}
               </select>
-              <button className="text-xs text-blue-600 underline">ok</button>
+              <button className="text-xs text-green-strong underline">ok</button>
             </form>
             <form action={deleteStockAction} className="ml-auto">
               <input type="hidden" name="stock_id" value={s.id} />
-              <button className="text-xs text-red-500">✕</button>
+              <button className="text-xs text-red-strong">✕</button>
             </form>
           </li>
         ))}
-        {rows.length === 0 && <li className="py-2 text-gray-500">Stock vide.</li>}
+        {rows.length === 0 && <li className="py-2 text-ink-soft">Stock vide.</li>}
       </ul>
 
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-ink-soft">
         « Présence » pour les produits courants à faible enjeu ; « Quantité » pour les denrées
         coûteuses. Le stock se décrémente à la consommation réelle ; la date d’ouverture est déduite
         à la première décrémentation et sert au calcul de péremption.

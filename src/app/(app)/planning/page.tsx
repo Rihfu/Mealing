@@ -73,10 +73,10 @@ export default async function PlanningPage({
           const dayMeals = mealList.filter((m) => m.meal_date === date);
 
           return (
-            <section key={date} className="rounded border border-gray-200 p-3 dark:border-gray-800">
+            <section key={date} className="rounded border border-line p-3 dark:border-gray-800">
               <div className="mb-2 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">
-                  {label} <span className="text-gray-400">{date}</span>
+                  {label} <span className="text-ink-soft">{date}</span>
                   {isOff && (
                     <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
                       journée hors-plan
@@ -86,7 +86,7 @@ export default async function PlanningPage({
                 {!isOff && (
                   <form action={markDayOffAction}>
                     <input type="hidden" name="date" value={date} />
-                    <button type="submit" className="text-xs text-gray-500 underline">
+                    <button type="submit" className="text-xs text-ink-soft underline">
                       Marquer hors-plan
                     </button>
                   </form>
@@ -98,11 +98,11 @@ export default async function PlanningPage({
                   const status = statusByMeal.get(m.id);
                   return (
                     <li key={m.id} className="flex flex-wrap items-center gap-2 text-sm">
-                      <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-800">
+                      <span className="rounded bg-sage-tint px-1.5 py-0.5 text-xs dark:bg-gray-800">
                         {SLOTS.find((s) => s.key === m.slot)?.label ?? m.slot}
                       </span>
                       <span>{m.recipe_id ? recipeName.get(m.recipe_id) : m.free_text}</span>
-                      {status === 'skipped' && <span className="text-xs text-red-600">sauté</span>}
+                      {status === 'skipped' && <span className="text-xs text-red-strong">sauté</span>}
                       {status === 'different' && (
                         <span className="text-xs text-amber-600">différent</span>
                       )}
@@ -111,34 +111,34 @@ export default async function PlanningPage({
                           <form action={recordDeviationAction}>
                             <input type="hidden" name="meal_id" value={m.id} />
                             <input type="hidden" name="status" value="skipped" />
-                            <button className="text-gray-500 underline">sauté</button>
+                            <button className="text-ink-soft underline">sauté</button>
                           </form>
                           <form action={recordDeviationAction}>
                             <input type="hidden" name="meal_id" value={m.id} />
                             <input type="hidden" name="status" value="different" />
-                            <button className="text-gray-500 underline">différent</button>
+                            <button className="text-ink-soft underline">différent</button>
                           </form>
                         </span>
                       )}
                       <form action={deleteMealAction} className="ml-auto">
                         <input type="hidden" name="meal_id" value={m.id} />
-                        <button className="text-xs text-red-500">✕</button>
+                        <button className="text-xs text-red-strong">✕</button>
                       </form>
                     </li>
                   );
                 })}
                 {dayMeals.length === 0 && (
-                  <li className="text-xs text-gray-400">Aucun repas planifié.</li>
+                  <li className="text-xs text-ink-soft">Aucun repas planifié.</li>
                 )}
               </ul>
 
               <details className="text-sm">
-                <summary className="cursor-pointer text-blue-600">+ Ajouter un repas</summary>
+                <summary className="cursor-pointer text-green-strong">+ Ajouter un repas</summary>
                 <form action={addMealAction} className="mt-2 flex flex-wrap items-center gap-2">
                   <input type="hidden" name="date" value={date} />
                   <select
                     name="slot"
-                    className="rounded border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
+                    className="rounded border border-line-strong px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
                   >
                     {SLOTS.map((s) => (
                       <option key={s.key} value={s.key}>
@@ -148,7 +148,7 @@ export default async function PlanningPage({
                   </select>
                   <select
                     name="recipe_id"
-                    className="rounded border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
+                    className="rounded border border-line-strong px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
                   >
                     <option value="">— recette —</option>
                     {(recipes ?? []).map((r) => (
@@ -160,11 +160,11 @@ export default async function PlanningPage({
                   <input
                     name="free_text"
                     placeholder="ou repas libre"
-                    className="rounded border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
+                    className="rounded border border-line-strong px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
                   />
                   <button
                     type="submit"
-                    className="rounded bg-black px-3 py-1.5 text-sm text-white dark:bg-white dark:text-black"
+                    className="rounded bg-green-strong px-3 py-1.5 text-sm text-white dark:bg-white dark:text-black"
                   >
                     Ajouter
                   </button>

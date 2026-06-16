@@ -14,7 +14,7 @@ export default async function NouvelleRecettePage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Nouvelle recette</h1>
-        <Link href="/recettes" className="text-sm text-gray-500 underline">
+        <Link href="/recettes" className="text-sm text-ink-soft underline">
           Retour
         </Link>
       </div>

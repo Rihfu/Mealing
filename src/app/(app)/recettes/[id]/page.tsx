@@ -38,12 +38,12 @@ export default async function RecetteDetailPage({
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">{recipe.name}</h1>
-        <Link href="/recettes" className="text-sm text-gray-500 underline">
+        <Link href="/recettes" className="text-sm text-ink-soft underline">
           Retour
         </Link>
       </div>
 
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-ink-soft">
         {(recipe.prep_time_min ?? 0) + (recipe.cook_time_min ?? 0)} min · {recipe.servings}{' '}
         portion(s)
       </p>
@@ -65,7 +65,7 @@ export default async function RecetteDetailPage({
       <section>
         <h2 className="mb-1 text-sm font-semibold">Nutrition par portion</h2>
         {Object.keys(nutrition.perServing).length === 0 ? (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-ink-soft">
             Aucune valeur : liez des aliments importés aux ingrédients pour le calcul.
           </p>
         ) : (
@@ -73,7 +73,7 @@ export default async function RecetteDetailPage({
             {Object.entries(nutrition.perServing).map(([code, amount]) => {
               const l = labelFor(code);
               return (
-                <li key={code} className="flex justify-between rounded bg-gray-50 px-2 py-1 dark:bg-gray-900">
+                <li key={code} className="flex justify-between rounded bg-sage-tint px-2 py-1 dark:bg-gray-900">
                   <span>{l.name}</span>
                   <span className="font-medium">
                     {Math.round(amount * 10) / 10} {l.unit}

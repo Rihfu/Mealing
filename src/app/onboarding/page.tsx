@@ -11,7 +11,7 @@ export default async function OnboardingPage() {
     <main className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center gap-6 p-6">
       <div>
         <h1 className="text-2xl font-bold">Bienvenue</h1>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-ink-soft">
           Créez votre foyer pour commencer à planifier vos repas. Vous pourrez inviter d’autres
           membres plus tard.
         </p>

@@ -20,40 +20,40 @@ export function FoodSearch() {
         <input
           name="q"
           placeholder="Rechercher un aliment (ex. carotte, lait…)"
-          className="flex-1 rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-900"
+          className="flex-1 rounded border border-line-strong px-3 py-2 dark:border-gray-700 dark:bg-gray-900"
         />
         <button
           type="submit"
           disabled={pending}
-          className="rounded bg-black px-4 py-2 text-white disabled:opacity-50 dark:bg-white dark:text-black"
+          className="rounded bg-green-strong px-4 py-2 text-white disabled:opacity-50 dark:bg-white dark:text-black"
         >
           {pending ? '…' : 'Chercher'}
         </button>
       </form>
 
-      {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
+      {state?.error && <p className="text-sm text-red-strong">{state.error}</p>}
 
-      <ul className="flex flex-col divide-y divide-gray-200 dark:divide-gray-800">
+      <ul className="flex flex-col divide-y divide-line dark:divide-gray-800">
         {(state?.results ?? []).map((r) => (
           <li key={`${r.source}:${r.externalId}`} className="flex items-center justify-between py-2">
             <div className="text-sm">
               <span>{r.name || '(sans nom)'}</span>
-              {r.brand && <span className="text-gray-500"> · {r.brand}</span>}
-              <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+              {r.brand && <span className="text-ink-soft"> · {r.brand}</span>}
+              <span className="ml-2 rounded bg-sage-tint px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                 {SOURCE_LABEL[r.source] ?? r.source}
               </span>
             </div>
             <form action={importFoodAction}>
               <input type="hidden" name="source" value={r.source} />
               <input type="hidden" name="external_id" value={r.externalId} />
-              <button type="submit" className="text-sm text-blue-600 underline">
+              <button type="submit" className="text-sm text-green-strong underline">
                 Importer
               </button>
             </form>
           </li>
         ))}
         {state?.results && state.results.length === 0 && (
-          <li className="py-2 text-sm text-gray-500">Aucun résultat.</li>
+          <li className="py-2 text-sm text-ink-soft">Aucun résultat.</li>
         )}
       </ul>
     </div>

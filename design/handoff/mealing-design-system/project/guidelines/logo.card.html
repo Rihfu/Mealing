@@ -1,0 +1,114 @@
+<!-- @dsCard group="Brand" viewport="760x620" name="Logo directions" subtitle="3 directions · wordmark, bowl+sprout, fork-leaf · mono + app icon" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html,body{margin:0}
+  body{
+    background:var(--color-paper);
+    color:var(--color-ink);
+    font-family:var(--font-sans);
+    padding:28px;
+  }
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:704px}
+  .tile{
+    background:var(--color-surface);
+    border:1px solid var(--color-line);
+    border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-sm);
+    padding:22px 24px;
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .tile.span{grid-column:1 / -1}
+  .eyebrow{
+    font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--color-ink-soft);
+  }
+  .lockup{display:flex;align-items:center;gap:14px}
+  .wordmark{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:42px;
+    letter-spacing:-0.01em;
+    color:var(--color-ink);
+    line-height:1;
+    position:relative;
+    display:inline-block;
+  }
+  .wordmark .leaf{position:absolute;top:-9px;right:-2px;width:18px;height:18px}
+  .row{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+  .chip{
+    display:flex;align-items:center;justify-content:center;
+    width:64px;height:64px;border-radius:16px;
+  }
+  .chip.paper{background:var(--color-paper);border:1px solid var(--color-line)}
+  .chip.sage{background:var(--color-sage-tint)}
+  .chip.ink{background:var(--color-ink)}
+  .chip.green{background:var(--color-green-strong)}
+  .cap{font-size:11px;color:var(--color-ink-soft);text-align:center;margin-top:6px}
+  .iconcol{display:flex;flex-direction:column;align-items:center}
+  .hand{font-family:var(--font-hand);font-size:20px;color:var(--color-sage-deep)}
+</style>
+</head>
+<body>
+  <div class="grid">
+
+    <!-- Direction A: wordmark -->
+    <div class="tile span">
+      <div class="eyebrow">Direction A — Wordmark</div>
+      <div class="lockup">
+        <span class="wordmark">Mealing<svg class="leaf" viewBox="0 0 24 24" fill="none"><path d="M12 21 C12 14 16 9 22 7 C22 14 18 20 12 21 Z" fill="#45A35E"/><path d="M12 21 C11 15 9 11 4 9" stroke="#5E7E58" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+      </div>
+      <div class="hand">fait maison, planifié ensemble</div>
+    </div>
+
+    <!-- Direction B: bowl + sprout lockup -->
+    <div class="tile">
+      <div class="eyebrow">Direction B — Bowl &amp; sprout</div>
+      <div class="lockup">
+        <img src="../../assets/logo/symbol-bowl.svg" width="56" height="56" alt="">
+        <span class="wordmark" style="font-size:36px">Mealing</span>
+      </div>
+    </div>
+
+    <!-- Direction C: fork-leaf lockup -->
+    <div class="tile">
+      <div class="eyebrow">Direction C — Fork-leaf</div>
+      <div class="lockup">
+        <img src="../../assets/logo/symbol-fork-leaf.svg" width="56" height="56" alt="">
+        <span class="wordmark" style="font-size:36px">Mealing</span>
+      </div>
+    </div>
+
+    <!-- Monochrome + app icons -->
+    <div class="tile span">
+      <div class="eyebrow">Monochrome &amp; compact (favicon / PWA icon)</div>
+      <div class="row">
+        <div class="iconcol">
+          <div class="chip paper"><img src="../../assets/logo/symbol-bowl.svg" width="44" height="44" alt=""></div>
+          <div class="cap">Color</div>
+        </div>
+        <div class="iconcol">
+          <div class="chip paper" style="color:var(--color-ink)"><div style="width:44px;height:44px;color:var(--color-ink)"><img src="../../assets/logo/symbol-bowl-mono.svg" width="44" height="44" alt=""></div></div>
+          <div class="cap">Mono / ink</div>
+        </div>
+        <div class="iconcol">
+          <div class="chip sage" style="color:var(--color-sage-deep)"><img src="../../assets/logo/symbol-bowl-mono.svg" width="44" height="44" alt="" style="filter:none"></div>
+          <div class="cap">On sage</div>
+        </div>
+        <div class="iconcol">
+          <div class="chip" style="padding:0"><img src="../../assets/logo/app-icon.svg" width="64" height="64" alt=""></div>
+          <div class="cap">App icon</div>
+        </div>
+        <div class="iconcol">
+          <div class="chip" style="padding:0"><img src="../../assets/logo/app-icon.svg" width="40" height="40" alt=""></div>
+          <div class="cap">Favicon 40</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

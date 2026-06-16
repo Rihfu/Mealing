@@ -13,23 +13,20 @@ export function LoginForm() {
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center gap-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold">Mealing</h1>
-        <p className="text-sm text-gray-500">
-          {mode === 'signin' ? 'Connectez-vous à votre compte.' : 'Créez votre compte.'}
+      <div className="flex flex-col items-center gap-1 text-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.svg" alt="Mealing" width={56} height={56} />
+        <h1 className="text-3xl font-semibold text-ink">Mealing</h1>
+        <p className="font-hand text-xl text-green-strong">mes repas, sans charge mentale</p>
+        <p className="text-sm text-ink-soft">
+          {mode === 'signin' ? 'Connecte-toi à ton compte.' : 'Crée ton compte.'}
         </p>
       </div>
 
       <form action={formAction} className="flex flex-col gap-3">
         <label className="flex flex-col gap-1 text-sm">
           Email
-          <input
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            className="rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-900"
-          />
+          <input name="email" type="email" required autoComplete="email" className="field-input" />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           Mot de passe
@@ -38,18 +35,14 @@ export function LoginForm() {
             type="password"
             required
             autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-            className="rounded border border-gray-300 px-3 py-2 dark:border-gray-700 dark:bg-gray-900"
+            className="field-input"
           />
         </label>
 
-        {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
-        {state?.message && <p className="text-sm text-green-600">{state.message}</p>}
+        {state?.error && <p className="text-sm text-red-strong">{state.error}</p>}
+        {state?.message && <p className="text-sm text-green-strong">{state.message}</p>}
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded bg-black px-4 py-2 text-white disabled:opacity-50 dark:bg-white dark:text-black"
-        >
+        <button type="submit" disabled={pending} className="btn-primary mt-1">
           {pending ? '…' : mode === 'signin' ? 'Se connecter' : 'Créer un compte'}
         </button>
       </form>
@@ -57,7 +50,7 @@ export function LoginForm() {
       <button
         type="button"
         onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
-        className="text-sm text-gray-500 underline"
+        className="text-sm text-ink-soft underline"
       >
         {mode === 'signin' ? 'Pas de compte ? Créer un compte' : 'Déjà un compte ? Se connecter'}
       </button>

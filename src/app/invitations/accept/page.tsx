@@ -15,7 +15,7 @@ export default async function AcceptInvitationPage({
       <h1 className="text-2xl font-bold">Invitation au foyer</h1>
 
       {!token ? (
-        <p className="text-sm text-red-600">Lien d’invitation invalide (token manquant).</p>
+        <p className="text-sm text-red-strong">Lien d’invitation invalide (token manquant).</p>
       ) : !userId ? (
         <>
           <p className="text-sm text-gray-600 dark:text-gray-300">
@@ -24,7 +24,7 @@ export default async function AcceptInvitationPage({
           </p>
           <Link
             href="/login"
-            className="self-start rounded bg-black px-4 py-2 text-sm text-white dark:bg-white dark:text-black"
+            className="self-start rounded bg-green-strong px-4 py-2 text-sm text-white dark:bg-white dark:text-black"
           >
             Se connecter
           </Link>
@@ -32,7 +32,7 @@ export default async function AcceptInvitationPage({
       ) : (
         <>
           {error && (
-            <p className="text-sm text-red-600">
+            <p className="text-sm text-red-strong">
               Cette invitation n’est plus valide (déjà utilisée ou expirée).
             </p>
           )}
@@ -42,7 +42,7 @@ export default async function AcceptInvitationPage({
           </p>
           <form action={acceptInvitationAction}>
             <input type="hidden" name="token" value={token} />
-            <button className="rounded bg-black px-4 py-2 text-sm text-white dark:bg-white dark:text-black">
+            <button className="rounded bg-green-strong px-4 py-2 text-sm text-white dark:bg-white dark:text-black">
               Rejoindre le foyer
             </button>
           </form>
