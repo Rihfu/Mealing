@@ -23,6 +23,9 @@ export async function importFood(db: DB, detail: FoodDetail): Promise<string> {
   if (existing.data) {
     foodId = existing.data.id;
   } else {
+    const {
+      data: { user },
+    } = await db.auth.getUser();
     const inserted = unwrap(
       await db
         .from('food')
@@ -33,6 +36,7 @@ export async function importFood(db: DB, detail: FoodDetail): Promise<string> {
           barcode: detail.barcode ?? null,
           default_unit: detail.baseUnit,
           base_amount: detail.baseAmount,
+          created_by: user?.id ?? null,
         })
         .select('id')
         .single(),
