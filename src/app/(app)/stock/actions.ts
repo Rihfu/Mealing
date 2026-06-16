@@ -29,7 +29,19 @@ export async function addStockAction(formData: FormData): Promise<void> {
     quantity: trackingMode === 'quantity' ? num(formData.get('quantity')) : undefined,
     unit: String(formData.get('unit') ?? '') || undefined,
     present: true,
+    conservationRuleId: String(formData.get('conservation_rule_id') ?? '') || undefined,
   });
+  revalidatePath('/stock');
+}
+
+/** Assigne (ou retire) une catégorie de conservation à un article de stock. */
+export async function setConservationAction(formData: FormData): Promise<void> {
+  const { supabase } = await requireHousehold();
+  const ruleId = String(formData.get('conservation_rule_id') ?? '');
+  await supabase
+    .from('stock')
+    .update({ conservation_rule_id: ruleId || null })
+    .eq('id', String(formData.get('stock_id')));
   revalidatePath('/stock');
 }
 

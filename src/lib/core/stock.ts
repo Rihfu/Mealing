@@ -9,6 +9,7 @@ export interface UpsertStockInput {
   quantity?: number;
   unit?: string;
   present?: boolean;
+  conservationRuleId?: string;
 }
 
 /** Ajoute ou met à jour un article de stock du foyer. */
@@ -24,6 +25,7 @@ export async function upsertStockItem(db: DB, input: UpsertStockInput): Promise<
         quantity: input.quantity ?? null,
         unit: input.unit ?? null,
         present: input.present ?? true,
+        conservation_rule_id: input.conservationRuleId ?? null,
       })
       .select('id')
       .single(),
