@@ -87,6 +87,24 @@ Ce fichier est un résumé opérationnel. En cas de doute sur un détail, lire l
 - Note auth : confirmation email Supabase activée + validation MX des domaines à l'inscription (rejette example.com). Pour tester, créer un user confirmé via SQL.
 - Convention UI : les mutations passent par des server actions qui appellent les fonctions de `src/lib/core/` (jamais de logique métier dans les composants).
 
+### Design system (branche `design-system-foundations`, PR #8 — NON mergée)
+
+- Handoff Claude Design implémenté : **fondations seulement** (tokens, polices, logo). Sources : `design/handoff/`, `docs/design-direction.md`, `docs/claude-design-brief.md`.
+- Tokens `@theme` Tailwind v4 dans `src/app/globals.css` ; polices Fraunces/Nunito/Caveat via `next/font` (layout racine) ; logo `public/logo.svg` + favicon `src/app/icon.svg` (direction « bowl & sprout » B).
+- Dark mode OS neutralisé via `@custom-variant dark (&:where(.dark, .dark *))` → les classes `dark:` existantes sont inertes.
+- Primitives `@layer components` : `btn-primary/secondary/danger`, `card`, `field-input`, `nav-link`.
+- **Piège Tailwind v4** : ne JAMAIS mettre `@import url(...)` (ex. Google Fonts) dans `globals.css` — `@import "tailwindcss"` est développé sur place, ce qui casse `@theme` puis la compilation. Charger les polices via `next/font`.
+- Écrans restylés aux tokens, mais **pas encore pixel-perfect** et **sans icônes Lucide** (le handoff ne contenait pas les maquettes d'écran ni la lib de composants).
+
+### Prochaine session — actions à effectuer
+
+1. **Revoir puis fusionner la PR #8** (design system) vers `main`, supprimer la branche, et mettre à jour cette section (design intégré dans `main`).
+2. **Claude Design → maquettes haute-fidélité** : générer Planning, Stock + anti-gaspi, Assistant d'abord ; transmettre l'export (HTML dans `design/exports/` ou nouveau handoff) pour une implémentation pixel-perfect.
+3. **Passe composants + icônes** : composants React partagés (Button, Field, Card, Badge, Nav, Bubble) + icônes **Lucide** (prévu par le handoff) ; convertir les écrans aux primitives plutôt qu'aux classes utilitaires.
+4. *(Optionnel)* **`/design-sync`** : une fois les composants codés, les pousser vers le projet Claude Design pour boucler la synchro (nécessite d'autoriser l'accès design sur le login claude.ai).
+5. **Mise en production** : configurer l'envoi d'email Supabase (confirmation + Redirect URL `…/auth/callback`) puis déployer sur Netlify (variables d'env du `.env.example`).
+6. **PWA** : `manifest` + icônes installables (favicon déjà posé via `src/app/icon.svg`).
+
 ---
 
 ## Modèle de données (entités clés)
