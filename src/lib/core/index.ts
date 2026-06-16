@@ -6,6 +6,7 @@ export * from './types';
 export * from './foods';
 export * from './recipes';
 export * from './nutrition';
+export * from './shopping';
 export * from './stock';
 export * from './meals';
 export * from './consumption';
