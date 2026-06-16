@@ -1,0 +1,14 @@
+# Configuration de déploiement Netlify pour Mealing (Next.js).
+# Le runtime Next.js de Netlify gère le rendu serveur, le proxy et les routes.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Rappel : configurer les variables d'environnement dans
+# Netlify > Site settings > Environment variables (jamais committées) :
+#   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+#   GROQ_API_KEY, USDA_API_KEY, (SUPABASE_SERVICE_ROLE_KEY si opérations admin)

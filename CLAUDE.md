@@ -1,6 +1,6 @@
 # CLAUDE.md — Mealing (mémoire de travail)
 
-Document de référence définitif : [specifications-projet.md](./specifications-projet%20(2).md)
+Document de référence définitif : [specifications-projet.md](./specifications-projet.md)
 Ce fichier est un résumé opérationnel. En cas de doute sur un détail, lire le document source.
 
 ---
@@ -36,6 +36,15 @@ Ce fichier est un résumé opérationnel. En cas de doute sur un détail, lire l
 | Données de conservation | USDA FoodKeeper (table de référence curatée manuellement) |
 | IA | **API cloud à palier gratuit : Groq ou Gemini** |
 | Authentification | Supabase Auth |
+
+### Versions réellement installées (vérifier les guides, ne pas se fier à la mémoire d'entraînement)
+
+- **Next.js 16.2.x** (App Router) + **React 19** + **Tailwind v4** + TypeScript. Postérieur à mon cutoff d'entraînement.
+- **Avant d'écrire du code Next.js, lire le guide concerné dans `node_modules/next/dist/docs/`** (consigne du `AGENTS.md` généré par le scaffold).
+- Pièges Next 16 déjà identifiés :
+  - `cookies()` (`next/headers`) est **async** → `const c = await cookies()`.
+  - Le middleware s'appelle désormais **`proxy.ts`** (racine ou `src/`), plus `middleware.ts`. Même rôle.
+- Intégration Supabase via `@supabase/ssr` : client navigateur (`createBrowserClient`), client serveur (`createServerClient` + cookies async), refresh de session dans `proxy.ts`.
 
 ---
 
@@ -73,6 +82,14 @@ Ce fichier est un résumé opérationnel. En cas de doute sur un détail, lire l
 Détail complet des attributs et relations : voir section 4 du document source.
 
 ---
+
+## Arborescence du code (depuis Phase 0)
+
+- `src/lib/supabase/` — clients navigateur / serveur / admin (+ `types.ts` à régénérer après migration).
+- `src/lib/providers/nutrition/` et `src/lib/providers/ai/` — couches d'abstraction fournisseurs (principe n°5). Toute la logique dépend des interfaces, jamais d'un fournisseur concret.
+- `src/lib/core/` — fonctions backend réutilisables (principe n°4) : `recipes`, `meals`, `stock`, `consumption`, `household`. UI **et** futur agent IA appellent ces mêmes fonctions.
+- `src/proxy.ts` — refresh de session Supabase (ex-middleware).
+- `supabase/migrations/` (0001 schéma, 0002 RLS), `supabase/seed.sql`, `supabase/tests/rls_smoke_test.sql`.
 
 ## Points de vigilance spécifiques à Phase 0
 
