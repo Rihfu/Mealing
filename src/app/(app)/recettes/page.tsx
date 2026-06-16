@@ -12,12 +12,17 @@ export default async function RecettesPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Recettes</h1>
-        <Link
-          href="/recettes/nouvelle"
-          className="rounded bg-black px-3 py-1.5 text-sm text-white dark:bg-white dark:text-black"
-        >
-          + Nouvelle
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/recettes/generer" className="rounded border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700">
+            ✨ Générer (IA)
+          </Link>
+          <Link
+            href="/recettes/nouvelle"
+            className="rounded bg-black px-3 py-1.5 text-sm text-white dark:bg-white dark:text-black"
+          >
+            + Nouvelle
+          </Link>
+        </div>
       </div>
 
       <ul className="flex flex-col divide-y divide-gray-200 dark:divide-gray-800">
