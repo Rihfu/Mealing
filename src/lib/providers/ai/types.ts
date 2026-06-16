@@ -21,6 +21,8 @@ export interface ChatOptions {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  /** Force une réponse JSON valide (le prompt doit mentionner « JSON »). */
+  jsonMode?: boolean;
 }
 
 export interface ChatResult {

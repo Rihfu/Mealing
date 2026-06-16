@@ -35,6 +35,7 @@ export const groqProvider: AIProvider = {
         messages,
         temperature: options?.temperature ?? 0.7,
         max_tokens: options?.maxTokens,
+        response_format: options?.jsonMode ? { type: 'json_object' } : undefined,
       }),
     });
 
