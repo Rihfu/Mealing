@@ -76,8 +76,10 @@ Ce fichier est un résumé opérationnel. En cas de doute sur un détail, lire l
 ### État d'avancement
 
 - **Phase 0** : faite. Migrations 0001–0005 appliquées en base, RLS testé, types générés. Branche `phase-0-foundations`.
-- **Phase 1** : faite (branche `phase-1-planning-nutrition`). Auth + onboarding foyer + shell ; Aliments (recherche/import USDA+OFF) ; Recettes (CRUD + nutrition calculée) ; Planning hebdo (ajout/suppression repas, journée hors-plan, écarts) ; Nutrition (agrégation jour/semaine planifié vs réel, objectifs). Aucune branche encore mergée dans `main`.
-- **Reste Phase 2** : stock UI, liste de courses dynamique, partage Foyer réel (invitation a un backend `inviteToHousehold`/`acceptInvitation` mais pas d'UI).
+- **Phase 1** : faite et **mergée dans `main`**. Auth + onboarding foyer + shell ; Aliments (recherche/import USDA+OFF) ; Recettes (CRUD + nutrition calculée) ; Planning hebdo ; Nutrition (agrégation jour/semaine planifié vs réel, objectifs).
+- **Phase 2** : faite (branche `phase-2-stock-shopping-sharing`). Stock UI (ajout/décrément/présence) ; Liste de courses dynamique (`generateShoppingList` : besoins repas − stock + récurrents + manuels, état coché) ; Partage Foyer (membres, invitation par email + lien d'acceptation `/invitations/accept`, visibilité nutrition via `nutrition_share`). Accès concurrents couverts par le RLS.
+- **Reste** : Phase 3 (péremption/anti-gaspillage), 4 (génération recettes IA), 5 (assistant lecture seule), 6 (assistant agentique).
+- Note auth : confirmation email Supabase activée + validation MX des domaines à l'inscription (rejette example.com). Pour tester, créer un user confirmé via SQL.
 - Convention UI : les mutations passent par des server actions qui appellent les fonctions de `src/lib/core/` (jamais de logique métier dans les composants).
 
 ---

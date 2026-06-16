@@ -21,6 +21,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/nutrition" className="hover:underline">
             Nutrition
           </Link>
+          <Link href="/stock" className="hover:underline">
+            Stock
+          </Link>
+          <Link href="/courses" className="hover:underline">
+            Courses
+          </Link>
+          <Link href="/foyer" className="hover:underline">
+            Foyer
+          </Link>
         </nav>
         <div className="flex items-center gap-3 text-sm">
           <span className="text-gray-500">{profile.display_name || email}</span>
