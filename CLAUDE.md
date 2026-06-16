@@ -75,14 +75,15 @@ Ce fichier est un résumé opérationnel. En cas de doute sur un détail, lire l
 
 ### État d'avancement
 
-- **Phases 0 à 5 : faites et mergées dans `main`.** Migrations 0001–0007 appliquées en base, RLS testé, types générés. Aucune branche de feature active — développer depuis `main`, une branche par phase.
+- **Toutes les phases (0 à 6) : faites et mergées dans `main`.** Migrations 0001–0007 appliquées en base, RLS testé, types générés. Aucune branche de feature active — développer depuis `main`, une branche par phase.
   - Phase 0 : fondations (schéma, RLS, fournisseurs, backend réutilisable).
   - Phase 1 : auth + onboarding foyer + shell ; Aliments (import USDA+OFF) ; Recettes (CRUD + nutrition calculée) ; Planning hebdo ; Nutrition (agrégation jour/semaine planifié vs réel, objectifs).
   - Phase 2 : Stock ; Liste de courses dynamique (`generateShoppingList`) ; Partage Foyer (membres, invitation + `/invitations/accept`, visibilité nutrition via `nutrition_share`). Accès concurrents couverts par le RLS.
   - Phase 3 : péremption + anti-gaspillage. Seed `conservation_rule` (0007) ; `getStockWithExpiry` (estimation déterministe triée par péremption, sans IA) ; UI stock.
   - Phase 4 : génération de recettes par IA. Mode JSON sur la couche Groq ; `src/lib/ai/generate-recipe.ts` (prompt + zod) ; UI `/recettes/generer`. Garde-fou n°3 respecté (aucune valeur nutritionnelle générée).
   - Phase 5 : assistant conversationnel IA **lecture seule**. `src/lib/ai/assistant.ts` (contexte repas/stock/macros + historique `conversation_ia`) ; UI `/assistant`. Ne modifie aucune donnée métier.
-- **Reste** : Phase 6 (assistant agentique lecture/écriture qui appelle les fonctions `core/` — à n'envisager qu'après validation de la fiabilité en lecture seule, specs §9).
+  - Phase 6 : assistant **agentique**. `src/lib/ai/agent.ts` (askAgent propose / executeAgent exécute via `core/`). **Confirmation systématique** : l'IA propose, l'utilisateur confirme (carte Confirmer/Annuler dans `agent-chat.tsx`), rien n'est écrit avant. Actions additives en liste blanche (add_meal, add_stock_item, add_shopping_item, mark_day_off), validées zod, sous RLS.
+- **Périmètre du document entièrement couvert.** Évolutions futures = nouvelles propositions à valider (voir règle de travail en tête).
 - Note auth : confirmation email Supabase activée + validation MX des domaines à l'inscription (rejette example.com). Pour tester, créer un user confirmé via SQL.
 - Convention UI : les mutations passent par des server actions qui appellent les fonctions de `src/lib/core/` (jamais de logique métier dans les composants).
 
