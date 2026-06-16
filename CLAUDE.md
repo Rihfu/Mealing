@@ -73,6 +73,13 @@ Ce fichier est un résumé opérationnel. En cas de doute sur un détail, lire l
 
 **Estimation actuelle Phases 0–2 : 14 à 22 semaines à 10-20h/semaine.**
 
+### État d'avancement
+
+- **Phase 0** : faite. Migrations 0001–0005 appliquées en base, RLS testé, types générés. Branche `phase-0-foundations`.
+- **Phase 1** : faite (branche `phase-1-planning-nutrition`). Auth + onboarding foyer + shell ; Aliments (recherche/import USDA+OFF) ; Recettes (CRUD + nutrition calculée) ; Planning hebdo (ajout/suppression repas, journée hors-plan, écarts) ; Nutrition (agrégation jour/semaine planifié vs réel, objectifs). Aucune branche encore mergée dans `main`.
+- **Reste Phase 2** : stock UI, liste de courses dynamique, partage Foyer réel (invitation a un backend `inviteToHousehold`/`acceptInvitation` mais pas d'UI).
+- Convention UI : les mutations passent par des server actions qui appellent les fonctions de `src/lib/core/` (jamais de logique métier dans les composants).
+
 ---
 
 ## Modèle de données (entités clés)

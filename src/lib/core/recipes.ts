@@ -21,6 +21,10 @@ export interface CreateRecipeInput {
 
 /** Crée une recette avec ses ingrédients structurés et ses tags. */
 export async function createRecipe(db: DB, input: CreateRecipeInput): Promise<string> {
+  const {
+    data: { user },
+  } = await db.auth.getUser();
+
   const recipe = unwrap(
     await db
       .from('recipe')
@@ -31,6 +35,7 @@ export async function createRecipe(db: DB, input: CreateRecipeInput): Promise<st
         prep_time_min: input.prepTimeMin,
         cook_time_min: input.cookTimeMin,
         servings: input.servings ?? 1,
+        created_by: user?.id ?? null,
       })
       .select('id')
       .single(),
