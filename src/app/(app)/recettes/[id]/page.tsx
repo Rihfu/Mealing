@@ -35,62 +35,99 @@ export default async function RecetteDetailPage({
     nutrientTypes?.find((n) => n.code === code) ?? { name: code, unit: '' };
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">{recipe.name}</h1>
-        <Link href="/recettes" className="text-sm text-ink-soft underline">
-          Retour
-        </Link>
-      </div>
+    <div className="flex flex-col gap-6">
+      <Link href="/recettes" className="w-fit text-sm font-bold text-sage-deep hover:underline">
+        Retour aux recettes
+      </Link>
 
-      <p className="text-sm text-ink-soft">
-        {(recipe.prep_time_min ?? 0) + (recipe.cook_time_min ?? 0)} min · {recipe.servings}{' '}
-        portion(s)
-      </p>
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+        <div className="min-w-0">
+          <h1 className="font-display text-3xl font-semibold tracking-tight">{recipe.name}</h1>
+          {recipe.description && (
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-soft">{recipe.description}</p>
+          )}
 
-      <section>
-        <h2 className="mb-1 text-sm font-semibold">Ingrédients</h2>
-        <ul className="list-inside list-disc text-sm">
-          {(ingredients ?? []).map((ing) => {
-            const food = Array.isArray(ing.food) ? ing.food[0] : ing.food;
-            return (
-              <li key={ing.id}>
-                {ing.quantity ?? ''} {ing.unit ?? ''} {food?.name ?? ing.free_text}
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+          <section className="mt-7">
+            <h2 className="mb-3 font-display text-xl font-semibold">Ingrédients</h2>
+            <ul className="overflow-hidden rounded-2xl border border-line bg-surface px-4 shadow-soft">
+              {(ingredients ?? []).map((ing) => {
+                const food = Array.isArray(ing.food) ? ing.food[0] : ing.food;
+                return (
+                  <li key={ing.id} className="flex items-center justify-between gap-4 border-b border-line py-3 last:border-b-0">
+                    <span className="text-sm font-medium">{food?.name ?? ing.free_text}</span>
+                    <span className="whitespace-nowrap text-sm font-bold">
+                      {ing.quantity ?? ''} {ing.unit ?? ''}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
 
-      <section>
-        <h2 className="mb-1 text-sm font-semibold">Nutrition par portion</h2>
-        {Object.keys(nutrition.perServing).length === 0 ? (
-          <p className="text-sm text-ink-soft">
-            Aucune valeur : liez des aliments importés aux ingrédients pour le calcul.
+          {recipe.instructions && (
+            <section className="mt-8">
+              <h2 className="mb-3 font-display text-xl font-semibold">Étapes</h2>
+              <ol className="flex flex-col gap-3">
+                {recipe.instructions.split('\n').filter(Boolean).map((step, index) => (
+                  <li key={`${step}-${index}`} className="flex gap-3 text-sm leading-relaxed">
+                    <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-sage-tint text-xs font-extrabold text-sage-deep">
+                      {index + 1}
+                    </span>
+                    <span className="pt-1">{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+        </div>
+
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
+          <section className="grid grid-cols-3 divide-x divide-line rounded-2xl border border-line bg-surface p-4 text-center shadow-soft">
+            <div>
+              <div className="text-xs text-ink-soft">Prépa</div>
+              <div className="font-bold">{recipe.prep_time_min ?? 0} min</div>
+            </div>
+            <div>
+              <div className="text-xs text-ink-soft">Cuisson</div>
+              <div className="font-bold">{recipe.cook_time_min ?? 0} min</div>
+            </div>
+            <div>
+              <div className="text-xs text-ink-soft">Portions</div>
+              <div className="font-bold">{recipe.servings}</div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <h2 className="font-display text-lg font-semibold">Nutrition</h2>
+              <span className="text-xs text-ink-soft">par portion</span>
+            </div>
+            {Object.keys(nutrition.perServing).length === 0 ? (
+              <p className="text-sm leading-relaxed text-ink-soft">
+                Aucune valeur : liez des aliments importés aux ingrédients pour le calcul.
+              </p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {Object.entries(nutrition.perServing).map(([code, amount]) => {
+                  const l = labelFor(code);
+                  return (
+                    <li key={code} className="flex justify-between gap-4 py-2 text-sm">
+                      <span className="text-ink-soft">{l.name}</span>
+                      <span className="font-bold">
+                        {Math.round(amount * 10) / 10} {l.unit}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          <p className="text-xs leading-relaxed text-ink-soft">
+            Valeurs calculées depuis les ingrédients liés, jamais générées par l’IA.
           </p>
-        ) : (
-          <ul className="grid grid-cols-2 gap-1 text-sm sm:grid-cols-3">
-            {Object.entries(nutrition.perServing).map(([code, amount]) => {
-              const l = labelFor(code);
-              return (
-                <li key={code} className="flex justify-between rounded bg-sage-tint px-2 py-1 dark:bg-gray-900">
-                  <span>{l.name}</span>
-                  <span className="font-medium">
-                    {Math.round(amount * 10) / 10} {l.unit}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      {recipe.instructions && (
-        <section>
-          <h2 className="mb-1 text-sm font-semibold">Étapes</h2>
-          <p className="whitespace-pre-wrap text-sm">{recipe.instructions}</p>
-        </section>
-      )}
+        </aside>
+      </div>
     </div>
   );
 }

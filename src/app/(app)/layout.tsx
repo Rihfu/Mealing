@@ -13,16 +13,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const initial = (name.trim()[0] || '?').toUpperCase();
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-2xl flex-col">
+    <div className="flex min-h-screen flex-col bg-paper">
       <header className="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur">
-        <div className="flex items-center justify-between gap-3 px-3 pb-2 pt-2.5">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 lg:px-8">
           <Link href="/planning" className="flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.svg" alt="" width={26} height={26} aria-hidden="true" />
-            <span className="font-display text-lg font-semibold tracking-tight text-ink">Mealing</span>
+            <img src="/logo.svg" alt="" width={34} height={34} aria-hidden="true" />
+            <span className="font-display text-xl font-semibold tracking-tight text-ink">Mealing</span>
           </Link>
+          <div className="hidden min-w-0 flex-1 justify-center lg:flex">
+            <NavTabs />
+          </div>
           <div className="flex items-center gap-2.5">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sage-tint text-xs font-extrabold text-sage-deep">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-sage-tint text-xs font-extrabold text-sage-deep">
               {initial}
             </span>
             <span className="hidden text-sm font-bold text-ink sm:inline">{profile.display_name || email}</span>
@@ -33,9 +36,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </form>
           </div>
         </div>
-        <NavTabs />
+        <div className="lg:hidden">
+          <NavTabs />
+        </div>
       </header>
-      <main className="flex-1 p-4">{children}</main>
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 lg:px-8 lg:py-8">{children}</main>
     </div>
   );
 }

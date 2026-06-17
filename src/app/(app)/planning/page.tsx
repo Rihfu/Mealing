@@ -64,8 +64,8 @@ export default async function PlanningPage({
   const slotLabel = (s: string) => SLOTS.find((x) => x.key === s)?.label ?? s;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-2">
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="font-display text-2xl font-semibold tracking-tight">Planning</h1>
         <div className="flex items-center gap-1 rounded-full border border-line bg-surface px-1.5 py-1 text-sm">
           <Link href={`/planning?week=${prevWeek}`} aria-label="Semaine précédente" className="flex h-6 w-6 items-center justify-center rounded-full text-ink hover:bg-sage-tint">‹</Link>
@@ -74,7 +74,7 @@ export default async function PlanningPage({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2.5">
+      <div className="grid gap-3 lg:grid-cols-7 lg:items-stretch">
         {DAYS_ABBR.map((abbr, i) => {
           const d = addDays(weekStart, i);
           const date = isoDate(d);
@@ -84,8 +84,8 @@ export default async function PlanningPage({
 
           if (isOff) {
             return (
-              <section key={date} className="rounded-2xl border border-butter bg-butter-tint p-3.5">
-                <div className="flex items-center justify-between">
+              <section key={date} className="flex min-h-36 flex-col rounded-2xl border border-butter bg-butter-tint p-3.5 lg:min-h-72">
+                <div className="flex items-center justify-between gap-2 border-b border-butter pb-2">
                   <h2 className="font-display text-base font-semibold">
                     {abbr} <span className="text-ink-soft">{dateLabel}</span>
                   </h2>
@@ -97,8 +97,8 @@ export default async function PlanningPage({
           }
 
           return (
-            <section key={date} className="rounded-2xl border border-line bg-surface p-3.5 shadow-soft">
-              <div className="mb-2 flex items-center justify-between">
+            <section key={date} className="flex min-h-36 flex-col rounded-2xl border border-line bg-surface p-3.5 shadow-soft lg:min-h-72">
+              <div className="mb-3 flex items-center justify-between gap-2 border-b border-line pb-2">
                 <h2 className="font-display text-base font-semibold">
                   {abbr} <span className="text-ink-soft">{dateLabel}</span>
                 </h2>
@@ -115,16 +115,16 @@ export default async function PlanningPage({
                 return (
                   <div key={m.id}>
                     {idx > 0 && <div className="h-px bg-line" />}
-                    <div className="flex items-center gap-2.5 py-1.5">
+                    <div className="flex flex-wrap items-center gap-2.5 py-1.5 lg:items-start">
                       <span className={`h-2.5 w-2.5 flex-none rounded-full ${SLOT_DOT[m.slot] ?? 'bg-sage'}`} />
-                      <span className="w-16 flex-none text-xs text-ink-soft">{slotLabel(m.slot)}</span>
-                      <span className={`flex-1 text-sm font-medium ${status === 'skipped' ? 'text-ink-soft line-through' : ''}`}>
+                      <span className="w-16 flex-none text-xs text-ink-soft lg:w-[calc(100%-1.25rem)]">{slotLabel(m.slot)}</span>
+                      <span className={`min-w-0 flex-1 text-sm font-medium lg:basis-full ${status === 'skipped' ? 'text-ink-soft line-through' : ''}`}>
                         {m.recipe_id ? recipeName.get(m.recipe_id) : m.free_text}
                       </span>
                       {status === 'skipped' && <span className="pill bg-red text-white">sauté</span>}
                       {status === 'different' && <span className="pill bg-orange text-white">différent</span>}
                       {!status && (
-                        <span className="flex gap-1.5 text-xs">
+                        <span className="flex gap-1.5 text-xs lg:w-full lg:flex-wrap">
                           <form action={recordDeviationAction}>
                             <input type="hidden" name="meal_id" value={m.id} />
                             <input type="hidden" name="status" value="skipped" />
@@ -146,11 +146,11 @@ export default async function PlanningPage({
                 );
               })}
 
-              <details className="mt-1 text-sm [&[open]>summary]:hidden">
+              <details className="mt-auto pt-2 text-sm [&[open]>summary]:hidden">
                 <summary className="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-line-strong py-2 text-xs font-bold text-sage-deep">
                   + Ajouter un repas
                 </summary>
-                <form action={addMealAction} className="mt-2 flex flex-wrap items-center gap-2">
+                <form action={addMealAction} className="mt-2 flex flex-wrap items-center gap-2 lg:flex-col lg:items-stretch">
                   <input type="hidden" name="date" value={date} />
                   <select name="slot" className="field-input py-1.5 text-sm">
                     {SLOTS.map((s) => (
@@ -163,7 +163,7 @@ export default async function PlanningPage({
                       <option key={r.id} value={r.id}>{r.name}</option>
                     ))}
                   </select>
-                  <input name="free_text" placeholder="ou repas libre" className="field-input flex-1 py-1.5 text-sm" />
+                  <input name="free_text" placeholder="ou repas libre" className="field-input flex-1 py-1.5 text-sm lg:w-full" />
                   <button type="submit" className="btn-primary px-3 py-1.5">Ajouter</button>
                 </form>
               </details>

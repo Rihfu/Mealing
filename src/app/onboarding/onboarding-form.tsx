@@ -10,13 +10,13 @@ export function OnboardingForm() {
   );
 
   return (
-    <form action={formAction} className="flex flex-col gap-3">
-      <label className="flex flex-col gap-1 text-sm">
-        Ton prénom (optionnel)
+    <form action={formAction} className="flex flex-col gap-4">
+      <label className="flex flex-col gap-1.5 text-sm">
+        <span className="text-xs font-bold text-ink-soft">Ton prénom (optionnel)</span>
         <input name="display_name" type="text" className="field-input" />
       </label>
-      <label className="flex flex-col gap-1 text-sm">
-        Nom du foyer
+      <label className="flex flex-col gap-1.5 text-sm">
+        <span className="text-xs font-bold text-ink-soft">Nom du foyer</span>
         <input
           name="household_name"
           type="text"
@@ -28,7 +28,7 @@ export function OnboardingForm() {
 
       {state?.error && <p className="text-sm text-red-strong">{state.error}</p>}
 
-      <button type="submit" disabled={pending} className="btn-primary">
+      <button type="submit" disabled={pending} className="btn-primary mt-1 py-3">
         {pending ? '…' : 'Créer mon foyer'}
       </button>
     </form>

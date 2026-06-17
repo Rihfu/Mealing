@@ -52,17 +52,17 @@ export default async function StockPage() {
   const priority = expiries.filter((e) => e.daysRemaining != null && (e.daysRemaining as number) <= 3);
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="font-display text-2xl font-semibold tracking-tight">Stock</h1>
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+      <h1 className="font-display text-2xl font-semibold tracking-tight lg:col-span-2">Stock</h1>
 
       {priority.length > 0 && (
-        <section className="rounded-2xl border border-clay bg-clay-tint p-3.5">
+        <section className="rounded-2xl border border-clay bg-clay-tint p-3.5 lg:col-start-1">
           <h2 className="mb-2 font-display text-base font-semibold">À consommer en priorité</h2>
-          <div className="flex flex-col">
+          <div className="grid gap-3 md:grid-cols-2">
             {priority.map((e, i) => (
-              <div key={e.id}>
-                {i > 0 && <div className="h-px bg-clay/40" />}
-                <div className="flex items-center justify-between py-1.5">
+              <div key={e.id} className="rounded-xl border border-clay/40 bg-surface/70 px-3 py-2">
+                {i > 0 && <div className="hidden h-px bg-clay/40" />}
+                <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-medium">{e.name}</div>
                     {e.category && <div className="text-xs text-ink-soft">{e.category}</div>}
@@ -79,7 +79,7 @@ export default async function StockPage() {
         </section>
       )}
 
-      <section className="rounded-2xl border border-line bg-surface p-3.5 shadow-soft">
+      <section className="rounded-2xl border border-line bg-surface p-3.5 shadow-soft lg:sticky lg:top-24 lg:col-start-2 lg:row-start-2">
         <h2 className="mb-3 font-display text-base font-semibold">Ajouter un article</h2>
         <form action={addStockAction} className="flex flex-col gap-2.5 text-sm">
           <select name="food_id" className="field-input">
@@ -107,7 +107,7 @@ export default async function StockPage() {
         </form>
       </section>
 
-      <div>
+      <div className="lg:col-start-1">
         <div className="mb-2 text-xs font-extrabold uppercase tracking-wider text-ink-soft">Tout le stock</div>
         <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-soft">
           {rows.map((s, i) => {

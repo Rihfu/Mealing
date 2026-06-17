@@ -16,11 +16,11 @@ const NAV = [
 export function NavTabs() {
   const pathname = usePathname();
   return (
-    <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
+    <nav className="flex gap-1 overflow-x-auto px-3 pb-2 lg:justify-center lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0">
       {NAV.map(([href, label]) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
-          <Link key={href} href={href} className="nav-pill" data-active={active}>
+          <Link key={href} href={href} className="nav-pill lg:px-4 lg:py-2 lg:text-sm" data-active={active}>
             {label}
           </Link>
         );

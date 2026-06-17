@@ -9,7 +9,14 @@ interface Msg {
   content: string;
 }
 
-export function AgentChat({ initial }: { initial: Msg[] }) {
+interface AgentContext {
+  meals: Array<{ slot: string; name: string }>;
+  urgentStock: Array<{ name: string; label: string; tone: string }>;
+  energy: number;
+  sodium: number;
+}
+
+export function AgentChat({ initial, context }: { initial: Msg[]; context?: AgentContext }) {
   const [messages, setMessages] = useState<Msg[]>(initial);
   const [input, setInput] = useState('');
   const [pending, setPending] = useState(false);
@@ -69,7 +76,8 @@ export function AgentChat({ initial }: { initial: Msg[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,760px)_280px] lg:items-start lg:justify-center">
+      <div className="flex flex-col gap-3">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight">Assistant</h1>
@@ -82,7 +90,7 @@ export function AgentChat({ initial }: { initial: Msg[] }) {
         )}
       </div>
 
-      <div className="flex min-h-[40vh] flex-col gap-3">
+      <div className="flex min-h-[40vh] flex-col gap-3 lg:min-h-[56vh]">
         {messages.map((m, i) => (
           <div
             key={i}
@@ -126,7 +134,7 @@ export function AgentChat({ initial }: { initial: Msg[] }) {
         )}
       </div>
 
-      <div className="sticky bottom-0 -mx-4 border-t border-line bg-surface px-4 pb-3 pt-2">
+      <div className="sticky bottom-0 -mx-4 border-t border-line bg-surface px-4 pb-3 pt-2 lg:static lg:mx-0 lg:rounded-2xl lg:border lg:shadow-soft">
         <div className="mb-2 flex gap-2 overflow-x-auto">
           {['Qu’est-ce qu’on mange ?', 'Planifie une omelette demain midi'].map((s) => (
             <button key={s} type="button" onClick={() => pick(s)} className="nav-pill bg-sage-tint text-sage-deep">
@@ -153,6 +161,56 @@ export function AgentChat({ initial }: { initial: Msg[] }) {
           </button>
         </form>
       </div>
+      </div>
+
+      <aside className="hidden flex-col gap-4 lg:flex">
+        <div className="text-xs font-extrabold uppercase tracking-wider text-ink-soft">Contexte</div>
+        <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
+          <h2 className="mb-3 font-display text-base font-semibold">Repas du jour</h2>
+          <div className="flex flex-col gap-2">
+            {(context?.meals.length ? context.meals : [{ slot: 'Aujourdâ€™hui', name: 'Aucun repas planifiÃ©' }]).map(
+              (meal, index) => (
+                <div key={`${meal.slot}-${index}`} className="flex items-start gap-2 text-sm">
+                  <span className="mt-1.5 h-2 w-2 flex-none rounded-full bg-sage" />
+                  <span>
+                    <span className="text-ink-soft">{meal.slot}</span>
+                    <br />
+                    <span className="font-semibold">{meal.name}</span>
+                  </span>
+                </div>
+              ),
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
+          <h2 className="mb-3 font-display text-base font-semibold">Stock urgent</h2>
+          <div className="flex flex-col gap-2">
+            {(context?.urgentStock.length ? context.urgentStock : [{ name: 'Rien Ã  signaler', label: 'frais', tone: 'ok' }]).map(
+              (item) => (
+                <div key={item.name} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-medium">{item.name}</span>
+                  <span className={`pill ${item.tone === 'danger' ? 'bg-red text-white' : item.tone === 'warn' ? 'bg-orange text-white' : 'bg-sage-tint text-green-strong'}`}>
+                    {item.label}
+                  </span>
+                </div>
+              ),
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-sage bg-sage-tint p-4">
+          <h2 className="mb-3 font-display text-base font-semibold">Macros du jour</h2>
+          <div className="flex items-center justify-between py-1 text-sm">
+            <span className="text-ink-soft">Ã‰nergie</span>
+            <span className="font-bold">{context?.energy ?? 0} kcal</span>
+          </div>
+          <div className="flex items-center justify-between py-1 text-sm">
+            <span className="text-ink-soft">Sodium</span>
+            <span className="font-bold text-red-strong">{context?.sodium ?? 0} mg</span>
+          </div>
+        </section>
+      </aside>
     </div>
   );
 }
