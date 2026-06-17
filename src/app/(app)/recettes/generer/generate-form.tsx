@@ -1,7 +1,12 @@
 'use client';
 
 import { useActionState } from 'react';
-import { generateRecipeAction, saveGeneratedRecipeAction, type GenerateState } from './actions';
+import {
+  addMissingIngredientsToShoppingAction,
+  generateRecipeAction,
+  saveGeneratedRecipeAction,
+  type GenerateState,
+} from './actions';
 
 export function GenerateForm() {
   const [state, formAction, pending] = useActionState<GenerateState | undefined, FormData>(
@@ -9,6 +14,8 @@ export function GenerateForm() {
     undefined,
   );
   const draft = state?.draft;
+  const availability = state?.availability ?? [];
+  const missing = availability.filter((item) => !item.covered);
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,430px)_minmax(0,1fr)] lg:items-start">
@@ -27,7 +34,8 @@ export function GenerateForm() {
           </button>
         </form>
         <p className="mt-4 text-xs leading-relaxed text-ink-soft">
-          L’IA structure la recette, mais ne fournit aucune valeur nutritionnelle.
+          L’IA structure la recette à partir de ta demande et de ton stock, mais ne fournit aucune valeur
+          nutritionnelle.
         </p>
       </section>
 
@@ -59,14 +67,30 @@ export function GenerateForm() {
               <div>
                 <h4 className="mb-2 text-sm font-extrabold text-ink">Ingrédients</h4>
                 <ul className="divide-y divide-line rounded-xl border border-line bg-paper/50 px-3">
-                  {draft.ingredients.map((i, idx) => (
-                    <li key={idx} className="flex justify-between gap-3 py-2 text-sm">
-                      <span>{i.name}</span>
-                      <span className="font-bold">
-                        {i.quantity ?? ''} {i.unit ?? ''}
-                      </span>
-                    </li>
-                  ))}
+                  {draft.ingredients.map((i, idx) => {
+                    const status = availability.find((item) => item.name === i.name);
+                    return (
+                      <li key={idx} className="flex items-center justify-between gap-3 py-2 text-sm">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span>{i.name}</span>
+                          {status && (
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                                status.covered
+                                  ? 'bg-sage-tint text-sage-deep'
+                                  : 'bg-butter-tint text-ink-soft'
+                              }`}
+                            >
+                              {status.covered ? 'stock' : 'à acheter'}
+                            </span>
+                          )}
+                        </span>
+                        <span className="font-bold">
+                          {i.quantity ?? ''} {i.unit ?? ''}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
 
@@ -87,6 +111,20 @@ export function GenerateForm() {
               )}
             </div>
 
+            {missing.length > 0 && (
+              <div className="rounded-xl border border-butter bg-butter-tint p-3 text-sm text-ink">
+                <p className="font-extrabold">Ingrédients à prévoir</p>
+                <p className="mt-1 text-xs leading-relaxed text-ink-soft">
+                  Cette recette utilise aussi {missing.map((item) => item.name).join(', ')}. Tu peux les envoyer dans
+                  les ajouts manuels de la liste de courses.
+                </p>
+                <form action={addMissingIngredientsToShoppingAction} className="mt-3">
+                  <input type="hidden" name="items" value={JSON.stringify(missing)} />
+                  <button className="btn-secondary py-2">Ajouter aux courses</button>
+                </form>
+              </div>
+            )}
+
             {draft.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {draft.tags.map((t) => (
@@ -99,7 +137,7 @@ export function GenerateForm() {
 
             <p className="rounded-xl border border-butter bg-butter-tint p-3 text-xs leading-relaxed text-ink-soft">
               Les ingrédients sont enregistrés en texte libre. Lie-les à des aliments importés pour activer le calcul
-              nutritionnel.
+              nutritionnel et le calcul automatique fin des courses.
             </p>
 
             <form action={saveGeneratedRecipeAction}>
