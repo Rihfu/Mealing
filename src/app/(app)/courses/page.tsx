@@ -1,6 +1,5 @@
 import { getAuthContext } from '@/lib/auth';
-import { generateShoppingList, type ShoppingLine } from '@/lib/core';
-import { addDays, isoDate } from '@/lib/dates';
+import { generateShoppingList, getShoppingWindow, type ShoppingLine } from '@/lib/core';
 import { CATEGORIES, ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-assets';
 import { AddArticle } from './add-article';
 import { PurchaseCheckout } from './purchase-checkout';
@@ -9,9 +8,16 @@ import {
   clearCheckedAction,
   deleteManualAction,
   deleteRecurringAction,
+  setShoppingHorizonAction,
   toggleCheckAction,
   toggleManualCheckAction,
 } from './actions';
+
+const CADENCE_OPTIONS = [
+  { days: 3, label: 'Quelques jours' },
+  { days: 7, label: '1 semaine' },
+  { days: 14, label: '2 semaines' },
+];
 
 const SOURCE_TO_PROV: Record<ShoppingLine['source'], ProvenanceKey> = {
   recipe: 'repas',
@@ -86,8 +92,7 @@ export default async function CoursesPage() {
   const { supabase, profile } = await getAuthContext();
   const householdId = profile?.household_id as string;
 
-  const from = isoDate(new Date());
-  const to = isoDate(addDays(new Date(), 13));
+  const { from, to, days } = await getShoppingWindow(supabase, householdId);
 
   const [lines, { data: recurring }, { data: foods }, { data: stock }] = await Promise.all([
     generateShoppingList(supabase, { householdId, from, to }),
@@ -131,6 +136,24 @@ export default async function CoursesPage() {
           Ta liste se met à jour toute seule : on part de tes repas, on retire ce que tu as déjà en stock, et tu
           ajoutes ce que tu veux. Coche au fur et à mesure de tes courses.
         </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-ink-soft">Courses sur&nbsp;:</span>
+          {CADENCE_OPTIONS.map((o) => (
+            <form key={o.days} action={setShoppingHorizonAction}>
+              <input type="hidden" name="days" value={o.days} />
+              <button
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                  days === o.days
+                    ? 'border-green-strong bg-sage-tint text-green-strong'
+                    : 'border-line text-ink-soft'
+                }`}
+              >
+                {o.label}
+              </button>
+            </form>
+          ))}
+        </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">

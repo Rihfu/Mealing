@@ -2,8 +2,13 @@
 
 import { revalidatePath } from 'next/cache';
 import { getAuthContext } from '@/lib/auth';
-import { searchFoodCatalog, importFoodByRef, checkoutPurchasedToStock, type FoodSuggestion } from '@/lib/core';
-import { addDays, isoDate } from '@/lib/dates';
+import {
+  searchFoodCatalog,
+  importFoodByRef,
+  checkoutPurchasedToStock,
+  getShoppingWindow,
+  type FoodSuggestion,
+} from '@/lib/core';
 import type { NutritionSource } from '@/lib/providers/nutrition';
 
 async function requireHousehold() {
@@ -32,11 +37,19 @@ export async function toggleCheckAction(formData: FormData): Promise<void> {
 /** « J'ai fait mes courses » : les articles cochés entrent dans le stock (chantier E). */
 export async function checkoutToStockAction(): Promise<void> {
   const { supabase, householdId } = await requireHousehold();
-  const from = isoDate(new Date());
-  const to = isoDate(addDays(new Date(), 13));
+  const { from, to } = await getShoppingWindow(supabase, householdId);
   await checkoutPurchasedToStock(supabase, { householdId, from, to });
   revalidatePath('/courses');
   revalidatePath('/stock');
+}
+
+/** Cadence de courses : horizon de calcul de la liste, en jours (chantier H). */
+export async function setShoppingHorizonAction(formData: FormData): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  const days = Number(formData.get('days'));
+  if (!Number.isInteger(days) || days < 1 || days > 60) return;
+  await supabase.from('household').update({ shopping_horizon_days: days }).eq('id', householdId);
+  revalidatePath('/courses');
 }
 
 /** Décoche toutes les lignes (fin d'une session de courses). Ne supprime rien. */

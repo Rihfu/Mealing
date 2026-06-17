@@ -201,6 +201,7 @@ export type Database = {
           created_by: string | null
           id: string
           name: string
+          shopping_horizon_days: number
           updated_at: string
         }
         Insert: {
@@ -208,6 +209,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           name: string
+          shopping_horizon_days?: number
           updated_at?: string
         }
         Update: {
@@ -215,6 +217,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           name?: string
+          shopping_horizon_days?: number
           updated_at?: string
         }
         Relationships: []

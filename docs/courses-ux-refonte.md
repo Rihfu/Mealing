@@ -191,7 +191,7 @@ Remplacer la fenêtre figée 14 j par un réglage (hebdo / bi-hebdo / jour de co
 | — | Banque d'assets (icônes produits) | — | ✅ `src/lib/product-assets.tsx` |
 | 5 | E — Achat → Stock daté | ✅ | ✅ checkout → stock (fusion + nettoyage), vérifié en direct |
 | — | G — Anti-surplus / anti-doublon | ✅ | ✅ alerte à l'ajout (liste + stock), vérifié en direct |
-| 6 | H — Cadence configurable | ⏳ | ⏳ |
+| 6 | H — Cadence configurable | ✅ | ✅ horizon foyer (3/7/14 j), vérifié en direct |
 | — | UX-13 Undo · UX-14 mode magasin mobile | ✅ (maquettes) | ⏳ |
 
 _Mise à jour après chaque chantier._
@@ -203,4 +203,5 @@ Handoff importé dans `design/handoff-courses/` (zip → impossible via connecte
 - **Courses (refonte)** : `page.tsx` réécrit — en-tête (titre + accent Caveat + sous-titre clair), **liste unique « À acheter » groupée par rayon** (sections repliables, icône + nom + puce de provenance + qté), « Déjà pris » + « Tout décocher », état vide, « Mes essentiels » (ex-récurrents). `add-article.tsx` (client) : autocomplétion (`searchCatalogAction`), formats 1 clic (`food_package`), unité (`<select>`). `shopping.ts` enrichit chaque ligne de `category` + `iconSlug`.
 - **Chantier E — Achat → Stock** ✅ : bouton « J'ai fait mes courses » (`purchase-checkout.tsx`, confirmation « Bien joué — on range ? ») → `checkoutToStockAction` → `checkoutPurchasedToStock` (core). Les lignes cochées entrent au stock (fusion si l'article existe : présent + cumul si même unité ; sinon création), datées du jour (created_at → péremption). Puis les achats quittent la liste (coches effacées, manuels achetés supprimés). Flux entrant uniquement — ne touche pas à la décrémentation (specs 3.4). `ShoppingLine` porte désormais `foodId`. Vérifié en direct (« Riz · 500 g » coché → entré au stock daté du jour).
 - **Chantier G — anti-surplus / anti-doublon** ✅ : à l'ajout d'un article, alerte non-bloquante si l'article est déjà sur la liste (« déjà sur ta liste ») ou déjà en stock (« déjà en stock (qté) — ajouter quand même ? »). La page passe le contexte liste+stock à `add-article.tsx` ; rapprochement par `foodId` puis libellé normalisé. Vérifié en direct (« Lait » → alerte stock).
-- **Reste à faire** (maquettes fournies, pas encore codées) : **undo** (UX-13), **mode magasin** mobile (UX-14). + chantier **H** (cadence configurable).
+- **Chantier H — cadence configurable** ✅ : migration `0010` (`household.shopping_horizon_days`, défaut 14) ; `getShoppingWindow` (core) calcule la fenêtre depuis ce réglage ; `setShoppingHorizonAction` ; sélecteur « Courses sur : Quelques jours (3 j) / 1 semaine (7 j) / 2 semaines (14 j) » dans l'en-tête. `generateShoppingList` et le checkout (E) utilisent la même fenêtre. Vérifié en direct.
+- **Reste à faire** (maquettes fournies, pas encore codées) : **undo** (UX-13), **mode magasin** mobile (UX-14).

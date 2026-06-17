@@ -1,6 +1,7 @@
 import type { DB } from './types';
 import { unwrap } from './types';
 import { type Quantity, toBase, fromBase, normalizeUnit } from '@/lib/units';
+import { addDays, isoDate } from '@/lib/dates';
 
 export type ShoppingSource = 'recipe' | 'recurring' | 'manual';
 
@@ -380,6 +381,21 @@ function normalizeLabel(value: string): string {
 
 function roundQty(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+/**
+ * Fenêtre de calcul de la liste selon la cadence du foyer (chantier H) :
+ * `household.shopping_horizon_days` jours à partir d'aujourd'hui (défaut 14).
+ */
+export async function getShoppingWindow(
+  db: DB,
+  householdId: string,
+): Promise<{ from: string; to: string; days: number }> {
+  const hh = await db.from('household').select('shopping_horizon_days').eq('id', householdId).maybeSingle();
+  if (hh.error) throw new Error(hh.error.message);
+  const days = (hh.data?.shopping_horizon_days as number | null) ?? 14;
+  const today = new Date();
+  return { from: isoDate(today), to: isoDate(addDays(today, days - 1)), days };
 }
 
 // Réconciliation des unités (besoins vs stock) : voir `src/lib/units.ts`,
