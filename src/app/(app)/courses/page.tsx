@@ -4,6 +4,7 @@ import { addDays, isoDate } from '@/lib/dates';
 import {
   addManualAction,
   addRecurringAction,
+  clearCheckedAction,
   deleteManualAction,
   deleteRecurringAction,
   toggleCheckAction,
@@ -85,8 +86,13 @@ export default async function CoursesPage() {
     supabase.from('food').select('id, name').order('name', { ascending: true }).limit(500),
   ]);
 
-  const grouped: Record<string, ShoppingLine[]> = { recipe: [], recurring: [], manual: [] };
-  for (const l of lines) grouped[l.source].push(l);
+  // Lignes actives (à acheter) par source ; lignes cochées regroupées en « déjà pris ».
+  const active: Record<string, ShoppingLine[]> = { recipe: [], recurring: [], manual: [] };
+  const done: ShoppingLine[] = [];
+  for (const l of lines) {
+    if (l.checked) done.push(l);
+    else active[l.source].push(l);
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -104,13 +110,32 @@ export default async function CoursesPage() {
             <section key={src} className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
               <h2 className="mb-2 font-display text-lg font-semibold">{SOURCE_LABEL[src]}</h2>
               <ul className="divide-y divide-line">
-                {grouped[src].map((l) => (
+                {active[src].map((l) => (
                   <LineRow key={l.key + l.source} line={l} />
                 ))}
-                {grouped[src].length === 0 && <li className="py-2 text-sm text-ink-soft">Rien.</li>}
+                {active[src].length === 0 && <li className="py-2 text-sm text-ink-soft">Rien.</li>}
               </ul>
             </section>
           ))}
+
+          {done.length > 0 && (
+            <details className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
+              <summary className="flex cursor-pointer list-none items-center justify-between font-display text-lg font-semibold">
+                <span>Déjà pris ({done.length})</span>
+                <span className="text-sm font-normal text-ink-soft">afficher / masquer</span>
+              </summary>
+              <div className="mt-2">
+                <form action={clearCheckedAction} className="mb-2 flex justify-end">
+                  <button className="text-xs font-bold text-green-strong">Tout décocher</button>
+                </form>
+                <ul className="divide-y divide-line">
+                  {done.map((l) => (
+                    <LineRow key={l.key + l.source} line={l} />
+                  ))}
+                </ul>
+              </div>
+            </details>
+          )}
         </div>
 
         <aside className="flex flex-col gap-4 lg:sticky lg:top-24">

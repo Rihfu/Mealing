@@ -26,6 +26,16 @@ export async function toggleCheckAction(formData: FormData): Promise<void> {
   revalidatePath('/courses');
 }
 
+/** Décoche toutes les lignes (fin d'une session de courses). Ne supprime rien. */
+export async function clearCheckedAction(): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  await Promise.all([
+    supabase.from('shopping_item_state').delete().eq('household_id', householdId),
+    supabase.from('shopping_manual_item').update({ checked: false }).eq('household_id', householdId),
+  ]);
+  revalidatePath('/courses');
+}
+
 export async function toggleManualCheckAction(formData: FormData): Promise<void> {
   const { supabase } = await requireHousehold();
   await supabase

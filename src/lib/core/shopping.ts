@@ -107,14 +107,17 @@ export async function generateShoppingList(
     present: boolean;
   }>;
 
-  const stockQtyByFood = new Map<string, number>();
+  // Stock agrégé par aliment, converti dans une unité de base (cf. helpers d'unités plus bas).
+  // `undefined` = pas de stock quantifié ; `null` = stock quantifié mais en unité non
+  // convertible / dimensions mêlées → on ne peut pas vérifier la couverture, donc on ne déduit pas.
+  const stockBaseByFood = new Map<string, Quantity | null>();
   const presentFoods = new Set<string>();
   const stockByLabel = new Map<string, { qty?: number; unit?: string; present: boolean }>();
 
   for (const s of stock) {
     if (s.food_id) {
       if (s.tracking_mode === 'quantity') {
-        stockQtyByFood.set(s.food_id, (stockQtyByFood.get(s.food_id) ?? 0) + (s.quantity ?? 0));
+        addStockBase(stockBaseByFood, s.food_id, toBase(s.quantity ?? 0, s.unit));
       } else if (s.present) {
         presentFoods.add(s.food_id);
       }
@@ -134,8 +137,8 @@ export async function generateShoppingList(
   const neededFoodIds: string[] = [];
   const netNeed = new Map<string, { qty: number; unit?: string }>();
   for (const [foodId, need] of needByFood) {
-    if (presentFoods.has(foodId)) continue;
-    const remaining = need.qty - (stockQtyByFood.get(foodId) ?? 0);
+    if (presentFoods.has(foodId)) continue; // stock en présence → on suppose la couverture
+    const remaining = remainingAfterStock(need.qty, need.unit, stockBaseByFood.get(foodId));
     if (remaining > 0) {
       netNeed.set(foodId, { qty: remaining, unit: need.unit });
       neededFoodIds.push(foodId);
@@ -146,14 +149,17 @@ export async function generateShoppingList(
   for (const [key, need] of needByLabel) {
     const stockItem = stockByLabel.get(key);
     if (!stockItem?.present) {
-      netLabelNeed.set(key, need);
+      netLabelNeed.set(key, need); // pas en stock → besoin entier
       continue;
     }
 
-    if (need.qty == null) continue;
-    if (!sameUnit(need.unit, stockItem.unit)) continue;
+    // Présent mais sans quantité chiffrée (suivi présence, ou besoin sans qté) :
+    // on suppose la couverture (principe « précision approximative assumée »).
+    if (need.qty == null || stockItem.qty == null) continue;
 
-    const remaining = need.qty - (stockItem.qty ?? 0);
+    // Stock quantifié : on déduit en unités réconciliées. En cas d'unités incompatibles,
+    // `remainingAfterStock` renvoie le besoin entier — on ne masque jamais un besoin réel.
+    const remaining = remainingAfterStock(need.qty, need.unit, toBase(stockItem.qty, stockItem.unit));
     if (remaining > 0) netLabelNeed.set(key, { ...need, qty: remaining });
   }
 
@@ -222,7 +228,9 @@ export async function generateShoppingList(
     if (r.food_id && presentFoods.has(r.food_id)) continue;
     if (!r.food_id && r.label && stockByLabel.get(normalizeLabel(r.label))?.present) continue;
 
-    const key = r.food_id ? `food:${r.food_id}` : `label:${r.label}`;
+    const key = r.food_id
+      ? `recurring-food:${r.food_id}`
+      : `recurring-label:${normalizeLabel(r.label ?? '')}`;
     lines.push({
       key,
       name: r.food_id ? (foodNames.get(r.food_id) ?? '(aliment)') : (r.label ?? ''),
@@ -267,11 +275,87 @@ function normalizeLabel(value: string): string {
     .replace(/s$/, '');
 }
 
-function sameUnit(a?: string, b?: string): boolean {
-  if (!a || !b) return false;
-  return normalizeLabel(a) === normalizeLabel(b);
-}
-
 function roundQty(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+// --- Unités ---------------------------------------------------------------
+// Réconciliation d'unités pour comparer besoins et stock. On regroupe par
+// dimension (masse, volume, comptage) avec une unité de base par dimension.
+// Précision approximative assumée : on ne couvre que les unités usuelles ;
+// une unité inconnue est traitée comme non réconciliable (on ne déduit pas,
+// plutôt que de masquer un besoin réel).
+
+type Dim = 'mass' | 'volume' | 'count';
+interface Quantity {
+  dim: Dim;
+  value: number; // exprimée dans l'unité de base de la dimension (g, ml, ou pièce)
+}
+
+const UNIT_TO_BASE: Record<string, { dim: Dim; factor: number }> = {
+  mg: { dim: 'mass', factor: 0.001 },
+  g: { dim: 'mass', factor: 1 },
+  gramme: { dim: 'mass', factor: 1 },
+  kg: { dim: 'mass', factor: 1000 },
+  ml: { dim: 'volume', factor: 1 },
+  cl: { dim: 'volume', factor: 10 },
+  dl: { dim: 'volume', factor: 100 },
+  l: { dim: 'volume', factor: 1000 },
+  litre: { dim: 'volume', factor: 1000 },
+  piece: { dim: 'count', factor: 1 },
+  u: { dim: 'count', factor: 1 },
+  unite: { dim: 'count', factor: 1 },
+};
+
+function normalizeUnit(unit?: string | null): string {
+  return (unit ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[^a-z]/g, '') // retire aussi les marques combinantes (accents) après NFD
+    .replace(/s$/, '');
+}
+
+function toBase(qty: number, unit?: string | null): Quantity | null {
+  const entry = UNIT_TO_BASE[normalizeUnit(unit)];
+  if (!entry) return null;
+  return { dim: entry.dim, value: qty * entry.factor };
+}
+
+function fromBase(value: number, unit?: string | null): number | null {
+  const entry = UNIT_TO_BASE[normalizeUnit(unit)];
+  if (!entry) return null;
+  return value / entry.factor;
+}
+
+function addStockBase(map: Map<string, Quantity | null>, foodId: string, base: Quantity | null): void {
+  const prev = map.get(foodId);
+  if (prev === undefined) {
+    map.set(foodId, base);
+    return;
+  }
+  if (prev === null || base === null || prev.dim !== base.dim) {
+    map.set(foodId, null); // unité non convertible ou dimensions mêlées
+    return;
+  }
+  map.set(foodId, { dim: prev.dim, value: prev.value + base.value });
+}
+
+/**
+ * Reste à acheter après déduction du stock, exprimé dans l'unité du besoin.
+ * - `stockBase` undefined (aucun stock quantifié) ou null (unité non réconciliable)
+ *   → besoin entier (on ne masque jamais un besoin sur une incompatibilité d'unité).
+ * - unités de dimensions différentes → besoin entier.
+ * - sinon : besoin − stock, converti dans l'unité du besoin.
+ */
+function remainingAfterStock(
+  needQty: number,
+  needUnit: string | undefined,
+  stockBase: Quantity | null | undefined,
+): number {
+  if (stockBase == null) return needQty;
+  const needBase = toBase(needQty, needUnit);
+  if (needBase == null || needBase.dim !== stockBase.dim) return needQty;
+  const remainingBase = needBase.value - stockBase.value;
+  if (remainingBase <= 0) return 0;
+  return fromBase(remainingBase, needUnit) ?? remainingBase;
 }
