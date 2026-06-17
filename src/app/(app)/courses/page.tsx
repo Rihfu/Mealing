@@ -6,12 +6,11 @@ import { PurchaseCheckout } from './purchase-checkout';
 import {
   addRecurringAction,
   clearCheckedAction,
-  deleteManualAction,
-  deleteRecurringAction,
   setShoppingHorizonAction,
   toggleCheckAction,
   toggleManualCheckAction,
 } from './actions';
+import { UndoToastHost, DeleteWithUndo } from './undo-toast';
 
 const CADENCE_OPTIONS = [
   { days: 3, label: 'Quelques jours' },
@@ -77,12 +76,7 @@ function LineRow({ line }: { line: ShoppingLine }) {
       <span className="ml-auto flex items-center gap-3">
         <ProvenanceBadge kind={SOURCE_TO_PROV[line.source]} />
         {qty && <span className="text-sm text-ink-soft">{qty}</span>}
-        {isManual && (
-          <form action={deleteManualAction}>
-            <input type="hidden" name="id" value={line.manualId} />
-            <button className="text-xs font-bold text-red-strong">supprimer</button>
-          </form>
-        )}
+        {isManual && line.manualId && <DeleteWithUndo kind="manual" id={line.manualId} label={line.name} />}
       </span>
     </li>
   );
@@ -241,10 +235,7 @@ export default async function CoursesPage() {
                 return (
                   <li key={r.id} className="flex items-center justify-between gap-3 py-2">
                     <span>{f?.name ?? r.label}</span>
-                    <form action={deleteRecurringAction}>
-                      <input type="hidden" name="id" value={r.id} />
-                      <button className="text-xs font-bold text-red-strong">supprimer</button>
-                    </form>
+                    <DeleteWithUndo kind="recurring" id={r.id} label={f?.name ?? r.label ?? ''} />
                   </li>
                 );
               })}
@@ -267,6 +258,8 @@ export default async function CoursesPage() {
           </section>
         </aside>
       </div>
+
+      <UndoToastHost />
     </div>
   );
 }

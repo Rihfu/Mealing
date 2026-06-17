@@ -106,6 +106,34 @@ export async function deleteManualAction(formData: FormData): Promise<void> {
   revalidatePath('/courses');
 }
 
+/** Données d'un article manuel restaurable (pour l'undo). */
+export interface ManualSnapshot {
+  label: string;
+  quantity: number | null;
+  unit: string | null;
+  food_id: string | null;
+}
+
+/** Supprime un article manuel et renvoie ses données (pour permettre l'annulation). */
+export async function deleteManualItem(id: string): Promise<ManualSnapshot | null> {
+  const { supabase } = await requireHousehold();
+  const { data } = await supabase
+    .from('shopping_manual_item')
+    .select('label, quantity, unit, food_id')
+    .eq('id', id)
+    .maybeSingle();
+  await supabase.from('shopping_manual_item').delete().eq('id', id);
+  revalidatePath('/courses');
+  return (data as ManualSnapshot | null) ?? null;
+}
+
+/** Recrée un article manuel supprimé (annulation). */
+export async function recreateManualItem(item: ManualSnapshot): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  await supabase.from('shopping_manual_item').insert({ household_id: householdId, ...item });
+  revalidatePath('/courses');
+}
+
 export async function addRecurringAction(formData: FormData): Promise<void> {
   const { supabase, householdId } = await requireHousehold();
   const foodId = String(formData.get('food_id') ?? '');
@@ -124,5 +152,31 @@ export async function addRecurringAction(formData: FormData): Promise<void> {
 export async function deleteRecurringAction(formData: FormData): Promise<void> {
   const { supabase } = await requireHousehold();
   await supabase.from('shopping_recurring_item').delete().eq('id', String(formData.get('id')));
+  revalidatePath('/courses');
+}
+
+/** Données d'un essentiel restaurable (pour l'undo). */
+export interface RecurringSnapshot {
+  food_id: string | null;
+  label: string | null;
+  default_quantity: number | null;
+  unit: string | null;
+}
+
+export async function deleteRecurringItem(id: string): Promise<RecurringSnapshot | null> {
+  const { supabase } = await requireHousehold();
+  const { data } = await supabase
+    .from('shopping_recurring_item')
+    .select('food_id, label, default_quantity, unit')
+    .eq('id', id)
+    .maybeSingle();
+  await supabase.from('shopping_recurring_item').delete().eq('id', id);
+  revalidatePath('/courses');
+  return (data as RecurringSnapshot | null) ?? null;
+}
+
+export async function recreateRecurringItem(item: RecurringSnapshot): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  await supabase.from('shopping_recurring_item').insert({ household_id: householdId, ...item });
   revalidatePath('/courses');
 }
