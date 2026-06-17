@@ -1,5 +1,7 @@
 import type { DB } from './types';
 import { unwrap } from './types';
+import { type Quantity, toBase, fromBase, normalizeUnit } from '@/lib/units';
+import { addDays, isoDate } from '@/lib/dates';
 
 export type ShoppingSource = 'recipe' | 'recurring' | 'manual';
 
@@ -11,6 +13,9 @@ export interface ShoppingLine {
   checked: boolean;
   source: ShoppingSource;
   manualId?: string;
+  foodId?: string | null; // aliment lié (identité produit) si connu
+  category?: string | null; // rayon (food.category) pour le tri par rayon ; null = non classé
+  iconSlug?: string | null; // food.external_id ('cat:<slug>') pour le picto produit
 }
 
 /**
@@ -107,14 +112,17 @@ export async function generateShoppingList(
     present: boolean;
   }>;
 
-  const stockQtyByFood = new Map<string, number>();
+  // Stock agrégé par aliment, converti dans une unité de base (cf. helpers d'unités plus bas).
+  // `undefined` = pas de stock quantifié ; `null` = stock quantifié mais en unité non
+  // convertible / dimensions mêlées → on ne peut pas vérifier la couverture, donc on ne déduit pas.
+  const stockBaseByFood = new Map<string, Quantity | null>();
   const presentFoods = new Set<string>();
   const stockByLabel = new Map<string, { qty?: number; unit?: string; present: boolean }>();
 
   for (const s of stock) {
     if (s.food_id) {
       if (s.tracking_mode === 'quantity') {
-        stockQtyByFood.set(s.food_id, (stockQtyByFood.get(s.food_id) ?? 0) + (s.quantity ?? 0));
+        addStockBase(stockBaseByFood, s.food_id, toBase(s.quantity ?? 0, s.unit));
       } else if (s.present) {
         presentFoods.add(s.food_id);
       }
@@ -134,8 +142,8 @@ export async function generateShoppingList(
   const neededFoodIds: string[] = [];
   const netNeed = new Map<string, { qty: number; unit?: string }>();
   for (const [foodId, need] of needByFood) {
-    if (presentFoods.has(foodId)) continue;
-    const remaining = need.qty - (stockQtyByFood.get(foodId) ?? 0);
+    if (presentFoods.has(foodId)) continue; // stock en présence → on suppose la couverture
+    const remaining = remainingAfterStock(need.qty, need.unit, stockBaseByFood.get(foodId));
     if (remaining > 0) {
       netNeed.set(foodId, { qty: remaining, unit: need.unit });
       neededFoodIds.push(foodId);
@@ -146,14 +154,17 @@ export async function generateShoppingList(
   for (const [key, need] of needByLabel) {
     const stockItem = stockByLabel.get(key);
     if (!stockItem?.present) {
-      netLabelNeed.set(key, need);
+      netLabelNeed.set(key, need); // pas en stock → besoin entier
       continue;
     }
 
-    if (need.qty == null) continue;
-    if (!sameUnit(need.unit, stockItem.unit)) continue;
+    // Présent mais sans quantité chiffrée (suivi présence, ou besoin sans qté) :
+    // on suppose la couverture (principe « précision approximative assumée »).
+    if (need.qty == null || stockItem.qty == null) continue;
 
-    const remaining = need.qty - (stockItem.qty ?? 0);
+    // Stock quantifié : on déduit en unités réconciliées. En cas d'unités incompatibles,
+    // `remainingAfterStock` renvoie le besoin entier — on ne masque jamais un besoin réel.
+    const remaining = remainingAfterStock(need.qty, need.unit, toBase(stockItem.qty, stockItem.unit));
     if (remaining > 0) netLabelNeed.set(key, { ...need, qty: remaining });
   }
 
@@ -170,15 +181,35 @@ export async function generateShoppingList(
     unit: string | null;
   }>;
 
+  const manual = (unwrap(
+    await db
+      .from('shopping_manual_item')
+      .select('id, food_id, label, quantity, unit, checked')
+      .eq('household_id', params.householdId),
+  ) ?? []) as Array<{
+    id: string;
+    food_id: string | null;
+    label: string;
+    quantity: number | null;
+    unit: string | null;
+    checked: boolean;
+  }>;
+
   const recurringFoodIds = recurring.map((r) => r.food_id).filter((x): x is string => !!x);
-  const allFoodIds = Array.from(new Set([...neededFoodIds, ...recurringFoodIds]));
+  const manualFoodIds = manual.map((m) => m.food_id).filter((x): x is string => !!x);
+  const allFoodIds = Array.from(new Set([...neededFoodIds, ...recurringFoodIds, ...manualFoodIds]));
   const foodNames = new Map<string, string>();
+  const foodCategory = new Map<string, string | null>();
+  const foodSlug = new Map<string, string | null>();
   if (allFoodIds.length > 0) {
-    const foods = (unwrap(await db.from('food').select('id, name').in('id', allFoodIds)) ?? []) as Array<{
-      id: string;
-      name: string;
-    }>;
-    for (const f of foods) foodNames.set(f.id, f.name);
+    const foods = (unwrap(
+      await db.from('food').select('id, name, category, external_id').in('id', allFoodIds),
+    ) ?? []) as Array<{ id: string; name: string; category: string | null; external_id: string | null }>;
+    for (const f of foods) {
+      foodNames.set(f.id, f.name);
+      foodCategory.set(f.id, f.category);
+      foodSlug.set(f.id, f.external_id);
+    }
   }
 
   const checkedKeys = new Set(
@@ -203,6 +234,9 @@ export async function generateShoppingList(
       unit: need.unit,
       checked: checkedKeys.has(key),
       source: 'recipe',
+      foodId,
+      category: foodCategory.get(foodId) ?? null,
+      iconSlug: foodSlug.get(foodId) ?? null,
     });
   }
 
@@ -222,7 +256,9 @@ export async function generateShoppingList(
     if (r.food_id && presentFoods.has(r.food_id)) continue;
     if (!r.food_id && r.label && stockByLabel.get(normalizeLabel(r.label))?.present) continue;
 
-    const key = r.food_id ? `food:${r.food_id}` : `label:${r.label}`;
+    const key = r.food_id
+      ? `recurring-food:${r.food_id}`
+      : `recurring-label:${normalizeLabel(r.label ?? '')}`;
     lines.push({
       key,
       name: r.food_id ? (foodNames.get(r.food_id) ?? '(aliment)') : (r.label ?? ''),
@@ -230,15 +266,11 @@ export async function generateShoppingList(
       unit: r.unit ?? undefined,
       checked: checkedKeys.has(key),
       source: 'recurring',
+      foodId: r.food_id ?? null,
+      category: r.food_id ? (foodCategory.get(r.food_id) ?? null) : null,
+      iconSlug: r.food_id ? (foodSlug.get(r.food_id) ?? null) : null,
     });
   }
-
-  const manual = (unwrap(
-    await db
-      .from('shopping_manual_item')
-      .select('id, label, quantity, unit, checked')
-      .eq('household_id', params.householdId),
-  ) ?? []) as Array<{ id: string; label: string; quantity: number | null; unit: string | null; checked: boolean }>;
 
   for (const m of manual) {
     lines.push({
@@ -249,10 +281,90 @@ export async function generateShoppingList(
       checked: m.checked,
       source: 'manual',
       manualId: m.id,
+      foodId: m.food_id ?? null,
+      category: m.food_id ? (foodCategory.get(m.food_id) ?? null) : null,
+      iconSlug: m.food_id ? (foodSlug.get(m.food_id) ?? null) : null,
     });
   }
 
   return lines;
+}
+
+/**
+ * « J'ai fait mes courses » (chantier E) : les lignes cochées entrent dans le stock,
+ * datées d'aujourd'hui (created_at → péremption Phase 3). Fusion simple : si un article
+ * de stock existe déjà (même aliment ou même libellé), on le marque présent et on cumule
+ * la quantité quand l'unité correspond ; sinon on crée la ligne. Puis les achats quittent
+ * la liste (coches effacées, articles manuels achetés supprimés).
+ *
+ * Ne touche jamais à la décrémentation (specs 3.4) : c'est un FLUX ENTRANT.
+ * @returns le nombre d'articles rangés.
+ */
+export async function checkoutPurchasedToStock(
+  db: DB,
+  params: { householdId: string; from: string; to: string },
+): Promise<{ added: number }> {
+  const lines = (await generateShoppingList(db, params)).filter((l) => l.checked);
+  if (lines.length === 0) return { added: 0 };
+
+  const stock = (unwrap(
+    await db
+      .from('stock')
+      .select('id, food_id, label, tracking_mode, quantity, unit')
+      .eq('household_id', params.householdId),
+  ) ?? []) as Array<{
+    id: string;
+    food_id: string | null;
+    label: string | null;
+    tracking_mode: string;
+    quantity: number | null;
+    unit: string | null;
+  }>;
+
+  const byFood = new Map<string, (typeof stock)[number]>();
+  const byLabel = new Map<string, (typeof stock)[number]>();
+  for (const s of stock) {
+    if (s.food_id) byFood.set(s.food_id, s);
+    else if (s.label) byLabel.set(normalizeLabel(s.label), s);
+  }
+
+  let added = 0;
+  for (const line of lines) {
+    const existing = line.foodId ? byFood.get(line.foodId) : byLabel.get(normalizeLabel(line.name));
+    const hasQty = line.quantity != null;
+
+    if (existing) {
+      const patch: Record<string, unknown> = { present: true };
+      const sameUnit = normalizeUnit(existing.unit) === normalizeUnit(line.unit);
+      if (hasQty && existing.tracking_mode === 'quantity' && sameUnit) {
+        patch.quantity = (existing.quantity ?? 0) + (line.quantity as number);
+      }
+      const { error } = await db.from('stock').update(patch).eq('id', existing.id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await db.from('stock').insert({
+        household_id: params.householdId,
+        food_id: line.foodId ?? null,
+        label: line.foodId ? null : line.name,
+        tracking_mode: hasQty ? 'quantity' : 'presence',
+        quantity: hasQty ? line.quantity : null,
+        unit: line.unit ?? null,
+        present: true,
+      });
+      if (error) throw new Error(error.message);
+    }
+    added++;
+  }
+
+  // Les achats quittent la liste.
+  await db.from('shopping_item_state').delete().eq('household_id', params.householdId);
+  await db
+    .from('shopping_manual_item')
+    .delete()
+    .eq('household_id', params.householdId)
+    .eq('checked', true);
+
+  return { added };
 }
 
 function normalizeLabel(value: string): string {
@@ -267,11 +379,57 @@ function normalizeLabel(value: string): string {
     .replace(/s$/, '');
 }
 
-function sameUnit(a?: string, b?: string): boolean {
-  if (!a || !b) return false;
-  return normalizeLabel(a) === normalizeLabel(b);
-}
-
 function roundQty(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+/**
+ * Fenêtre de calcul de la liste selon la cadence du foyer (chantier H) :
+ * `household.shopping_horizon_days` jours à partir d'aujourd'hui (défaut 14).
+ */
+export async function getShoppingWindow(
+  db: DB,
+  householdId: string,
+): Promise<{ from: string; to: string; days: number }> {
+  const hh = await db.from('household').select('shopping_horizon_days').eq('id', householdId).maybeSingle();
+  if (hh.error) throw new Error(hh.error.message);
+  const days = (hh.data?.shopping_horizon_days as number | null) ?? 14;
+  const today = new Date();
+  return { from: isoDate(today), to: isoDate(addDays(today, days - 1)), days };
+}
+
+// Réconciliation des unités (besoins vs stock) : voir `src/lib/units.ts`,
+// source de vérité unique partagée avec l'UI de saisie.
+
+function addStockBase(map: Map<string, Quantity | null>, foodId: string, base: Quantity | null): void {
+  const prev = map.get(foodId);
+  if (prev === undefined) {
+    map.set(foodId, base);
+    return;
+  }
+  if (prev === null || base === null || prev.dim !== base.dim) {
+    map.set(foodId, null); // unité non convertible ou dimensions mêlées
+    return;
+  }
+  map.set(foodId, { dim: prev.dim, value: prev.value + base.value });
+}
+
+/**
+ * Reste à acheter après déduction du stock, exprimé dans l'unité du besoin.
+ * - `stockBase` undefined (aucun stock quantifié) ou null (unité non réconciliable)
+ *   → besoin entier (on ne masque jamais un besoin sur une incompatibilité d'unité).
+ * - unités de dimensions différentes → besoin entier.
+ * - sinon : besoin − stock, converti dans l'unité du besoin.
+ */
+function remainingAfterStock(
+  needQty: number,
+  needUnit: string | undefined,
+  stockBase: Quantity | null | undefined,
+): number {
+  if (stockBase == null) return needQty;
+  const needBase = toBase(needQty, needUnit);
+  if (needBase == null || needBase.dim !== stockBase.dim) return needQty;
+  const remainingBase = needBase.value - stockBase.value;
+  if (remainingBase <= 0) return 0;
+  return fromBase(remainingBase, needUnit) ?? remainingBase;
 }

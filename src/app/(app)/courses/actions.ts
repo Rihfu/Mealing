@@ -2,6 +2,14 @@
 
 import { revalidatePath } from 'next/cache';
 import { getAuthContext } from '@/lib/auth';
+import {
+  searchFoodCatalog,
+  importFoodByRef,
+  checkoutPurchasedToStock,
+  getShoppingWindow,
+  type FoodSuggestion,
+} from '@/lib/core';
+import type { NutritionSource } from '@/lib/providers/nutrition';
 
 async function requireHousehold() {
   const { supabase, userId, profile } = await getAuthContext();
@@ -26,6 +34,34 @@ export async function toggleCheckAction(formData: FormData): Promise<void> {
   revalidatePath('/courses');
 }
 
+/** « J'ai fait mes courses » : les articles cochés entrent dans le stock (chantier E). */
+export async function checkoutToStockAction(): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  const { from, to } = await getShoppingWindow(supabase, householdId);
+  await checkoutPurchasedToStock(supabase, { householdId, from, to });
+  revalidatePath('/courses');
+  revalidatePath('/stock');
+}
+
+/** Cadence de courses : horizon de calcul de la liste, en jours (chantier H). */
+export async function setShoppingHorizonAction(formData: FormData): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  const days = Number(formData.get('days'));
+  if (!Number.isInteger(days) || days < 1 || days > 60) return;
+  await supabase.from('household').update({ shopping_horizon_days: days }).eq('id', householdId);
+  revalidatePath('/courses');
+}
+
+/** Décoche toutes les lignes (fin d'une session de courses). Ne supprime rien. */
+export async function clearCheckedAction(): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  await Promise.all([
+    supabase.from('shopping_item_state').delete().eq('household_id', householdId),
+    supabase.from('shopping_manual_item').update({ checked: false }).eq('household_id', householdId),
+  ]);
+  revalidatePath('/courses');
+}
+
 export async function toggleManualCheckAction(formData: FormData): Promise<void> {
   const { supabase } = await requireHousehold();
   await supabase
@@ -35,13 +71,29 @@ export async function toggleManualCheckAction(formData: FormData): Promise<void>
   revalidatePath('/courses');
 }
 
+/** Autocomplétion d'aliments (catalogue local + fournisseurs). */
+export async function searchCatalogAction(query: string): Promise<FoodSuggestion[]> {
+  const { supabase } = await requireHousehold();
+  return searchFoodCatalog(supabase, query, { limit: 8 });
+}
+
 export async function addManualAction(formData: FormData): Promise<void> {
   const { supabase, householdId } = await requireHousehold();
   const label = String(formData.get('label') ?? '').trim();
   if (!label) return;
+
+  // Identité produit (D) : food_id direct, ou import paresseux d'une suggestion externe.
+  let foodId = String(formData.get('food_id') ?? '') || null;
+  const source = String(formData.get('source') ?? '') as NutritionSource | '';
+  const externalId = String(formData.get('external_id') ?? '');
+  if (!foodId && (source === 'usda' || source === 'openfoodfacts') && externalId) {
+    foodId = await importFoodByRef(supabase, source, externalId);
+  }
+
   await supabase.from('shopping_manual_item').insert({
     household_id: householdId,
     label,
+    food_id: foodId,
     quantity: num(formData.get('quantity')) ?? null,
     unit: String(formData.get('unit') ?? '') || null,
   });
@@ -51,6 +103,34 @@ export async function addManualAction(formData: FormData): Promise<void> {
 export async function deleteManualAction(formData: FormData): Promise<void> {
   const { supabase } = await requireHousehold();
   await supabase.from('shopping_manual_item').delete().eq('id', String(formData.get('id')));
+  revalidatePath('/courses');
+}
+
+/** Données d'un article manuel restaurable (pour l'undo). */
+export interface ManualSnapshot {
+  label: string;
+  quantity: number | null;
+  unit: string | null;
+  food_id: string | null;
+}
+
+/** Supprime un article manuel et renvoie ses données (pour permettre l'annulation). */
+export async function deleteManualItem(id: string): Promise<ManualSnapshot | null> {
+  const { supabase } = await requireHousehold();
+  const { data } = await supabase
+    .from('shopping_manual_item')
+    .select('label, quantity, unit, food_id')
+    .eq('id', id)
+    .maybeSingle();
+  await supabase.from('shopping_manual_item').delete().eq('id', id);
+  revalidatePath('/courses');
+  return (data as ManualSnapshot | null) ?? null;
+}
+
+/** Recrée un article manuel supprimé (annulation). */
+export async function recreateManualItem(item: ManualSnapshot): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  await supabase.from('shopping_manual_item').insert({ household_id: householdId, ...item });
   revalidatePath('/courses');
 }
 
@@ -72,5 +152,31 @@ export async function addRecurringAction(formData: FormData): Promise<void> {
 export async function deleteRecurringAction(formData: FormData): Promise<void> {
   const { supabase } = await requireHousehold();
   await supabase.from('shopping_recurring_item').delete().eq('id', String(formData.get('id')));
+  revalidatePath('/courses');
+}
+
+/** Données d'un essentiel restaurable (pour l'undo). */
+export interface RecurringSnapshot {
+  food_id: string | null;
+  label: string | null;
+  default_quantity: number | null;
+  unit: string | null;
+}
+
+export async function deleteRecurringItem(id: string): Promise<RecurringSnapshot | null> {
+  const { supabase } = await requireHousehold();
+  const { data } = await supabase
+    .from('shopping_recurring_item')
+    .select('food_id, label, default_quantity, unit')
+    .eq('id', id)
+    .maybeSingle();
+  await supabase.from('shopping_recurring_item').delete().eq('id', id);
+  revalidatePath('/courses');
+  return (data as RecurringSnapshot | null) ?? null;
+}
+
+export async function recreateRecurringItem(item: RecurringSnapshot): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  await supabase.from('shopping_recurring_item').insert({ household_id: householdId, ...item });
   revalidatePath('/courses');
 }

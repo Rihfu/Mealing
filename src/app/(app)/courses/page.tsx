@@ -1,20 +1,38 @@
 import { getAuthContext } from '@/lib/auth';
-import { generateShoppingList, type ShoppingLine } from '@/lib/core';
-import { addDays, isoDate } from '@/lib/dates';
+import { generateShoppingList, getShoppingWindow, type ShoppingLine } from '@/lib/core';
+import { CATEGORIES, ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-assets';
+import { AddArticle } from './add-article';
+import { PurchaseCheckout } from './purchase-checkout';
 import {
-  addManualAction,
   addRecurringAction,
-  deleteManualAction,
-  deleteRecurringAction,
+  clearCheckedAction,
+  setShoppingHorizonAction,
   toggleCheckAction,
   toggleManualCheckAction,
 } from './actions';
+import { UndoToastHost, DeleteWithUndo } from './undo-toast';
 
-const SOURCE_LABEL: Record<string, string> = {
-  recipe: 'Repas à venir',
-  recurring: 'Récurrents',
-  manual: 'Ajouts manuels',
+const CADENCE_OPTIONS = [
+  { days: 3, label: 'Quelques jours' },
+  { days: 7, label: '1 semaine' },
+  { days: 14, label: '2 semaines' },
+];
+
+const SOURCE_TO_PROV: Record<ShoppingLine['source'], ProvenanceKey> = {
+  recipe: 'repas',
+  recurring: 'essentiel',
+  manual: 'ajoute',
 };
+
+// Ordre d'affichage des rayons + lookup teinte/encre par libellé.
+const RAYON_ORDER = Object.values(CATEGORIES).map((c) => c.label);
+const RAYON_BY_LABEL = new Map(Object.values(CATEGORIES).map((c) => [c.label, c]));
+const OTHER_RAYON = 'Autres';
+
+function tileStyle(category?: string | null) {
+  const def = category ? RAYON_BY_LABEL.get(category) : undefined;
+  return { background: def?.tint ?? 'var(--color-sage-tint)', color: def?.ink ?? 'var(--color-sage-deep)' };
+}
 
 function CheckMark({ checked }: { checked: boolean }) {
   return (
@@ -30,41 +48,36 @@ function CheckMark({ checked }: { checked: boolean }) {
 
 function LineRow({ line }: { line: ShoppingLine }) {
   const qty = line.quantity != null ? `${line.quantity} ${line.unit ?? ''}`.trim() : '';
-  const content = (
-    <span className={`text-sm ${line.checked ? 'text-ink-soft line-through' : ''}`}>
-      {line.name} {qty && <span className="text-ink-soft">· {qty}</span>}
-    </span>
-  );
-
-  if (line.source === 'manual') {
-    return (
-      <li className="flex items-center gap-3 py-2">
-        <form action={toggleManualCheckAction}>
-          <input type="hidden" name="id" value={line.manualId} />
-          <input type="hidden" name="checked" value={(!line.checked).toString()} />
-          <button aria-label="Cocher" className="block">
-            <CheckMark checked={line.checked} />
-          </button>
-        </form>
-        {content}
-        <form action={deleteManualAction} className="ml-auto">
-          <input type="hidden" name="id" value={line.manualId} />
-          <button className="text-xs font-bold text-red-strong">supprimer</button>
-        </form>
-      </li>
-    );
-  }
+  const isManual = line.source === 'manual';
+  const toggle = isManual ? toggleManualCheckAction : toggleCheckAction;
+  const toggleField = isManual
+    ? { name: 'id', value: line.manualId ?? '' }
+    : { name: 'item_key', value: line.key };
 
   return (
     <li className="flex items-center gap-3 py-2">
-      <form action={toggleCheckAction}>
-        <input type="hidden" name="item_key" value={line.key} />
+      <form action={toggle}>
+        <input type="hidden" name={toggleField.name} value={toggleField.value} />
         <input type="hidden" name="checked" value={(!line.checked).toString()} />
         <button aria-label="Cocher" className="block">
           <CheckMark checked={line.checked} />
         </button>
       </form>
-      {content}
+
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+        style={tileStyle(line.category)}
+      >
+        <ProductIcon slug={line.iconSlug} size={20} />
+      </span>
+
+      <span className={`text-sm ${line.checked ? 'text-ink-soft line-through' : ''}`}>{line.name}</span>
+
+      <span className="ml-auto flex items-center gap-3">
+        <ProvenanceBadge kind={SOURCE_TO_PROV[line.source]} />
+        {qty && <span className="text-sm text-ink-soft">{qty}</span>}
+        {isManual && line.manualId && <DeleteWithUndo kind="manual" id={line.manualId} label={line.name} />}
+      </span>
     </li>
   );
 }
@@ -73,93 +86,180 @@ export default async function CoursesPage() {
   const { supabase, profile } = await getAuthContext();
   const householdId = profile?.household_id as string;
 
-  const from = isoDate(new Date());
-  const to = isoDate(addDays(new Date(), 13));
+  const { from, to, days } = await getShoppingWindow(supabase, householdId);
 
-  const [lines, { data: recurring }, { data: foods }] = await Promise.all([
+  const [lines, { data: recurring }, { data: foods }, { data: stock }] = await Promise.all([
     generateShoppingList(supabase, { householdId, from, to }),
-    supabase
-      .from('shopping_recurring_item')
-      .select('id, label, food:food_id(name)')
-      .eq('household_id', householdId),
+    supabase.from('shopping_recurring_item').select('id, label, food:food_id(name)').eq('household_id', householdId),
     supabase.from('food').select('id, name').order('name', { ascending: true }).limit(500),
+    supabase.from('stock').select('food_id, label, quantity, unit, present').eq('household_id', householdId),
   ]);
 
-  const grouped: Record<string, ShoppingLine[]> = { recipe: [], recurring: [], manual: [] };
-  for (const l of lines) grouped[l.source].push(l);
+  // Actif (à acheter) groupé par rayon ; coché → « Déjà pris ».
+  const active = lines.filter((l) => !l.checked);
+  const done = lines.filter((l) => l.checked);
+
+  // Contexte anti-doublon / anti-surplus (G) pour le formulaire d'ajout.
+  const onListRefs = active.map((l) => ({
+    foodId: l.foodId ?? null,
+    name: l.name,
+    qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
+  }));
+  const inStockRefs = (stock ?? []).map((s) => ({
+    foodId: s.food_id ?? null,
+    label: s.label ?? null,
+    qty: s.quantity != null ? `${s.quantity} ${s.unit ?? ''}`.trim() : '',
+    present: s.present,
+  }));
+
+  const byRayon = new Map<string, ShoppingLine[]>();
+  for (const l of active) {
+    const r = l.category && RAYON_BY_LABEL.has(l.category) ? l.category : OTHER_RAYON;
+    (byRayon.get(r) ?? byRayon.set(r, []).get(r)!).push(l);
+  }
+  const rayonsToShow = [...RAYON_ORDER, OTHER_RAYON].filter((r) => byRayon.has(r));
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="font-display text-2xl font-semibold tracking-tight">Liste de courses</h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          Calculée pour les 2 prochaines semaines : besoins des repas moins le stock, plus les récurrents
-          et ajouts manuels.
+        <p className="font-hand mt-0.5 text-lg text-green-strong">
+          une seule liste, triée par rayon — coche au pouce, range au retour
         </p>
+        <p className="mt-2 max-w-xl text-sm text-ink-soft">
+          Ta liste se met à jour toute seule : on part de tes repas, on retire ce que tu as déjà en stock, et tu
+          ajoutes ce que tu veux. Coche au fur et à mesure de tes courses.
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-ink-soft">Courses sur&nbsp;:</span>
+          {CADENCE_OPTIONS.map((o) => (
+            <form key={o.days} action={setShoppingHorizonAction}>
+              <input type="hidden" name="days" value={o.days} />
+              <button
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                  days === o.days
+                    ? 'border-green-strong bg-sage-tint text-green-strong'
+                    : 'border-line text-ink-soft'
+                }`}
+              >
+                {o.label}
+              </button>
+            </form>
+          ))}
+        </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <div className="flex flex-col gap-4">
-          {(['recipe', 'recurring', 'manual'] as const).map((src) => (
-            <section key={src} className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
-              <h2 className="mb-2 font-display text-lg font-semibold">{SOURCE_LABEL[src]}</h2>
-              <ul className="divide-y divide-line">
-                {grouped[src].map((l) => (
-                  <LineRow key={l.key + l.source} line={l} />
-                ))}
-                {grouped[src].length === 0 && <li className="py-2 text-sm text-ink-soft">Rien.</li>}
-              </ul>
-            </section>
-          ))}
+          <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h2 className="font-display text-lg font-semibold">À acheter</h2>
+              {done.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-ink-soft">{done.length} déjà pris</span>
+                  <PurchaseCheckout
+                    items={done.map((l) => ({
+                      name: l.name,
+                      qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
+                      category: l.category ?? null,
+                    }))}
+                  />
+                </div>
+              )}
+            </div>
+
+            {active.length === 0 ? (
+              <p className="py-6 text-center text-sm text-ink-soft">
+                Rien à acheter pour l’instant. Ta liste se remplit toute seule dès que tu planifies des repas ou
+                qu’un essentiel vient à manquer.
+              </p>
+            ) : (
+              rayonsToShow.map((rayon) => {
+                const items = byRayon.get(rayon)!;
+                const def = RAYON_BY_LABEL.get(rayon);
+                return (
+                  <details key={rayon} open className="border-t border-line first:border-t-0">
+                    <summary className="flex cursor-pointer list-none items-center gap-2 py-2 font-display text-sm font-semibold">
+                      <span
+                        className="flex h-5 w-5 items-center justify-center rounded-md text-[10px]"
+                        style={{ background: def?.tint ?? 'var(--color-line)', color: def?.ink ?? 'var(--color-ink-soft)' }}
+                      >
+                        ●
+                      </span>
+                      <span className="flex-1">{rayon}</span>
+                      <span className="text-xs font-normal text-ink-soft">{items.length}</span>
+                    </summary>
+                    <ul className="divide-y divide-line pl-1">
+                      {items.map((l) => (
+                        <LineRow key={l.key + l.source} line={l} />
+                      ))}
+                    </ul>
+                  </details>
+                );
+              })
+            )}
+          </section>
+
+          {done.length > 0 && (
+            <details className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
+              <summary className="flex cursor-pointer list-none items-center justify-between font-display text-lg font-semibold">
+                <span>Déjà pris ({done.length})</span>
+                <span className="text-sm font-normal text-ink-soft">afficher / masquer</span>
+              </summary>
+              <div className="mt-2">
+                <form action={clearCheckedAction} className="mb-2 flex justify-end">
+                  <button className="text-xs font-bold text-green-strong">Tout décocher</button>
+                </form>
+                <ul className="divide-y divide-line">
+                  {done.map((l) => (
+                    <LineRow key={l.key + l.source} line={l} />
+                  ))}
+                </ul>
+              </div>
+            </details>
+          )}
         </div>
 
         <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
           <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
             <h2 className="mb-3 font-display text-lg font-semibold">Ajouter un article</h2>
-            <form action={addManualAction} className="flex flex-col gap-2.5 text-sm">
-              <input name="label" placeholder="Article" required className="field-input" />
-              <div className="grid grid-cols-2 gap-2">
-                <input name="quantity" type="number" step="any" placeholder="Qté" className="field-input" />
-                <input name="unit" placeholder="Unité" className="field-input" />
-              </div>
-              <button className="btn-primary py-2.5">Ajouter</button>
-            </form>
+            <AddArticle onList={onListRefs} inStock={inStockRefs} />
           </section>
 
           <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
-            <h2 className="mb-3 font-display text-lg font-semibold">Produits récurrents</h2>
+            <h2 className="mb-3 font-display text-lg font-semibold">Mes essentiels</h2>
             <ul className="mb-3 divide-y divide-line text-sm">
               {(recurring ?? []).map((r) => {
                 const f = Array.isArray(r.food) ? r.food[0] : r.food;
                 return (
                   <li key={r.id} className="flex items-center justify-between gap-3 py-2">
                     <span>{f?.name ?? r.label}</span>
-                    <form action={deleteRecurringAction}>
-                      <input type="hidden" name="id" value={r.id} />
-                      <button className="text-xs font-bold text-red-strong">supprimer</button>
-                    </form>
+                    <DeleteWithUndo kind="recurring" id={r.id} label={f?.name ?? r.label ?? ''} />
                   </li>
                 );
               })}
               {(!recurring || recurring.length === 0) && (
-                <li className="py-2 text-sm text-ink-soft">Aucun produit récurrent.</li>
+                <li className="py-2 text-sm text-ink-soft">Aucun essentiel pour l’instant.</li>
               )}
             </ul>
             <form action={addRecurringAction} className="flex flex-col gap-2.5 text-sm">
               <select name="food_id" className="field-input">
-                <option value="">— libellé libre —</option>
+                <option value="">— choisir un aliment —</option>
                 {(foods ?? []).map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name}
                   </option>
                 ))}
               </select>
-              <input name="label" placeholder="ou libellé" className="field-input" />
-              <button className="btn-secondary py-2.5">Ajouter aux récurrents</button>
+              <input name="label" placeholder="ou un libellé libre" className="field-input" />
+              <button className="btn-secondary py-2.5">Ajouter aux essentiels</button>
             </form>
           </section>
         </aside>
       </div>
+
+      <UndoToastHost />
     </div>
   );
 }

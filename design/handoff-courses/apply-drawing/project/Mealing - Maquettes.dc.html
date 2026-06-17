@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/effects.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/styles.css">
+  <script src="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/_ds_bundle.js"></script>
+  <style>
+    body { margin:0; }
+    *::-webkit-scrollbar { height:6px; width:6px; }
+    *::-webkit-scrollbar-thumb { background:#D7CDB9; border-radius:999px; }
+  </style>
+</helmet>
+<div style="background:#E9E4DA; min-height:100vh; padding:40px 40px 80px; font-family:var(--font-sans); color:var(--color-ink); box-sizing:border-box;">
+
+  <!-- Sheet header -->
+  <div style="max-width:1320px; margin:0 auto 36px; display:flex; align-items:flex-end; justify-content:space-between; gap:24px; flex-wrap:wrap;">
+    <div style="display:flex; align-items:center; gap:14px;">
+      <svg width="46" height="46" viewBox="0 0 64 64" fill="none">
+        <path d="M32 34 C31.6 28 32.2 23.5 32 19.5" stroke="#2F8049" stroke-width="2.6" stroke-linecap="round"></path>
+        <path d="M32 24.5 C27 24.8 22.6 22 21.3 16.4 C27.2 15.2 31.6 18.6 32 24.5 Z" fill="#45A35E"></path>
+        <path d="M32 21 C36.6 20.6 41.2 17.4 42.4 11.8 C36.6 11 32.2 14.8 32 21 Z" fill="#7FBE7E"></path>
+        <path d="M12.5 33 C20 30.6 44 30.4 51.5 33.2" stroke="#5E7E58" stroke-width="2.8" stroke-linecap="round"></path>
+        <path d="M14.5 34 C16 46 23.5 52.5 32 52.5 C40.5 52.5 48 46 49.5 34" stroke="#5E7E58" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+      <div>
+        <div style="font-family:var(--font-display); font-size:30px; font-weight:600; letter-spacing:-0.01em; line-height:1.05;">Mealing — maquettes</div>
+        <div style="font-family:var(--font-hand); font-size:22px; color:var(--color-green-strong); line-height:1; margin-top:2px;">10 écrans · planifier, manger, ne rien gaspiller</div>
+      </div>
+    </div>
+    <div style="font-size:12.5px; color:var(--color-ink-soft); max-width:360px; text-align:right; line-height:1.5;">
+      PWA mobile-first · foyer « Maison » (Will &amp; Camille) · semaine lun. 16 → dim. 22 juin. Accents vifs réservés aux points d'intérêt.
+    </div>
+  </div>
+
+  <!-- ============ SECTION: CŒUR PRODUIT ============ -->
+  <div style="max-width:1320px; margin:0 auto;">
+    <div style="font-family:var(--font-sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:var(--color-sage-deep); margin:0 0 20px;">Cœur produit</div>
+    <div style="display:flex; flex-wrap:wrap; gap:52px; align-items:flex-start; margin-bottom:60px;">
+
+      <!-- ===== 1. PLANNING ===== -->
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">01 · Planning <span style="color:var(--color-ink-soft); font-weight:600;">— la semaine</span></div>
+        <div style="width:390px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:30px; box-shadow:var(--shadow-md); overflow:hidden;">
+          <dc-import name="MealingNav" active="planning" hint-size="100%,88px"></dc-import>
+          <div style="background:var(--color-paper); padding:16px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+              <div style="font-family:var(--font-display); font-size:26px; font-weight:600; letter-spacing:-0.01em;">Planning</div>
+              <div style="display:flex; align-items:center; gap:6px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:999px; padding:4px 6px;">
+                <span style="width:26px; height:26px; border-radius:999px; display:flex; align-items:center; justify-content:center; color:var(--color-ink);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></span>
+                <span style="font-size:12.5px; font-weight:700; white-space:nowrap;">16 – 22 juin</span>
+                <span style="width:26px; height:26px; border-radius:999px; display:flex; align-items:center; justify-content:center; color:var(--color-ink);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+              </div>
+            </div>
+
+            <!-- lun -->
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:13px; margin-bottom:10px; box-shadow:var(--shadow-sm);">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:9px;">
+                <div style="font-family:var(--font-display); font-size:16px; font-weight:600; white-space:nowrap;">lun. <span style="color:var(--color-ink-soft);">16 juin</span></div>
+                <span style="font-size:11px; color:var(--color-ink-soft);">hors-plan</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:9px; padding:7px 0;">
+                <span style="width:9px; height:9px; border-radius:999px; background:var(--color-sage); flex:none;"></span>
+                <span style="font-size:11px; color:var(--color-ink-soft); width:62px; flex:none;">Déjeuner</span>
+                <span style="font-size:13.5px; font-weight:600; flex:1;">Salade de carottes râpées</span>
+              </div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:9px; padding:7px 0;">
+                <span style="width:9px; height:9px; border-radius:999px; background:var(--color-clay); flex:none;"></span>
+                <span style="font-size:11px; color:var(--color-ink-soft); width:62px; flex:none;">Dîner</span>
+                <span style="font-size:13.5px; font-weight:600; flex:1;">Saumon riz &amp; brocoli</span>
+              </div>
+            </div>
+
+            <!-- mar -->
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:13px; margin-bottom:10px; box-shadow:var(--shadow-sm);">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:9px;">
+                <div style="font-family:var(--font-display); font-size:16px; font-weight:600; white-space:nowrap;">mar. <span style="color:var(--color-ink-soft);">17 juin</span></div>
+                <span style="font-size:11px; color:var(--color-ink-soft);">hors-plan</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:9px; padding:7px 0;">
+                <span style="width:9px; height:9px; border-radius:999px; background:var(--color-sage); flex:none;"></span>
+                <span style="font-size:11px; color:var(--color-ink-soft); width:62px; flex:none;">Déjeuner</span>
+                <span style="font-size:13.5px; font-weight:600; flex:1;">Curry de pois chiches</span>
+                <span style="font-size:10.5px; font-weight:700; color:#fff; background:var(--color-orange); padding:2px 8px; border-radius:999px;">différent</span>
+              </div>
+            </div>
+
+            <!-- mer -->
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:13px; margin-bottom:10px; box-shadow:var(--shadow-sm);">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:9px;">
+                <div style="font-family:var(--font-display); font-size:16px; font-weight:600; white-space:nowrap;">mer. <span style="color:var(--color-ink-soft);">18 juin</span></div>
+                <span style="font-size:11px; color:var(--color-ink-soft);">hors-plan</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:9px; padding:7px 0;">
+                <span style="width:9px; height:9px; border-radius:999px; background:var(--color-clay); flex:none;"></span>
+                <span style="font-size:11px; color:var(--color-ink-soft); width:62px; flex:none;">Dîner</span>
+                <span style="font-size:13.5px; font-weight:600; flex:1;">Omelette aux herbes</span>
+              </div>
+            </div>
+
+            <!-- jeu (sauté) -->
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:13px; margin-bottom:10px; box-shadow:var(--shadow-sm);">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:9px;">
+                <div style="font-family:var(--font-display); font-size:16px; font-weight:600; white-space:nowrap;">jeu. <span style="color:var(--color-ink-soft);">19 juin</span></div>
+                <span style="font-size:11px; color:var(--color-ink-soft);">hors-plan</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:9px; padding:7px 0;">
+                <span style="width:9px; height:9px; border-radius:999px; background:var(--color-sage); flex:none;"></span>
+                <span style="font-size:11px; color:var(--color-ink-soft); width:62px; flex:none;">Déjeuner</span>
+                <span style="font-size:13.5px; font-weight:600; flex:1; color:var(--color-ink-soft); text-decoration:line-through;">Soupe de potimarron</span>
+                <span style="font-size:10.5px; font-weight:700; color:#fff; background:var(--color-red); padding:2px 8px; border-radius:999px;">sauté</span>
+              </div>
+            </div>
+
+            <!-- ven (vide) -->
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:13px; margin-bottom:10px; box-shadow:var(--shadow-sm);">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                <div style="font-family:var(--font-display); font-size:16px; font-weight:600; white-space:nowrap;">ven. <span style="color:var(--color-ink-soft);">20 juin</span></div>
+                <span style="font-size:11px; color:var(--color-ink-soft);">hors-plan</span>
+              </div>
+              <button style="width:100%; display:flex; align-items:center; justify-content:center; gap:6px; background:transparent; border:1px dashed var(--border-strong); color:var(--color-sage-deep); border-radius:12px; padding:9px; font-family:var(--font-sans); font-size:12.5px; font-weight:700; cursor:pointer;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Ajouter un repas</button>
+            </div>
+
+            <!-- sam (hors-plan) -->
+            <div style="background:var(--color-butter-tint); border:1px solid var(--color-butter); border-radius:16px; padding:13px; margin-bottom:10px;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="font-family:var(--font-display); font-size:16px; font-weight:600; white-space:nowrap;">sam. <span style="color:var(--color-ink-soft);">21 juin</span></div>
+                <span style="font-size:10.5px; font-weight:700; color:#7a5e12; background:var(--color-butter); padding:3px 9px; border-radius:999px;">journée hors-plan</span>
+              </div>
+              <div style="font-size:12px; color:var(--color-ink-soft); margin-top:6px;">Aucun suivi ce jour-là — on profite.</div>
+            </div>
+
+            <!-- dim (vide) -->
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:13px; box-shadow:var(--shadow-sm);">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                <div style="font-family:var(--font-display); font-size:16px; font-weight:600; white-space:nowrap;">dim. <span style="color:var(--color-ink-soft);">22 juin</span></div>
+                <span style="font-size:11px; color:var(--color-ink-soft);">hors-plan</span>
+              </div>
+              <button style="width:100%; display:flex; align-items:center; justify-content:center; gap:6px; background:transparent; border:1px dashed var(--border-strong); color:var(--color-sage-deep); border-radius:12px; padding:9px; font-family:var(--font-sans); font-size:12.5px; font-weight:700; cursor:pointer;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Ajouter un repas</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 2. STOCK ===== -->
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">02 · Stock <span style="color:var(--color-ink-soft); font-weight:600;">— anti-gaspi</span></div>
+        <div style="width:390px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:30px; box-shadow:var(--shadow-md); overflow:hidden;">
+          <dc-import name="MealingNav" active="stock" hint-size="100%,88px"></dc-import>
+          <div style="background:var(--color-paper); padding:16px;">
+            <div style="font-family:var(--font-display); font-size:26px; font-weight:600; letter-spacing:-0.01em; margin-bottom:14px;">Stock</div>
+
+            <!-- À consommer en priorité -->
+            <div style="background:var(--color-clay-tint); border:1px solid var(--color-clay); border-radius:16px; padding:14px; margin-bottom:16px;">
+              <div style="font-family:var(--font-display); font-size:15px; font-weight:600; margin-bottom:10px;">À consommer en priorité</div>
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:6px 0;">
+                <div><div style="font-size:13.5px; font-weight:600;">Restes de curry</div><div style="font-size:11px; color:var(--color-ink-soft);">Restes cuisinés</div></div>
+                <span style="font-size:10.5px; font-weight:700; color:#fff; background:var(--color-red); padding:3px 9px; border-radius:999px; white-space:nowrap;">périmé (1 j)</span>
+              </div>
+              <div style="height:1px; background:#e3c9b8;"></div>
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:6px 0;">
+                <div><div style="font-size:13.5px; font-weight:600;">Saumon frais</div><div style="font-size:11px; color:var(--color-ink-soft);">Poisson frais</div></div>
+                <span style="font-size:10.5px; font-weight:700; color:#fff; background:var(--color-orange); padding:3px 9px; border-radius:999px; white-space:nowrap;">à consommer · 1 j</span>
+              </div>
+            </div>
+
+            <!-- Ajout -->
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:14px; margin-bottom:16px; box-shadow:var(--shadow-sm);">
+              <div style="font-family:var(--font-display); font-size:15px; font-weight:600; margin-bottom:11px;">Ajouter un article</div>
+              <input placeholder="Aliment lié ou libellé" style="width:100%; box-sizing:border-box; font-family:var(--font-sans); font-size:13px; padding:9px 11px; border:1px solid var(--color-line); border-radius:12px; background:var(--color-paper); color:var(--color-ink); margin-bottom:9px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; border:1px solid var(--color-line); border-radius:12px; padding:9px 11px; background:var(--color-paper); margin-bottom:9px;">
+                <span style="font-size:13px; color:var(--color-ink-soft);">Catégorie de conservation</span>
+                <span style="font-size:12.5px; font-weight:700; color:var(--color-sage-deep);">Légumes frais ⌄</span>
+              </div>
+              <div style="display:flex; gap:7px; margin-bottom:11px;">
+                <div style="flex:1; display:flex; background:var(--color-paper); border:1px solid var(--color-line); border-radius:999px; padding:3px;">
+                  <span style="flex:1; text-align:center; font-size:12px; font-weight:700; padding:5px; border-radius:999px; background:var(--color-sage-tint); color:var(--color-sage-deep);">Présence</span>
+                  <span style="flex:1; text-align:center; font-size:12px; font-weight:600; padding:5px; color:var(--color-ink-soft);">Quantité</span>
+                </div>
+              </div>
+              <button style="width:100%; background:var(--color-green-strong); color:#fff; border:none; border-radius:12px; padding:11px; font-family:var(--font-sans); font-size:13.5px; font-weight:700; cursor:pointer;">Ajouter au stock</button>
+            </div>
+
+            <!-- Liste -->
+            <div style="font-family:var(--font-sans); font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-ink-soft); margin-bottom:9px;">Tout le stock</div>
+
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; overflow:hidden; box-shadow:var(--shadow-sm);">
+              <div style="display:flex; align-items:center; gap:10px; padding:12px 13px;">
+                <div style="flex:1;"><div style="font-size:13.5px; font-weight:600;">Saumon frais</div><div style="font-size:11px; color:var(--color-sage-deep);">Poisson frais</div></div>
+                <span style="font-size:12px; font-weight:700;">1 filet</span>
+                <span style="font-size:10px; font-weight:700; color:#fff; background:var(--color-orange); padding:2px 7px; border-radius:999px;">1 j</span>
+                <span style="color:var(--color-ink-soft);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span>
+              </div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:10px; padding:12px 13px;">
+                <div style="flex:1;"><div style="font-size:13.5px; font-weight:600;">Carottes</div><div style="font-size:11px; color:var(--color-sage-deep);">Légumes frais</div></div>
+                <span style="font-size:12px; font-weight:700;">6</span>
+                <span style="font-size:10px; font-weight:700; color:var(--color-green-strong); background:var(--color-sage-tint); padding:2px 7px; border-radius:999px;">frais</span>
+                <span style="color:var(--color-ink-soft);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span>
+              </div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:10px; padding:12px 13px;">
+                <div style="flex:1;"><div style="font-size:13.5px; font-weight:600;">Yaourt nature</div><div style="font-size:11px; color:var(--color-sage-deep);">Yaourt / laitage</div></div>
+                <span style="font-size:12px; font-weight:700;">4</span>
+                <span style="font-size:10px; font-weight:700; color:var(--color-green-strong); background:var(--color-sage-tint); padding:2px 7px; border-radius:999px;">frais</span>
+                <span style="color:var(--color-ink-soft);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span>
+              </div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:10px; padding:12px 13px;">
+                <div style="flex:1;"><div style="font-size:13.5px; font-weight:600;">Lait</div><div style="font-size:11px; color:var(--color-ink-soft);">Suivi : présence</div></div>
+                <span style="font-size:11px; font-weight:700; color:var(--color-green-strong); background:var(--color-sage-tint); padding:3px 9px; border-radius:999px;">présent</span>
+                <span style="color:var(--color-ink-soft);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span>
+              </div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:10px; padding:12px 13px;">
+                <div style="flex:1;"><div style="font-size:13.5px; font-weight:600;">Pâtes</div><div style="font-size:11px; color:var(--color-ink-soft);">Suivi : présence</div></div>
+                <span style="font-size:11px; font-weight:700; color:var(--color-green-strong); background:var(--color-sage-tint); padding:3px 9px; border-radius:999px;">présent</span>
+                <span style="color:var(--color-ink-soft);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span>
+              </div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:10px; padding:12px 13px; background:#fbeeea;">
+                <div style="flex:1;"><div style="font-size:13.5px; font-weight:600;">Restes de curry</div><div style="font-size:11px; color:var(--color-sage-deep);">Restes cuisinés</div></div>
+                <span style="font-size:12px; font-weight:700;">1 part</span>
+                <span style="font-size:10px; font-weight:700; color:#fff; background:var(--color-red); padding:2px 7px; border-radius:999px;">périmé (1 j)</span>
+                <span style="color:var(--color-red-strong);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 3. ASSISTANT ===== -->
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">03 · Assistant <span style="color:var(--color-ink-soft); font-weight:600;">— agentique</span></div>
+        <div style="width:390px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:30px; box-shadow:var(--shadow-md); overflow:hidden;">
+          <dc-import name="MealingNav" active="assistant" hint-size="100%,88px"></dc-import>
+          <div style="background:var(--color-paper); display:flex; flex-direction:column; height:660px;">
+            <div style="padding:14px 16px 8px;">
+              <div style="font-family:var(--font-display); font-size:22px; font-weight:600; letter-spacing:-0.01em;">Assistant</div>
+              <div style="font-size:11px; color:var(--color-ink-soft); margin-top:2px;">Contexte : repas de la semaine · stock · macros du jour</div>
+            </div>
+
+            <div style="flex:1; overflow-y:auto; padding:8px 16px; display:flex; flex-direction:column; gap:12px;">
+              <!-- user -->
+              <div style="align-self:flex-end; max-width:80%; background:var(--color-green); color:#fff; padding:10px 13px; border-radius:16px 16px 4px 16px; font-size:13.5px; line-height:1.45;">Ajoute du brocoli à ma liste de courses</div>
+              <!-- assistant -->
+              <div style="align-self:flex-start; max-width:84%; background:var(--color-sage-tint); color:var(--color-ink); padding:10px 13px; border-radius:16px 16px 16px 4px; font-size:13.5px; line-height:1.45;">D'accord. Je vais ajouter brocoli (1) au groupe « Ajouts manuels » de ta liste de courses.</div>
+
+              <!-- confirm card -->
+              <div data-actioncard style="align-self:flex-start; width:88%; background:#fdf0e3; border:1px solid var(--color-orange); border-radius:16px; padding:13px; box-shadow:var(--shadow-sm);">
+                <div style="display:flex; align-items:center; gap:7px; margin-bottom:9px;">
+                  <span style="color:var(--color-orange);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+                  <span style="font-family:var(--font-display); font-size:14.5px; font-weight:600;">Confirmer cette action ?</span>
+                </div>
+                <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:12px; padding:10px; font-size:12.5px; margin-bottom:11px;">
+                  <div style="color:var(--color-ink-soft); margin-bottom:3px;">Ajouter à la liste de courses</div>
+                  <div style="font-weight:700;">Brocoli · 1 — groupe « Ajouts manuels »</div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button data-confirm style="flex:1; background:var(--color-green-strong); color:#fff; border:none; border-radius:12px; padding:10px; font-family:var(--font-sans); font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Confirmer</button>
+                  <button data-cancel style="flex:none; background:var(--color-surface); color:var(--color-ink); border:1px solid var(--color-line); border-radius:12px; padding:10px 16px; font-family:var(--font-sans); font-size:13px; font-weight:700; cursor:pointer;">Annuler</button>
+                </div>
+              </div>
+
+              <!-- result (hidden until confirm) -->
+              <div data-actionresult style="display:none; align-self:flex-start; max-width:84%; background:var(--color-sage-tint); color:var(--color-ink); padding:10px 13px; border-radius:16px 16px 16px 4px; font-size:13.5px; line-height:1.45;"><span style="color:var(--color-green-strong); font-weight:700;">✓ Fait.</span> Brocoli ajouté à ta liste de courses.</div>
+            </div>
+
+            <div style="padding:8px 16px 14px; border-top:1px solid var(--color-line); background:var(--color-surface);">
+              <div style="display:flex; gap:7px; margin-bottom:9px; overflow-x:auto;">
+                <span style="white-space:nowrap; font-size:11.5px; font-weight:600; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:5px 11px; border-radius:999px;">Qu'est-ce qu'on mange ?</span>
+                <span style="white-space:nowrap; font-size:11.5px; font-weight:600; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:5px 11px; border-radius:999px;">Planifie une omelette demain midi</span>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input placeholder="Écris à l'assistant…" style="flex:1; font-family:var(--font-sans); font-size:13px; padding:11px 13px; border:1px solid var(--color-line); border-radius:999px; background:var(--color-paper); color:var(--color-ink);">
+                <button style="flex:none; width:42px; height:42px; border-radius:999px; background:var(--color-green-strong); color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ SECTION: RECETTES & NUTRITION ============ -->
+    <div style="font-family:var(--font-sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:var(--color-sage-deep); margin:0 0 20px;">Recettes &amp; nutrition</div>
+    <div style="display:flex; flex-wrap:wrap; gap:52px; align-items:flex-start; margin-bottom:60px;">
+
+      <!-- ===== 4. RECETTES LISTE ===== -->
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">04 · Recettes <span style="color:var(--color-ink-soft); font-weight:600;">— la bibliothèque</span></div>
+        <div style="width:390px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:30px; box-shadow:var(--shadow-md); overflow:hidden;">
+          <dc-import name="MealingNav" active="recettes" hint-size="100%,88px"></dc-import>
+          <div style="background:var(--color-paper); padding:16px;">
+            <div style="font-family:var(--font-display); font-size:26px; font-weight:600; letter-spacing:-0.01em; margin-bottom:12px;">Recettes</div>
+            <div style="display:flex; gap:8px; margin-bottom:16px;">
+              <button style="flex:1; background:var(--color-surface); color:var(--color-sage-deep); border:1px solid var(--color-line); border-radius:12px; padding:11px; font-family:var(--font-sans); font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/></svg>Générer (IA)</button>
+              <button style="flex:1; background:var(--color-green-strong); color:#fff; border:none; border-radius:12px; padding:11px; font-family:var(--font-sans); font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Nouvelle</button>
+            </div>
+
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; overflow:hidden; box-shadow:var(--shadow-sm);">
+              <div style="display:flex; align-items:center; gap:10px; padding:13px;"><div style="flex:1;"><div style="font-size:14px; font-weight:600;">Curry de pois chiches</div><div style="font-size:11.5px; color:var(--color-ink-soft);">35 min · 4 portions</div></div><span style="color:var(--color-ink-soft);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:10px; padding:13px;"><div style="flex:1;"><div style="font-size:14px; font-weight:600;">Salade de carottes râpées</div><div style="font-size:11.5px; color:var(--color-ink-soft);">15 min · 2 portions</div></div><span style="color:var(--color-ink-soft);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:10px; padding:13px;"><div style="flex:1;"><div style="font-size:14px; font-weight:600;">Omelette aux herbes</div><div style="font-size:11.5px; color:var(--color-ink-soft);">12 min · 2 portions</div></div><span style="color:var(--color-ink-soft);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:10px; padding:13px;"><div style="flex:1;"><div style="font-size:14px; font-weight:600;">Saumon riz &amp; brocoli</div><div style="font-size:11.5px; color:var(--color-ink-soft);">30 min · 2 portions</div></div><span style="color:var(--color-ink-soft);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:10px; padding:13px;"><div style="flex:1;"><div style="font-size:14px; font-weight:600;">Soupe de potimarron</div><div style="font-size:11.5px; color:var(--color-ink-soft);">40 min · 4 portions</div></div><span style="color:var(--color-ink-soft);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:10px; padding:13px;"><div style="flex:1;"><div style="font-size:14px; font-weight:600;">Pâtes tomate-basilic</div><div style="font-size:11.5px; color:var(--color-ink-soft);">20 min · 2 portions</div></div><span style="color:var(--color-ink-soft);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span></div>
+            </div>
+            <div style="font-family:var(--font-hand); font-size:18px; color:var(--color-sage-deep); text-align:center; margin-top:14px;">6 recettes au foyer — ajoute les tiennes !</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 5. DÉTAIL RECETTE ===== -->
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">05 · Détail recette</div>
+        <div style="width:390px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:30px; box-shadow:var(--shadow-md); overflow:hidden;">
+          <dc-import name="MealingNav" active="recettes" hint-size="100%,88px"></dc-import>
+          <div style="background:var(--color-paper); padding:16px;">
+            <div style="font-family:var(--font-display); font-size:24px; font-weight:600; letter-spacing:-0.01em; line-height:1.1;">Curry de pois chiches</div>
+            <div style="display:flex; gap:6px; margin:10px 0 12px; flex-wrap:wrap;">
+              <span style="font-size:11px; font-weight:700; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:3px 10px; border-radius:999px;">Végétarien</span>
+              <span style="font-size:11px; font-weight:700; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:3px 10px; border-radius:999px;">Plat</span>
+              <span style="font-size:11px; font-weight:700; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:3px 10px; border-radius:999px;">Réconfort</span>
+            </div>
+            <div style="font-size:12.5px; color:var(--color-ink-soft); line-height:1.5; margin-bottom:12px;">Un curry crémeux au lait de coco, doux et nourrissant — parfait pour un soir de semaine.</div>
+            <div style="display:flex; gap:8px; margin-bottom:16px;">
+              <div style="flex:1; background:var(--color-surface); border:1px solid var(--color-line); border-radius:12px; padding:9px; text-align:center;"><div style="font-size:11px; color:var(--color-ink-soft);">Prépa</div><div style="font-size:14px; font-weight:700;">10 min</div></div>
+              <div style="flex:1; background:var(--color-surface); border:1px solid var(--color-line); border-radius:12px; padding:9px; text-align:center;"><div style="font-size:11px; color:var(--color-ink-soft);">Cuisson</div><div style="font-size:14px; font-weight:700;">25 min</div></div>
+              <div style="flex:1; background:var(--color-surface); border:1px solid var(--color-line); border-radius:12px; padding:9px; text-align:center;"><div style="font-size:11px; color:var(--color-ink-soft);">Portions</div><div style="font-size:14px; font-weight:700;">4</div></div>
+            </div>
+
+            <div style="font-family:var(--font-display); font-size:16px; font-weight:600; margin-bottom:8px;">Ingrédients</div>
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:6px 13px; margin-bottom:16px; box-shadow:var(--shadow-sm);">
+              <div style="display:flex; justify-content:space-between; padding:7px 0; font-size:13px;"><span>Pois chiches <span style="color:var(--color-sage-deep); font-size:10px; font-weight:700;">· lié</span></span><span style="font-weight:700;">400 g</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:7px 0; font-size:13px;"><span>Lait de coco <span style="color:var(--color-sage-deep); font-size:10px; font-weight:700;">· lié</span></span><span style="font-weight:700;">200 ml</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:7px 0; font-size:13px;"><span>Tomates concassées</span><span style="font-weight:700;">400 g</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:7px 0; font-size:13px;"><span>Oignon</span><span style="font-weight:700;">1</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:7px 0; font-size:13px;"><span>Pâte de curry <span style="color:var(--color-ink-soft); font-size:10px;">· texte libre</span></span><span style="font-weight:700;">2 c. à café</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:7px 0; font-size:13px;"><span>Riz</span><span style="font-weight:700;">250 g</span></div>
+            </div>
+
+            <div style="font-family:var(--font-display); font-size:16px; font-weight:600; margin-bottom:8px;">Étapes</div>
+            <div style="display:flex; flex-direction:column; gap:9px; margin-bottom:16px;">
+              <div style="display:flex; gap:10px;"><span style="flex:none; width:22px; height:22px; border-radius:999px; background:var(--color-sage-tint); color:var(--color-sage-deep); font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center;">1</span><span style="font-size:13px; line-height:1.5;">Fais revenir l'oignon émincé dans un peu d'huile.</span></div>
+              <div style="display:flex; gap:10px;"><span style="flex:none; width:22px; height:22px; border-radius:999px; background:var(--color-sage-tint); color:var(--color-sage-deep); font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center;">2</span><span style="font-size:13px; line-height:1.5;">Ajoute la pâte de curry, les tomates et le lait de coco.</span></div>
+              <div style="display:flex; gap:10px;"><span style="flex:none; width:22px; height:22px; border-radius:999px; background:var(--color-sage-tint); color:var(--color-sage-deep); font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center;">3</span><span style="font-size:13px; line-height:1.5;">Incorpore les pois chiches, laisse mijoter 20 min.</span></div>
+              <div style="display:flex; gap:10px;"><span style="flex:none; width:22px; height:22px; border-radius:999px; background:var(--color-sage-tint); color:var(--color-sage-deep); font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center;">4</span><span style="font-size:13px; line-height:1.5;">Sers avec le riz cuit.</span></div>
+            </div>
+
+            <div style="font-family:var(--font-display); font-size:16px; font-weight:600; margin-bottom:8px;">Nutrition <span style="font-size:12px; color:var(--color-ink-soft); font-weight:400;">/ portion</span></div>
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:6px 13px; box-shadow:var(--shadow-sm); font-variant-numeric:tabular-nums;">
+              <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:12.5px;"><span style="color:var(--color-ink-soft);">Énergie</span><span style="font-weight:700;">420 kcal</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:12.5px;"><span style="color:var(--color-ink-soft);">Protéines</span><span style="font-weight:700;">14 g</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:12.5px;"><span style="color:var(--color-ink-soft);">Lipides</span><span style="font-weight:700;">18 g</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:12.5px;"><span style="color:var(--color-ink-soft);">Glucides</span><span style="font-weight:700;">48 g</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:12.5px;"><span style="color:var(--color-ink-soft);">Sucres</span><span style="font-weight:700;">8 g</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:12.5px;"><span style="color:var(--color-ink-soft);">Fibres</span><span style="font-weight:700;">11 g</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:12.5px;"><span style="color:var(--color-ink-soft);">Sodium</span><span style="font-weight:700;">320 mg</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:12.5px;"><span style="color:var(--color-ink-soft);">Fer</span><span style="font-weight:700;">3,2 mg</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:12.5px;"><span style="color:var(--color-ink-soft);">Calcium</span><span style="font-weight:700;">90 mg</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:12.5px;"><span style="color:var(--color-ink-soft);">Vitamine D</span><span style="font-weight:700;">0 µg</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:12.5px;"><span style="color:var(--color-ink-soft);">Vitamine B12</span><span style="font-weight:700;">0 µg</span></div>
+            </div>
+            <div style="font-size:11px; color:var(--color-ink-soft); margin-top:9px; line-height:1.5;">Valeurs calculées depuis les ingrédients — jamais par l'IA.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 6. GÉNÉRATION IA ===== -->
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">06 · Génération IA</div>
+        <div style="width:390px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:30px; box-shadow:var(--shadow-md); overflow:hidden;">
+          <dc-import name="MealingNav" active="recettes" hint-size="100%,88px"></dc-import>
+          <div style="background:var(--color-paper); padding:16px;">
+            <div style="font-family:var(--font-display); font-size:24px; font-weight:600; letter-spacing:-0.01em; margin-bottom:4px;">Générer une recette</div>
+            <div style="font-size:12px; color:var(--color-ink-soft); margin-bottom:14px;">Décris ce que tu veux, l'assistant structure la recette.</div>
+
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:13px; margin-bottom:14px; box-shadow:var(--shadow-sm);">
+              <textarea style="width:100%; box-sizing:border-box; border:none; resize:none; outline:none; font-family:var(--font-sans); font-size:14px; color:var(--color-ink); background:transparent; line-height:1.5;" rows="2">un curry rapide pour 4, végétarien</textarea>
+            </div>
+            <button style="width:100%; background:var(--color-green-strong); color:#fff; border:none; border-radius:12px; padding:12px; font-family:var(--font-sans); font-size:13.5px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px; margin-bottom:16px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/></svg>Générer avec l'IA</button>
+
+            <div style="font-family:var(--font-sans); font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-ink-soft); margin-bottom:9px;">Aperçu</div>
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:14px; box-shadow:var(--shadow-sm);">
+              <div style="font-family:var(--font-display); font-size:18px; font-weight:600;">Curry de pois chiches express</div>
+              <div style="display:flex; gap:6px; margin:8px 0 10px; flex-wrap:wrap;">
+                <span style="font-size:11px; font-weight:700; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:3px 10px; border-radius:999px;">Végétarien</span>
+                <span style="font-size:11px; font-weight:700; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:3px 10px; border-radius:999px;">Rapide</span>
+              </div>
+              <div style="font-size:12px; color:var(--color-ink-soft); margin-bottom:12px;">30 min · 4 portions</div>
+              <div style="font-size:12.5px; font-weight:700; margin-bottom:5px;">Ingrédients</div>
+              <div style="font-size:12.5px; color:var(--color-ink); line-height:1.7; margin-bottom:11px;">400 g pois chiches · 200 ml lait de coco · 400 g tomates · 1 oignon · 2 c. à café curry · 250 g riz</div>
+              <div style="font-size:12.5px; font-weight:700; margin-bottom:5px;">Étapes</div>
+              <div style="font-size:12.5px; color:var(--color-ink); line-height:1.7;">1. Revenir l'oignon. 2. Ajouter curry, tomates, coco. 3. Mijoter avec pois chiches 20 min. 4. Servir avec le riz.</div>
+              <div style="background:var(--color-butter-tint); border:1px solid var(--color-butter); border-radius:12px; padding:9px 11px; margin-top:13px; font-size:11.5px; color:#7a5e12; line-height:1.5;">L'IA structure la recette mais ne fournit aucune valeur nutritionnelle — elle sera calculée depuis les ingrédients à l'enregistrement.</div>
+              <button style="width:100%; background:var(--color-green-strong); color:#fff; border:none; border-radius:12px; padding:11px; font-family:var(--font-sans); font-size:13px; font-weight:700; cursor:pointer; margin-top:13px;">Enregistrer cette recette</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 7. NUTRITION ===== -->
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">07 · Nutrition</div>
+        <div style="width:390px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:30px; box-shadow:var(--shadow-md); overflow:hidden;">
+          <dc-import name="MealingNav" active="nutrition" hint-size="100%,88px"></dc-import>
+          <div style="background:var(--color-paper); padding:16px;">
+            <div style="font-family:var(--font-display); font-size:26px; font-weight:600; letter-spacing:-0.01em;">Nutrition</div>
+            <div style="font-size:11px; color:var(--color-ink-soft); margin:3px 0 13px;">Will · privé par défaut</div>
+
+            <div style="display:flex; background:var(--color-surface); border:1px solid var(--color-line); border-radius:999px; padding:3px; margin-bottom:14px;">
+              <span data-nuttab="today" style="flex:1; text-align:center; font-size:12.5px; font-weight:800; padding:7px; border-radius:999px; background:var(--color-sage-tint); color:var(--color-sage-deep); cursor:pointer;">Aujourd'hui</span>
+              <span data-nuttab="week" style="flex:1; text-align:center; font-size:12.5px; font-weight:600; padding:7px; border-radius:999px; color:var(--color-ink-soft); cursor:pointer;">Cette semaine</span>
+            </div>
+
+            <!-- Today -->
+            <div data-nutpanel="today">
+              <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:5px 12px; box-shadow:var(--shadow-sm); font-variant-numeric:tabular-nums;">
+                <div style="display:flex; padding:8px 0 6px; font-size:10.5px; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; color:var(--color-ink-soft); border-bottom:1px solid var(--color-line);"><span style="flex:1;"></span><span style="width:58px; text-align:right;">Planifié</span><span style="width:58px; text-align:right;">Réel est.</span><span style="width:58px; text-align:right;">Obj./j</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px;"><span style="flex:1;">Énergie</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">1 610</span><span style="width:58px; text-align:right; font-weight:700;">1 850</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">2 000</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Protéines</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">72</span><span style="width:58px; text-align:right; font-weight:700;">78</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">90</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Lipides</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">55</span><span style="width:58px; text-align:right; font-weight:700;">60</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">—</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Glucides</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">180</span><span style="width:58px; text-align:right; font-weight:700;">200</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">—</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Sucres</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">38</span><span style="width:58px; text-align:right; font-weight:700;">44</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">—</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Fibres</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">22</span><span style="width:58px; text-align:right; font-weight:700;">25</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">30</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Sodium <span style="font-size:10px; color:var(--color-ink-soft);">mg</span></span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">1 850</span><span style="width:58px; text-align:right; font-weight:700; color:var(--color-red-strong);">2 100</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">2 000</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Fer <span style="font-size:10px; color:var(--color-ink-soft);">mg</span></span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">9,1</span><span style="width:58px; text-align:right; font-weight:700;">10,4</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">—</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Calcium <span style="font-size:10px; color:var(--color-ink-soft);">mg</span></span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">640</span><span style="width:58px; text-align:right; font-weight:700;">710</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">—</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Vitamine D <span style="font-size:10px; color:var(--color-ink-soft);">µg</span></span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">3,2</span><span style="width:58px; text-align:right; font-weight:700;">4,0</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">—</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Vitamine B12 <span style="font-size:10px; color:var(--color-ink-soft);">µg</span></span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">2,4</span><span style="width:58px; text-align:right; font-weight:700;">3,1</span><span style="width:58px; text-align:right; color:var(--color-ink-soft);">—</span></div>
+              </div>
+              <div style="font-size:11px; color:var(--color-ink-soft); margin-top:8px;">Dépassement de l'objectif affiché en <span style="color:var(--color-red-strong); font-weight:700;">rouge</span>.</div>
+            </div>
+
+            <!-- Week (hidden) -->
+            <div data-nutpanel="week" style="display:none;">
+              <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:5px 12px; box-shadow:var(--shadow-sm); font-variant-numeric:tabular-nums;">
+                <div style="display:flex; padding:8px 0 6px; font-size:10.5px; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; color:var(--color-ink-soft); border-bottom:1px solid var(--color-line);"><span style="flex:1;"></span><span style="width:78px; text-align:right;">Planifié</span><span style="width:78px; text-align:right;">Réel est.</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px;"><span style="flex:1;">Énergie</span><span style="width:78px; text-align:right; color:var(--color-ink-soft);">11 270</span><span style="width:78px; text-align:right; font-weight:700;">11 060</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Protéines</span><span style="width:78px; text-align:right; color:var(--color-ink-soft);">504</span><span style="width:78px; text-align:right; font-weight:700;">512</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Lipides</span><span style="width:78px; text-align:right; color:var(--color-ink-soft);">385</span><span style="width:78px; text-align:right; font-weight:700;">402</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Glucides</span><span style="width:78px; text-align:right; color:var(--color-ink-soft);">1 260</span><span style="width:78px; text-align:right; font-weight:700;">1 305</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Sucres</span><span style="width:78px; text-align:right; color:var(--color-ink-soft);">266</span><span style="width:78px; text-align:right; font-weight:700;">291</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Fibres</span><span style="width:78px; text-align:right; color:var(--color-ink-soft);">154</span><span style="width:78px; text-align:right; font-weight:700;">168</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Sodium <span style="font-size:10px; color:var(--color-ink-soft);">mg</span></span><span style="width:78px; text-align:right; color:var(--color-ink-soft);">12 950</span><span style="width:78px; text-align:right; font-weight:700;">14 100</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Fer <span style="font-size:10px; color:var(--color-ink-soft);">mg</span></span><span style="width:78px; text-align:right; color:var(--color-ink-soft);">63,7</span><span style="width:78px; text-align:right; font-weight:700;">72,8</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Calcium <span style="font-size:10px; color:var(--color-ink-soft);">mg</span></span><span style="width:78px; text-align:right; color:var(--color-ink-soft);">4 480</span><span style="width:78px; text-align:right; font-weight:700;">4 970</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Vitamine D <span style="font-size:10px; color:var(--color-ink-soft);">µg</span></span><span style="width:78px; text-align:right; color:var(--color-ink-soft);">22,4</span><span style="width:78px; text-align:right; font-weight:700;">28,0</span></div>
+                <div style="display:flex; padding:7px 0; font-size:12.5px; border-top:1px solid var(--color-line);"><span style="flex:1;">Vitamine B12 <span style="font-size:10px; color:var(--color-ink-soft);">µg</span></span><span style="width:78px; text-align:right; color:var(--color-ink-soft);">16,8</span><span style="width:78px; text-align:right; font-weight:700;">21,7</span></div>
+              </div>
+            </div>
+
+            <!-- Objectifs -->
+            <div style="background:var(--color-sage-tint); border:1px solid var(--color-sage); border-radius:16px; padding:14px; margin-top:16px;">
+              <div style="font-family:var(--font-display); font-size:15px; font-weight:600; margin-bottom:11px;">Objectifs quotidiens</div>
+              <div style="display:flex; align-items:center; justify-content:space-between; background:var(--color-surface); border:1px solid var(--color-line); border-radius:12px; padding:9px 12px; margin-bottom:8px;"><span style="font-size:13px;">Énergie</span><span style="font-size:13px; font-weight:700;">2 000 kcal</span></div>
+              <div style="display:flex; align-items:center; justify-content:space-between; background:var(--color-surface); border:1px solid var(--color-line); border-radius:12px; padding:9px 12px; margin-bottom:8px;"><span style="font-size:13px;">Protéines</span><span style="font-size:13px; font-weight:700;">90 g</span></div>
+              <div style="display:flex; align-items:center; justify-content:space-between; background:var(--color-surface); border:1px solid var(--color-line); border-radius:12px; padding:9px 12px;"><span style="font-size:13px;">Fibres</span><span style="font-size:13px; font-weight:700;">30 g</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ SECTION: ORGANISATION ============ -->
+    <div style="font-family:var(--font-sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:var(--color-sage-deep); margin:0 0 20px;">Organisation du foyer</div>
+    <div style="display:flex; flex-wrap:wrap; gap:52px; align-items:flex-start; margin-bottom:60px;">
+
+      <!-- ===== 8. COURSES ===== -->
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">08 · Courses</div>
+        <div style="width:390px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:30px; box-shadow:var(--shadow-md); overflow:hidden;">
+          <dc-import name="MealingNav" active="courses" hint-size="100%,88px"></dc-import>
+          <div style="background:var(--color-paper); padding:16px;">
+            <div style="font-family:var(--font-display); font-size:26px; font-weight:600; letter-spacing:-0.01em;">Liste de courses</div>
+            <div style="font-size:11.5px; color:var(--color-ink-soft); margin:3px 0 14px;">Calculée pour les 2 prochaines semaines</div>
+
+            <!-- Repas à venir -->
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;"><span style="font-family:var(--font-display); font-size:15px; font-weight:600;">Repas à venir</span><span style="font-size:11px; color:var(--color-ink-soft);">3 articles</span></div>
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; overflow:hidden; box-shadow:var(--shadow-sm); margin-bottom:16px;">
+              <div data-check data-on="0" style="display:flex; align-items:center; gap:11px; padding:12px 13px; cursor:pointer;"><span data-box style="flex:none; width:22px; height:22px; border-radius:7px; border:1.75px solid var(--border-strong); display:flex; align-items:center; justify-content:center; color:#fff;"></span><span data-label style="flex:1; font-size:13.5px;">Brocoli</span><span data-qty style="font-size:12px; color:var(--color-ink-soft);">1</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div data-check data-on="1" style="display:flex; align-items:center; gap:11px; padding:12px 13px; cursor:pointer;"><span data-box style="flex:none; width:22px; height:22px; border-radius:7px; border:1.75px solid var(--color-green); background:var(--color-green); display:flex; align-items:center; justify-content:center; color:#fff;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span data-label style="flex:1; font-size:13.5px; color:var(--color-ink-soft); text-decoration:line-through;">Riz</span><span data-qty style="font-size:12px; color:var(--color-ink-soft); text-decoration:line-through;">250 g</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div data-check data-on="0" style="display:flex; align-items:center; gap:11px; padding:12px 13px; cursor:pointer;"><span data-box style="flex:none; width:22px; height:22px; border-radius:7px; border:1.75px solid var(--border-strong); display:flex; align-items:center; justify-content:center; color:#fff;"></span><span data-label style="flex:1; font-size:13.5px;">Basilic</span><span data-qty style="font-size:12px; color:var(--color-ink-soft);">1 botte</span></div>
+            </div>
+
+            <!-- Récurrents -->
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;"><span style="font-family:var(--font-display); font-size:15px; font-weight:600;">Récurrents</span><span style="font-size:11px; color:var(--color-sage-deep); font-weight:700;">Gérer</span></div>
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; overflow:hidden; box-shadow:var(--shadow-sm); margin-bottom:16px;">
+              <div data-check data-on="0" style="display:flex; align-items:center; gap:11px; padding:12px 13px; cursor:pointer;"><span data-box style="flex:none; width:22px; height:22px; border-radius:7px; border:1.75px solid var(--border-strong); display:flex; align-items:center; justify-content:center; color:#fff;"></span><span data-label style="flex:1; font-size:13.5px;">Café</span><span style="font-size:10px; font-weight:700; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:2px 8px; border-radius:999px;">récurrent</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div data-check data-on="0" style="display:flex; align-items:center; gap:11px; padding:12px 13px; cursor:pointer;"><span data-box style="flex:none; width:22px; height:22px; border-radius:7px; border:1.75px solid var(--border-strong); display:flex; align-items:center; justify-content:center; color:#fff;"></span><span data-label style="flex:1; font-size:13.5px;">Lait</span><span style="font-size:10px; font-weight:700; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:2px 8px; border-radius:999px;">récurrent</span></div>
+            </div>
+
+            <!-- Ajouts manuels -->
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;"><span style="font-family:var(--font-display); font-size:15px; font-weight:600;">Ajouts manuels</span><span style="font-size:11px; color:var(--color-ink-soft);">2 articles</span></div>
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; overflow:hidden; box-shadow:var(--shadow-sm); margin-bottom:13px;">
+              <div data-check data-on="0" style="display:flex; align-items:center; gap:11px; padding:12px 13px; cursor:pointer;"><span data-box style="flex:none; width:22px; height:22px; border-radius:7px; border:1.75px solid var(--border-strong); display:flex; align-items:center; justify-content:center; color:#fff;"></span><span data-label style="flex:1; font-size:13.5px;">Éponges</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div data-check data-on="0" style="display:flex; align-items:center; gap:11px; padding:12px 13px; cursor:pointer;"><span data-box style="flex:none; width:22px; height:22px; border-radius:7px; border:1.75px solid var(--border-strong); display:flex; align-items:center; justify-content:center; color:#fff;"></span><span data-label style="flex:1; font-size:13.5px;">Sacs poubelle</span></div>
+            </div>
+
+            <!-- Ajout manuel -->
+            <div style="display:flex; gap:7px;">
+              <input placeholder="Libellé" style="flex:1; min-width:0; font-family:var(--font-sans); font-size:13px; padding:10px 11px; border:1px solid var(--color-line); border-radius:12px; background:var(--color-surface); color:var(--color-ink);">
+              <input placeholder="Qté" style="width:46px; font-family:var(--font-sans); font-size:13px; padding:10px 8px; border:1px solid var(--color-line); border-radius:12px; background:var(--color-surface); color:var(--color-ink); box-sizing:border-box;">
+              <input placeholder="Unité" style="width:54px; font-family:var(--font-sans); font-size:13px; padding:10px 8px; border:1px solid var(--color-line); border-radius:12px; background:var(--color-surface); color:var(--color-ink); box-sizing:border-box;">
+              <button style="flex:none; width:42px; background:var(--color-green-strong); color:#fff; border:none; border-radius:12px; display:flex; align-items:center; justify-content:center; cursor:pointer;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 9. FOYER ===== -->
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">09 · Foyer</div>
+        <div style="width:390px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:30px; box-shadow:var(--shadow-md); overflow:hidden;">
+          <dc-import name="MealingNav" active="foyer" hint-size="100%,88px"></dc-import>
+          <div style="background:var(--color-paper); padding:16px;">
+            <div style="font-family:var(--font-display); font-size:26px; font-weight:600; letter-spacing:-0.01em;">Foyer</div>
+            <div style="font-family:var(--font-hand); font-size:20px; color:var(--color-green-strong); margin:0 0 14px;">Maison</div>
+
+            <div style="font-family:var(--font-sans); font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-ink-soft); margin-bottom:9px;">Membres</div>
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:6px 14px; box-shadow:var(--shadow-sm); margin-bottom:16px;">
+              <div style="display:flex; align-items:center; gap:11px; padding:11px 0;">
+                <span style="width:36px; height:36px; border-radius:999px; background:var(--color-sage-tint); color:var(--color-sage-deep); font-size:14px; font-weight:800; display:flex; align-items:center; justify-content:center;">W</span>
+                <div style="flex:1;"><div style="font-size:14px; font-weight:600;">Will <span style="font-size:11px; color:var(--color-ink-soft); font-weight:400;">— moi</span></div><div style="font-size:11px; color:var(--color-ink-soft);">Partager ma nutrition</div></div>
+                <span data-toggle data-on="1" style="flex:none; width:42px; height:24px; border-radius:999px; background:var(--color-green); padding:2px; cursor:pointer; transition:background .15s; display:flex;"><span data-knob style="width:20px; height:20px; border-radius:999px; background:#fff; transform:translateX(18px); transition:transform .15s;"></span></span>
+              </div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:11px; padding:11px 0;">
+                <span style="width:36px; height:36px; border-radius:999px; background:var(--color-clay-tint); color:#a96a4a; font-size:14px; font-weight:800; display:flex; align-items:center; justify-content:center;">C</span>
+                <div style="flex:1;"><div style="font-size:14px; font-weight:600;">Camille</div><div style="font-size:11px; color:var(--color-ink-soft);">Nutrition privée</div></div>
+                <span style="flex:none; width:42px; height:24px; border-radius:999px; background:var(--border-strong); padding:2px; display:flex; opacity:0.6;"><span style="width:20px; height:20px; border-radius:999px; background:#fff;"></span></span>
+              </div>
+            </div>
+
+            <div style="font-family:var(--font-sans); font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-ink-soft); margin-bottom:9px;">Inviter quelqu'un</div>
+            <div style="display:flex; gap:7px; margin-bottom:14px;">
+              <input placeholder="email@exemple.fr" style="flex:1; min-width:0; font-family:var(--font-sans); font-size:13px; padding:11px; border:1px solid var(--color-line); border-radius:12px; background:var(--color-surface); color:var(--color-ink);">
+              <button style="flex:none; background:var(--color-green-strong); color:#fff; border:none; border-radius:12px; padding:0 15px; font-family:var(--font-sans); font-size:13px; font-weight:700; cursor:pointer;">Inviter</button>
+            </div>
+
+            <div style="font-family:var(--font-sans); font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-ink-soft); margin-bottom:9px;">En attente</div>
+            <div style="background:var(--color-butter-tint); border:1px solid var(--color-butter); border-radius:16px; padding:13px; margin-bottom:16px;">
+              <div style="display:flex; align-items:center; justify-content:space-between;"><span style="font-size:13px; font-weight:600;">alex@email.fr</span><span style="font-size:10.5px; font-weight:700; color:#7a5e12; background:var(--color-butter); padding:2px 9px; border-radius:999px;">en attente</span></div>
+              <div style="display:flex; align-items:center; gap:8px; margin-top:9px;">
+                <code style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; color:var(--color-sage-deep); background:var(--color-surface); border:1px solid var(--color-line); border-radius:8px; padding:6px 9px;">mealing.app/i/8f2a-c1</code>
+                <span style="font-size:12px; font-weight:700; color:var(--color-sage-deep);">Renvoyer</span>
+              </div>
+            </div>
+
+            <div style="font-size:11.5px; color:var(--color-ink-soft); line-height:1.5;">Stock, courses et repas sont partagés au sein du foyer ; la nutrition reste privée par défaut.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ SECTION: ACCÈS ============ -->
+    <div style="font-family:var(--font-sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:var(--color-sage-deep); margin:0 0 20px;">Accès &amp; onboarding</div>
+    <div style="display:flex; flex-wrap:wrap; gap:52px; align-items:flex-start;">
+
+      <!-- ===== 10a. AUTH ===== -->
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">10 · Connexion / inscription</div>
+        <div style="width:390px; background:var(--color-paper); border:1px solid var(--color-line); border-radius:30px; box-shadow:var(--shadow-md); overflow:hidden; min-height:660px; display:flex; flex-direction:column; justify-content:center; padding:32px 26px; box-sizing:border-box;">
+          <div style="text-align:center; margin-bottom:26px;">
+            <svg width="60" height="60" viewBox="0 0 64 64" fill="none" style="margin:0 auto;">
+              <path d="M32 34 C31.6 28 32.2 23.5 32 19.5" stroke="#2F8049" stroke-width="2.6" stroke-linecap="round"></path>
+              <path d="M32 24.5 C27 24.8 22.6 22 21.3 16.4 C27.2 15.2 31.6 18.6 32 24.5 Z" fill="#45A35E"></path>
+              <path d="M32 21 C36.6 20.6 41.2 17.4 42.4 11.8 C36.6 11 32.2 14.8 32 21 Z" fill="#7FBE7E"></path>
+              <path d="M12.5 33 C20 30.6 44 30.4 51.5 33.2" stroke="#5E7E58" stroke-width="2.8" stroke-linecap="round"></path>
+              <path d="M14.5 34 C16 46 23.5 52.5 32 52.5 C40.5 52.5 48 46 49.5 34" stroke="#5E7E58" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <div style="font-family:var(--font-display); font-size:34px; font-weight:600; letter-spacing:-0.01em; margin-top:8px;">Mealing</div>
+            <div style="font-family:var(--font-hand); font-size:22px; color:var(--color-green-strong); margin-top:2px;">Qu'est-ce qu'on mange ?</div>
+          </div>
+
+          <div style="display:flex; background:var(--color-surface); border:1px solid var(--color-line); border-radius:999px; padding:3px; margin-bottom:18px;">
+            <span data-authtab="login" style="flex:1; text-align:center; font-size:13px; font-weight:800; padding:9px; border-radius:999px; background:var(--color-sage-tint); color:var(--color-sage-deep); cursor:pointer;">Connexion</span>
+            <span data-authtab="signup" style="flex:1; text-align:center; font-size:13px; font-weight:600; padding:9px; border-radius:999px; color:var(--color-ink-soft); cursor:pointer;">Inscription</span>
+          </div>
+
+          <label style="font-size:12px; font-weight:700; color:var(--color-ink-soft); display:block; margin-bottom:5px;">Email</label>
+          <input value="will@email.fr" style="width:100%; box-sizing:border-box; font-family:var(--font-sans); font-size:14px; padding:12px; border:1px solid var(--color-line); border-radius:12px; background:var(--color-surface); color:var(--color-ink); margin-bottom:13px;">
+          <label style="font-size:12px; font-weight:700; color:var(--color-ink-soft); display:block; margin-bottom:5px;">Mot de passe</label>
+          <input type="password" value="········" style="width:100%; box-sizing:border-box; font-family:var(--font-sans); font-size:14px; padding:12px; border:1px solid var(--color-line); border-radius:12px; background:var(--color-surface); color:var(--color-ink); margin-bottom:6px;">
+          <div data-authhint style="font-size:11px; color:var(--color-ink-soft); margin-bottom:18px; min-height:14px;"></div>
+
+          <button data-authcta style="width:100%; background:var(--color-green-strong); color:#fff; border:none; border-radius:12px; padding:13px; font-family:var(--font-sans); font-size:14.5px; font-weight:700; cursor:pointer;">Se connecter</button>
+          <div style="text-align:center; font-size:12px; color:var(--color-ink-soft); margin-top:14px;">En continuant, tu rejoins ou crées ton foyer.</div>
+        </div>
+      </div>
+
+      <!-- ===== 10b. ONBOARDING ===== -->
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">10 · Onboarding <span style="color:var(--color-ink-soft); font-weight:600;">— créer le foyer</span></div>
+        <div style="width:390px; background:var(--color-paper); border:1px solid var(--color-line); border-radius:30px; box-shadow:var(--shadow-md); overflow:hidden; min-height:660px; display:flex; flex-direction:column; justify-content:center; padding:32px 26px; box-sizing:border-box;">
+          <svg width="52" height="52" viewBox="0 0 64 64" fill="none" style="margin:0 auto 6px;">
+            <path d="M32 34 C31.6 28 32.2 23.5 32 19.5" stroke="#2F8049" stroke-width="2.6" stroke-linecap="round"></path>
+            <path d="M32 24.5 C27 24.8 22.6 22 21.3 16.4 C27.2 15.2 31.6 18.6 32 24.5 Z" fill="#45A35E"></path>
+            <path d="M32 21 C36.6 20.6 41.2 17.4 42.4 11.8 C36.6 11 32.2 14.8 32 21 Z" fill="#7FBE7E"></path>
+            <path d="M12.5 33 C20 30.6 44 30.4 51.5 33.2" stroke="#5E7E58" stroke-width="2.8" stroke-linecap="round"></path>
+            <path d="M14.5 34 C16 46 23.5 52.5 32 52.5 C40.5 52.5 48 46 49.5 34" stroke="#5E7E58" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+          <div style="font-family:var(--font-display); font-size:26px; font-weight:600; letter-spacing:-0.01em; text-align:center; line-height:1.15;">Crée ton foyer</div>
+          <div style="font-size:13px; color:var(--color-ink-soft); text-align:center; margin:7px 0 24px; line-height:1.5;">Tu pourras inviter les autres membres ensuite.</div>
+
+          <label style="font-size:12px; font-weight:700; color:var(--color-ink-soft); display:block; margin-bottom:5px;">Ton prénom <span style="font-weight:400;">— optionnel</span></label>
+          <input value="Will" style="width:100%; box-sizing:border-box; font-family:var(--font-sans); font-size:14px; padding:12px; border:1px solid var(--color-line); border-radius:12px; background:var(--color-surface); color:var(--color-ink); margin-bottom:13px;">
+          <label style="font-size:12px; font-weight:700; color:var(--color-ink-soft); display:block; margin-bottom:5px;">Nom du foyer</label>
+          <input value="Maison" style="width:100%; box-sizing:border-box; font-family:var(--font-sans); font-size:14px; padding:12px; border:1px solid var(--color-line); border-radius:12px; background:var(--color-surface); color:var(--color-ink); margin-bottom:22px;">
+          <button style="width:100%; background:var(--color-green-strong); color:#fff; border:none; border-radius:12px; padding:13px; font-family:var(--font-sans); font-size:14.5px; font-weight:700; cursor:pointer;">Créer mon foyer</button>
+        </div>
+      </div>
+
+      <!-- ===== 10c. INVITATION ===== -->
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">10 · Acceptation d'invitation</div>
+        <div style="width:390px; background:var(--color-paper); border:1px solid var(--color-line); border-radius:30px; box-shadow:var(--shadow-md); overflow:hidden; min-height:660px; display:flex; flex-direction:column; justify-content:center; padding:32px 26px; box-sizing:border-box;">
+          <div style="background:var(--color-sage-tint); border-radius:24px; padding:26px 20px; text-align:center;">
+            <svg width="52" height="52" viewBox="0 0 64 64" fill="none" style="margin:0 auto 8px;">
+              <path d="M32 34 C31.6 28 32.2 23.5 32 19.5" stroke="#2F8049" stroke-width="2.6" stroke-linecap="round"></path>
+              <path d="M32 24.5 C27 24.8 22.6 22 21.3 16.4 C27.2 15.2 31.6 18.6 32 24.5 Z" fill="#45A35E"></path>
+              <path d="M32 21 C36.6 20.6 41.2 17.4 42.4 11.8 C36.6 11 32.2 14.8 32 21 Z" fill="#7FBE7E"></path>
+              <path d="M12.5 33 C20 30.6 44 30.4 51.5 33.2" stroke="#5E7E58" stroke-width="2.8" stroke-linecap="round"></path>
+              <path d="M14.5 34 C16 46 23.5 52.5 32 52.5 C40.5 52.5 48 46 49.5 34" stroke="#5E7E58" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <div style="font-family:var(--font-display); font-size:23px; font-weight:600; letter-spacing:-0.01em; line-height:1.2;">Rejoindre le foyer</div>
+            <div style="font-size:14px; color:var(--color-ink); margin-top:10px; line-height:1.5;"><span style="font-weight:700;">Will</span> t'invite à rejoindre le foyer <span style="font-weight:700;">« Maison »</span>.</div>
+            <div style="font-size:12px; color:var(--color-ink-soft); margin-top:6px;">Vous partagerez planning, stock et courses.</div>
+          </div>
+          <button style="width:100%; background:var(--color-green-strong); color:#fff; border:none; border-radius:12px; padding:13px; font-family:var(--font-sans); font-size:14.5px; font-weight:700; cursor:pointer; margin-top:20px;">Rejoindre le foyer</button>
+          <button style="width:100%; background:transparent; color:var(--color-ink-soft); border:none; padding:12px; font-family:var(--font-sans); font-size:13px; font-weight:600; cursor:pointer; margin-top:6px;">Ce n'est pas moi</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  componentDidMount() {
+    const root = document;
+
+    // Shopping checkboxes
+    root.querySelectorAll('[data-check]').forEach((row) => {
+      row.addEventListener('click', () => {
+        const on = row.getAttribute('data-on') === '1';
+        this.setCheck(row, !on);
+      });
+    });
+
+    // Foyer toggle (Will)
+    root.querySelectorAll('[data-toggle]').forEach((tg) => {
+      tg.addEventListener('click', () => {
+        const on = tg.getAttribute('data-on') === '1';
+        const next = !on;
+        tg.setAttribute('data-on', next ? '1' : '0');
+        tg.style.background = next ? 'var(--color-green)' : 'var(--border-strong)';
+        const knob = tg.querySelector('[data-knob]');
+        if (knob) knob.style.transform = next ? 'translateX(18px)' : 'translateX(0px)';
+      });
+    });
+
+    // Nutrition tabs
+    root.querySelectorAll('[data-nuttab]').forEach((tab) => {
+      tab.addEventListener('click', () => this.switchNut(tab.getAttribute('data-nuttab')));
+    });
+
+    // Auth tabs
+    root.querySelectorAll('[data-authtab]').forEach((tab) => {
+      tab.addEventListener('click', () => this.switchAuth(tab.getAttribute('data-authtab')));
+    });
+
+    // Assistant confirm / cancel
+    const card = root.querySelector('[data-actioncard]');
+    const result = root.querySelector('[data-actionresult]');
+    const confirmBtn = root.querySelector('[data-confirm]');
+    const cancelBtn = root.querySelector('[data-cancel]');
+    if (confirmBtn) confirmBtn.addEventListener('click', () => { if (card) card.style.display = 'none'; if (result) result.style.display = 'block'; });
+    if (cancelBtn) cancelBtn.addEventListener('click', () => { if (card) card.style.display = 'none'; });
+  }
+
+  setCheck(row, on) {
+    row.setAttribute('data-on', on ? '1' : '0');
+    const box = row.querySelector('[data-box]');
+    const label = row.querySelector('[data-label]');
+    const qty = row.querySelector('[data-qty]');
+    if (box) {
+      if (on) {
+        box.style.border = '1.75px solid var(--color-green)';
+        box.style.background = 'var(--color-green)';
+        box.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+      } else {
+        box.style.border = '1.75px solid var(--border-strong)';
+        box.style.background = 'transparent';
+        box.innerHTML = '';
+      }
+    }
+    if (label) { label.style.color = on ? 'var(--color-ink-soft)' : 'var(--color-ink)'; label.style.textDecoration = on ? 'line-through' : 'none'; }
+    if (qty) { qty.style.textDecoration = on ? 'line-through' : 'none'; }
+  }
+
+  switchNut(which) {
+    document.querySelectorAll('[data-nuttab]').forEach((t) => {
+      const active = t.getAttribute('data-nuttab') === which;
+      t.style.background = active ? 'var(--color-sage-tint)' : 'transparent';
+      t.style.color = active ? 'var(--color-sage-deep)' : 'var(--color-ink-soft)';
+      t.style.fontWeight = active ? '800' : '600';
+    });
+    document.querySelectorAll('[data-nutpanel]').forEach((p) => {
+      p.style.display = p.getAttribute('data-nutpanel') === which ? 'block' : 'none';
+    });
+  }
+
+  switchAuth(which) {
+    document.querySelectorAll('[data-authtab]').forEach((t) => {
+      const active = t.getAttribute('data-authtab') === which;
+      t.style.background = active ? 'var(--color-sage-tint)' : 'transparent';
+      t.style.color = active ? 'var(--color-sage-deep)' : 'var(--color-ink-soft)';
+      t.style.fontWeight = active ? '800' : '600';
+    });
+    const cta = document.querySelector('[data-authcta]');
+    const hint = document.querySelector('[data-authhint]');
+    if (cta) cta.textContent = which === 'signup' ? 'Créer mon compte' : 'Se connecter';
+    if (hint) hint.textContent = which === 'signup' ? 'Au moins 8 caractères.' : '';
+  }
+}
+</script>
+</body>
+</html>
