@@ -13,5 +13,11 @@
 
 # Rappel : configurer les variables d'environnement dans
 # Netlify > Site settings > Environment variables (jamais committées) :
-#   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
-#   GROQ_API_KEY, USDA_API_KEY.
+#   Requises  : NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+#               GROQ_API_KEY, USDA_API_KEY
+#   Optionnelle : SUPABASE_SERVICE_ROLE_KEY (opérations admin contournant le RLS)
+# Les NEXT_PUBLIC_* sont « inlinées » au build → présence requise dès le build.
+#
+# Côté Supabase (Authentication > URL Configuration) : régler Site URL sur le
+# domaine Netlify et ajouter la Redirect URL « https://<domaine>/auth/callback »
+# pour la confirmation d'email et la connexion.

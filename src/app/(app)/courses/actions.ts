@@ -100,12 +100,6 @@ export async function addManualAction(formData: FormData): Promise<void> {
   revalidatePath('/courses');
 }
 
-export async function deleteManualAction(formData: FormData): Promise<void> {
-  const { supabase } = await requireHousehold();
-  await supabase.from('shopping_manual_item').delete().eq('id', String(formData.get('id')));
-  revalidatePath('/courses');
-}
-
 /** Données d'un article manuel restaurable (pour l'undo). */
 export interface ManualSnapshot {
   label: string;
@@ -146,12 +140,6 @@ export async function addRecurringAction(formData: FormData): Promise<void> {
     default_quantity: num(formData.get('quantity')) ?? null,
     unit: String(formData.get('unit') ?? '') || null,
   });
-  revalidatePath('/courses');
-}
-
-export async function deleteRecurringAction(formData: FormData): Promise<void> {
-  const { supabase } = await requireHousehold();
-  await supabase.from('shopping_recurring_item').delete().eq('id', String(formData.get('id')));
   revalidatePath('/courses');
 }
 

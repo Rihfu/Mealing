@@ -87,22 +87,39 @@ Ce fichier est un résumé opérationnel. En cas de doute sur un détail, lire l
 - Note auth : confirmation email Supabase activée + validation MX des domaines à l'inscription (rejette example.com). Pour tester, créer un user confirmé via SQL.
 - Convention UI : les mutations passent par des server actions qui appellent les fonctions de `src/lib/core/` (jamais de logique métier dans les composants).
 
-### Design system (branche `design-system-foundations`, PR #8 — NON mergée)
+### Design system (intégré dans `main`)
 
-- Handoff Claude Design implémenté : **fondations seulement** (tokens, polices, logo). Sources : `design/handoff/`, `docs/design-direction.md`, `docs/claude-design-brief.md`.
+- **Statut** : fondations + maquettes haute-fidélité **mobile et desktop** intégrées dans `main` (commits `1869bc9`, `84ba912` mobile, `89b7878` desktop). La branche `design-system-foundations` existe encore (origin) mais son contenu est dans `main` — peut être supprimée.
+- Handoff Claude Design implémenté : fondations (tokens, polices, logo) **puis écrans restylés en haute-fidélité**. Sources : `design/handoff/`, `design/handoff-desktop/`, `docs/design-direction.md`, `docs/claude-design-brief.md`, `docs/claude-design-highfi-brief.md`, `docs/claude-design-highfi-desktop-brief.md`.
 - Tokens `@theme` Tailwind v4 dans `src/app/globals.css` ; polices Fraunces/Nunito/Caveat via `next/font` (layout racine) ; logo `public/logo.svg` + favicon `src/app/icon.svg` (direction « bowl & sprout » B).
 - Dark mode OS neutralisé via `@custom-variant dark (&:where(.dark, .dark *))` → les classes `dark:` existantes sont inertes.
 - Primitives `@layer components` : `btn-primary/secondary/danger`, `card`, `field-input`, `nav-link`.
 - **Piège Tailwind v4** : ne JAMAIS mettre `@import url(...)` (ex. Google Fonts) dans `globals.css` — `@import "tailwindcss"` est développé sur place, ce qui casse `@theme` puis la compilation. Charger les polices via `next/font`.
-- Écrans restylés aux tokens, mais **pas encore pixel-perfect** et **sans icônes Lucide** (le handoff ne contenait pas les maquettes d'écran ni la lib de composants).
+- Écrans restylés en haute-fidélité (mobile + desktop). **Restent à faire** : icônes **Lucide** (lib non installée, cf. `package.json`) et la passe « composants React partagés ».
+
+### Changements récents non issus du séquencement par phases (Codex, juin 2026)
+
+- **Design haute-fidélité** : maquettes mobile (`84ba912`) puis desktop (`89b7878`) intégrées sur ~19 écrans (planning, nutrition, courses, foyer, recettes, login, onboarding, assistant…).
+- **Déploiement Netlify** : `netlify.toml` configuré avec le plugin runtime `@netlify/plugin-nextjs` (`e117fde`) ; clés Supabase publiques exclues du secret-scan Netlify (`cfb965c`, `581c84e`).
+- **Recettes IA + stock** (`11c0f6c`) : la génération de recettes par IA tient désormais compte du stock disponible (`src/lib/ai/generate-recipe.ts`, `src/lib/core/shopping.ts`, flow `recettes/generer`).
+
+### Refonte de la section Courses / Liste de courses (juin 2026 — mergée dans `main`, merge `804d93d`)
+
+Doc de référence : `docs/courses-ux-refonte.md` · tests/bugs : `docs/courses-retravail-findings.md` · maquettes Claude Design : `design/handoff-courses/` · brief : `docs/claude-design-courses-brief.md`.
+
+- **Logique** : réconciliation d'unités (`src/lib/units.ts` — `UNIT_OPTIONS`, `toBase/fromBase`, source unique), `src/lib/core/shopping.ts` enrichit chaque ligne de `category` (rayon) + `iconSlug`, calcule la fenêtre via `getShoppingWindow` (cadence foyer), et `checkoutPurchasedToStock` (achat → stock daté, **flux entrant**, ne touche pas à la décrémentation specs 3.4). Catalogue : `src/lib/core/foods.ts` (`searchFoodCatalog` hybride local + USDA/OFF, `importFoodByRef`).
+- **UI** (`src/app/(app)/courses/`) : `page.tsx` (liste unique triée par rayon + puces de provenance + « Déjà pris »), `add-article.tsx` (autocomplétion + formats `food_package` + unités + anti-surplus/doublon), `purchase-checkout.tsx` (achat→stock), `undo-toast.tsx` (annulation des suppressions). Banque d'assets d'icônes produits réutilisable : `src/lib/product-assets.tsx`.
+- **BDD** : migrations `0008` (catalogue : `food.category`, table `food_package`, `shopping_manual_item.food_id`), `0009` (seed FR : 76 aliments / 8 rayons / 29 conditionnements), `0010` (`household.shopping_horizon_days`). Appliquées en base + types régénérés.
+- **Bugs corrigés** : déduction stock sans unités, besoins masqués sur unité ≠, collision de clés d'état.
+- **Reste optionnel** : UX-14 (vue « mode magasin » mobile dédiée).
 
 ### Prochaine session — actions à effectuer
 
-1. **Revoir puis fusionner la PR #8** (design system) vers `main`, supprimer la branche, et mettre à jour cette section (design intégré dans `main`).
-2. **Claude Design → maquettes haute-fidélité** : générer Planning, Stock + anti-gaspi, Assistant d'abord ; transmettre l'export (HTML dans `design/exports/` ou nouveau handoff) pour une implémentation pixel-perfect.
-3. **Passe composants + icônes** : composants React partagés (Button, Field, Card, Badge, Nav, Bubble) + icônes **Lucide** (prévu par le handoff) ; convertir les écrans aux primitives plutôt qu'aux classes utilitaires.
+1. **Tests & vérification utilisateur** (étape en cours) : valider les parcours dans le navigateur. Capacité disponible : extension **Claude in Chrome** connectée (piloter un vrai onglet, lire console/réseau) + skill `verify` + skill `playwright-cli`. Prérequis : `npm run dev` lancé sur `http://localhost:3000`.
+2. **Passe composants + icônes** : composants React partagés (Button, Field, Card, Badge, Nav, Bubble) + icônes **Lucide** (lib à installer) ; convertir les écrans aux primitives plutôt qu'aux classes utilitaires.
+3. **Nettoyage git** : supprimer la branche `design-system-foundations` (origin) maintenant que son contenu est dans `main`.
 4. *(Optionnel)* **`/design-sync`** : une fois les composants codés, les pousser vers le projet Claude Design pour boucler la synchro (nécessite d'autoriser l'accès design sur le login claude.ai).
-5. **Mise en production** : configurer l'envoi d'email Supabase (confirmation + Redirect URL `…/auth/callback`) puis déployer sur Netlify (variables d'env du `.env.example`).
+5. **Mise en production** : `netlify.toml` en place et **`npm run build` validé** (build de prod OK). Reste, côté tableau de bord (non committable) : renseigner les variables d'env Netlify (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GROQ_API_KEY`, `USDA_API_KEY` requises ; `SUPABASE_SERVICE_ROLE_KEY` optionnelle) et configurer Supabase Auth (Site URL = domaine Netlify + Redirect URL `…/auth/callback`).
 6. **PWA** : `manifest` + icônes installables (favicon déjà posé via `src/app/icon.svg`).
 
 ---
