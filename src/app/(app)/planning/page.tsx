@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getAuthContext } from '@/lib/auth';
-import { addDays, DAY_LABELS, isoDate, mondayOf, SLOTS } from '@/lib/dates';
+import { addDays, isoDate, mondayOf, SLOTS } from '@/lib/dates';
 import { addMealAction, deleteMealAction, markDayOffAction, recordDeviationAction } from './actions';
 
 interface Meal {
@@ -10,6 +10,18 @@ interface Meal {
   recipe_id: string | null;
   free_text: string | null;
 }
+
+const DAYS_ABBR = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
+const MONTHS = [
+  'janv.', 'févr.', 'mars', 'avril', 'mai', 'juin',
+  'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
+];
+const SLOT_DOT: Record<string, string> = {
+  breakfast: 'bg-butter',
+  lunch: 'bg-sage',
+  dinner: 'bg-clay',
+  snack: 'bg-sage-deep',
+};
 
 export default async function PlanningPage({
   searchParams,
@@ -38,136 +50,121 @@ export default async function PlanningPage({
   const recipeName = new Map((recipes ?? []).map((r) => [r.id, r.name]));
   const offSet = new Set((offDays ?? []).map((o) => o.off_date));
 
-  // Statuts d'écart enregistrés par l'utilisateur courant pour ces repas.
   const { data: consumptions } = await supabase
     .from('real_consumption')
     .select('planned_meal_id, status')
     .in('planned_meal_id', mealList.map((m) => m.id).length ? mealList.map((m) => m.id) : ['']);
   const statusByMeal = new Map(
-    (consumptions ?? [])
-      .filter((c) => c.planned_meal_id)
-      .map((c) => [c.planned_meal_id as string, c.status]),
+    (consumptions ?? []).filter((c) => c.planned_meal_id).map((c) => [c.planned_meal_id as string, c.status]),
   );
 
   const prevWeek = isoDate(addDays(weekStart, -7));
   const nextWeek = isoDate(addDays(weekStart, 7));
+  const weekLabel = `${weekStart.getDate()} – ${weekEnd.getDate()} ${MONTHS[weekEnd.getMonth()]}`;
+  const slotLabel = (s: string) => SLOTS.find((x) => x.key === s)?.label ?? s;
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Planning</h1>
-        <div className="flex items-center gap-3 text-sm">
-          <Link href={`/planning?week=${prevWeek}`} className="underline">
-            ← Semaine préc.
-          </Link>
-          <Link href={`/planning?week=${nextWeek}`} className="underline">
-            Semaine suiv. →
-          </Link>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Planning</h1>
+        <div className="flex items-center gap-1 rounded-full border border-line bg-surface px-1.5 py-1 text-sm">
+          <Link href={`/planning?week=${prevWeek}`} aria-label="Semaine précédente" className="flex h-6 w-6 items-center justify-center rounded-full text-ink hover:bg-sage-tint">‹</Link>
+          <span className="whitespace-nowrap px-1 text-xs font-bold">{weekLabel}</span>
+          <Link href={`/planning?week=${nextWeek}`} aria-label="Semaine suivante" className="flex h-6 w-6 items-center justify-center rounded-full text-ink hover:bg-sage-tint">›</Link>
         </div>
       </div>
 
-      <div className="flex flex-col gap-3">
-        {DAY_LABELS.map((label, i) => {
-          const date = isoDate(addDays(weekStart, i));
+      <div className="flex flex-col gap-2.5">
+        {DAYS_ABBR.map((abbr, i) => {
+          const d = addDays(weekStart, i);
+          const date = isoDate(d);
+          const dateLabel = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
           const isOff = offSet.has(date);
           const dayMeals = mealList.filter((m) => m.meal_date === date);
 
+          if (isOff) {
+            return (
+              <section key={date} className="rounded-2xl border border-butter bg-butter-tint p-3.5">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-display text-base font-semibold">
+                    {abbr} <span className="text-ink-soft">{dateLabel}</span>
+                  </h2>
+                  <span className="pill bg-butter text-[#7a5e12]">journée hors-plan</span>
+                </div>
+                <p className="mt-1.5 text-xs text-ink-soft">Aucun suivi ce jour-là — on profite.</p>
+              </section>
+            );
+          }
+
           return (
-            <section key={date} className="rounded border border-line p-3 dark:border-gray-800">
+            <section key={date} className="rounded-2xl border border-line bg-surface p-3.5 shadow-soft">
               <div className="mb-2 flex items-center justify-between">
-                <h2 className="text-sm font-semibold">
-                  {label} <span className="text-ink-soft">{date}</span>
-                  {isOff && (
-                    <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                      journée hors-plan
-                    </span>
-                  )}
+                <h2 className="font-display text-base font-semibold">
+                  {abbr} <span className="text-ink-soft">{dateLabel}</span>
                 </h2>
-                {!isOff && (
-                  <form action={markDayOffAction}>
-                    <input type="hidden" name="date" value={date} />
-                    <button type="submit" className="text-xs text-ink-soft underline">
-                      Marquer hors-plan
-                    </button>
-                  </form>
-                )}
+                <form action={markDayOffAction}>
+                  <input type="hidden" name="date" value={date} />
+                  <button type="submit" className="text-xs text-ink-soft hover:underline">
+                    hors-plan
+                  </button>
+                </form>
               </div>
 
-              <ul className="mb-2 flex flex-col gap-1">
-                {dayMeals.map((m) => {
-                  const status = statusByMeal.get(m.id);
-                  return (
-                    <li key={m.id} className="flex flex-wrap items-center gap-2 text-sm">
-                      <span className="rounded bg-sage-tint px-1.5 py-0.5 text-xs dark:bg-gray-800">
-                        {SLOTS.find((s) => s.key === m.slot)?.label ?? m.slot}
+              {dayMeals.map((m, idx) => {
+                const status = statusByMeal.get(m.id);
+                return (
+                  <div key={m.id}>
+                    {idx > 0 && <div className="h-px bg-line" />}
+                    <div className="flex items-center gap-2.5 py-1.5">
+                      <span className={`h-2.5 w-2.5 flex-none rounded-full ${SLOT_DOT[m.slot] ?? 'bg-sage'}`} />
+                      <span className="w-16 flex-none text-xs text-ink-soft">{slotLabel(m.slot)}</span>
+                      <span className={`flex-1 text-sm font-medium ${status === 'skipped' ? 'text-ink-soft line-through' : ''}`}>
+                        {m.recipe_id ? recipeName.get(m.recipe_id) : m.free_text}
                       </span>
-                      <span>{m.recipe_id ? recipeName.get(m.recipe_id) : m.free_text}</span>
-                      {status === 'skipped' && <span className="text-xs text-red-strong">sauté</span>}
-                      {status === 'different' && (
-                        <span className="text-xs text-amber-600">différent</span>
-                      )}
+                      {status === 'skipped' && <span className="pill bg-red text-white">sauté</span>}
+                      {status === 'different' && <span className="pill bg-orange text-white">différent</span>}
                       {!status && (
-                        <span className="flex gap-1 text-xs">
+                        <span className="flex gap-1.5 text-xs">
                           <form action={recordDeviationAction}>
                             <input type="hidden" name="meal_id" value={m.id} />
                             <input type="hidden" name="status" value="skipped" />
-                            <button className="text-ink-soft underline">sauté</button>
+                            <button className="text-ink-soft hover:underline">sauté</button>
                           </form>
                           <form action={recordDeviationAction}>
                             <input type="hidden" name="meal_id" value={m.id} />
                             <input type="hidden" name="status" value="different" />
-                            <button className="text-ink-soft underline">différent</button>
+                            <button className="text-ink-soft hover:underline">différent</button>
                           </form>
                         </span>
                       )}
-                      <form action={deleteMealAction} className="ml-auto">
+                      <form action={deleteMealAction}>
                         <input type="hidden" name="meal_id" value={m.id} />
-                        <button className="text-xs text-red-strong">✕</button>
+                        <button aria-label="Supprimer" className="text-xs text-ink-soft hover:text-red-strong">✕</button>
                       </form>
-                    </li>
-                  );
-                })}
-                {dayMeals.length === 0 && (
-                  <li className="text-xs text-ink-soft">Aucun repas planifié.</li>
-                )}
-              </ul>
+                    </div>
+                  </div>
+                );
+              })}
 
-              <details className="text-sm">
-                <summary className="cursor-pointer text-green-strong">+ Ajouter un repas</summary>
+              <details className="mt-1 text-sm [&[open]>summary]:hidden">
+                <summary className="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-line-strong py-2 text-xs font-bold text-sage-deep">
+                  + Ajouter un repas
+                </summary>
                 <form action={addMealAction} className="mt-2 flex flex-wrap items-center gap-2">
                   <input type="hidden" name="date" value={date} />
-                  <select
-                    name="slot"
-                    className="rounded border border-line-strong px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
-                  >
+                  <select name="slot" className="field-input py-1.5 text-sm">
                     {SLOTS.map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.label}
-                      </option>
+                      <option key={s.key} value={s.key}>{s.label}</option>
                     ))}
                   </select>
-                  <select
-                    name="recipe_id"
-                    className="rounded border border-line-strong px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
-                  >
+                  <select name="recipe_id" className="field-input py-1.5 text-sm">
                     <option value="">— recette —</option>
                     {(recipes ?? []).map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
+                      <option key={r.id} value={r.id}>{r.name}</option>
                     ))}
                   </select>
-                  <input
-                    name="free_text"
-                    placeholder="ou repas libre"
-                    className="rounded border border-line-strong px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
-                  />
-                  <button
-                    type="submit"
-                    className="rounded bg-green-strong px-3 py-1.5 text-sm text-white dark:bg-white dark:text-black"
-                  >
-                    Ajouter
-                  </button>
+                  <input name="free_text" placeholder="ou repas libre" className="field-input flex-1 py-1.5 text-sm" />
+                  <button type="submit" className="btn-primary px-3 py-1.5">Ajouter</button>
                 </form>
               </details>
             </section>
