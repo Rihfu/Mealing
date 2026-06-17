@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/effects.css">
+</helmet>
+<div style="width:100%; background:var(--color-surface); border-bottom:1px solid var(--color-line); box-sizing:border-box;">
+  <div style="max-width:1200px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:24px; padding:14px 32px;">
+
+    <div style="display:flex; align-items:center; gap:10px; flex:none;">
+      <svg width="34" height="34" viewBox="0 0 64 64" fill="none">
+        <path d="M32 34 C31.6 28 32.2 23.5 32 19.5" stroke="#2F8049" stroke-width="2.6" stroke-linecap="round"></path>
+        <path d="M32 24.5 C27 24.8 22.6 22 21.3 16.4 C27.2 15.2 31.6 18.6 32 24.5 Z" fill="#45A35E"></path>
+        <path d="M32 21 C36.6 20.6 41.2 17.4 42.4 11.8 C36.6 11 32.2 14.8 32 21 Z" fill="#7FBE7E"></path>
+        <path d="M12.5 33 C20 30.6 44 30.4 51.5 33.2" stroke="#5E7E58" stroke-width="2.8" stroke-linecap="round"></path>
+        <path d="M14.5 34 C16 46 23.5 52.5 32 52.5 C40.5 52.5 48 46 49.5 34" stroke="#5E7E58" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+      <span style="font-family:var(--font-display); font-weight:600; font-size:21px; color:var(--color-ink); letter-spacing:-0.01em;">Mealing</span>
+    </div>
+
+    <nav style="display:flex; align-items:center; gap:2px; flex:1; justify-content:center;">
+      <sc-for list="{{ links }}" as="link" hint-placeholder-count="7">
+        <span style="{{ link.style }}">{{ link.label }}</span>
+      </sc-for>
+    </nav>
+
+    <div style="display:flex; align-items:center; gap:11px; flex:none;">
+      <span style="width:30px; height:30px; border-radius:999px; background:var(--color-sage-tint); color:var(--color-sage-deep); font-size:13px; font-weight:800; font-family:var(--font-sans); display:flex; align-items:center; justify-content:center;">W</span>
+      <span style="font-family:var(--font-sans); font-size:14px; color:var(--color-ink); font-weight:700;">Will</span>
+      <span style="width:1px; height:18px; background:var(--color-line);"></span>
+      <span style="display:flex; align-items:center; gap:5px; font-family:var(--font-sans); font-size:12.5px; color:var(--color-ink-soft); cursor:pointer;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+        Déconnexion
+      </span>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1200,&quot;height&quot;:64},&quot;active&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;planning&quot;,&quot;recettes&quot;,&quot;nutrition&quot;,&quot;stock&quot;,&quot;courses&quot;,&quot;foyer&quot;,&quot;assistant&quot;],&quot;default&quot;:&quot;planning&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const active = this.props.active || 'planning';
+    const items = [
+      ['planning','Planning'],['recettes','Recettes'],['nutrition','Nutrition'],
+      ['stock','Stock'],['courses','Courses'],['foyer','Foyer'],['assistant','Assistant']
+    ];
+    const base = 'font-family:var(--font-sans); font-size:14px; white-space:nowrap; padding:8px 16px; border-radius:999px; cursor:pointer; transition:background .15s;';
+    const links = items.map(([key,label]) => ({
+      label,
+      style: key === active
+        ? base + 'background:var(--color-sage-tint); color:var(--color-sage-deep); font-weight:800;'
+        : base + 'background:transparent; color:var(--color-ink-soft); font-weight:600;'
+    }));
+    return { links };
+  }
+}
+</script>
+</body>
+</html>

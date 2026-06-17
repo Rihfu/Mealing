@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/effects.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/styles.css">
+  <style> body { margin:0; } </style>
+</helmet>
+<div style="background:var(--color-paper); min-height:100vh; padding:48px 56px 80px; font-family:var(--font-sans); color:var(--color-ink); box-sizing:border-box;">
+
+  <!-- header -->
+  <div style="max-width:1080px; margin:0 auto 36px;">
+    <div style="font-family:var(--font-display); font-size:34px; font-weight:600; letter-spacing:-0.01em; line-height:1.05;">Banque d'assets — figures produits</div>
+    <div style="font-family:var(--font-hand); font-size:24px; color:var(--color-green-strong); margin-top:3px;">un picto par type de produit, à réutiliser partout</div>
+    <div style="font-size:14px; color:var(--color-ink-soft); line-height:1.6; margin-top:12px; max-width:680px;">Jeu de figures « doodle » monoline, dans le style dessiné-main de Mealing. Pensées pour les listes de courses, le stock, les recettes et le planning. Trait <span style="color:var(--color-ink); font-weight:600;">currentColor</span> (prend la couleur du rayon), remplissage translucide léger. Source réutilisable : <code style="font-size:12.5px; background:var(--color-sage-tint); color:var(--color-sage-deep); padding:2px 7px; border-radius:6px;">assets/produits-assets.js</code></div>
+  </div>
+
+  <!-- legend -->
+  <div style="max-width:1080px; margin:0 auto 40px; display:flex; gap:18px; flex-wrap:wrap; align-items:stretch;">
+    <div style="flex:1; min-width:380px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:18px 20px; box-shadow:var(--shadow-sm);">
+      <div style="font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-ink-soft); margin-bottom:13px;">Rayons &amp; teintes</div>
+      <div data-legend-cats style="display:flex; flex-wrap:wrap; gap:9px;"></div>
+    </div>
+    <div style="flex:1; min-width:380px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:18px 20px; box-shadow:var(--shadow-sm);">
+      <div style="font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-ink-soft); margin-bottom:13px;">Puces de provenance</div>
+      <div data-legend-prov style="display:flex; flex-wrap:wrap; gap:18px; margin-bottom:14px;"></div>
+      <div style="font-size:12.5px; color:var(--color-ink-soft); line-height:1.55;">Le picto produit dit <span style="color:var(--color-ink); font-weight:600;">quoi</span> ; la puce de provenance dit <span style="color:var(--color-ink); font-weight:600;">pourquoi</span> c'est sur la liste.</div>
+    </div>
+  </div>
+
+  <!-- gallery -->
+  <div data-gallery style="max-width:1080px; margin:0 auto; display:flex; flex-direction:column; gap:36px;"></div>
+
+  <!-- usage demo -->
+  <div style="max-width:1080px; margin:44px auto 0;">
+    <div style="font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-sage-deep); margin-bottom:14px;">En contexte</div>
+    <div style="display:flex; gap:18px; flex-wrap:wrap;">
+      <div data-demo-list style="flex:1; min-width:320px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:10px 16px; box-shadow:var(--shadow-sm);"></div>
+      <div style="flex:1; min-width:320px; background:var(--color-sage-tint); border:1px solid var(--color-sage); border-radius:16px; padding:18px 20px;">
+        <div style="font-family:var(--font-display); font-size:16px; font-weight:600; margin-bottom:9px;">Comment réutiliser</div>
+        <pre style="margin:0; font-family:ui-monospace, monospace; font-size:12px; line-height:1.7; color:var(--color-ink); white-space:pre-wrap;">import { productSvg, findProduct }
+  from './assets/produits-assets.js';
+
+el.innerHTML = productSvg('carotte', { size: 22 });
+const p = findProduct('saumon'); // → poisson</pre>
+        <div style="font-size:12px; color:var(--color-ink-soft); line-height:1.55; margin-top:11px;">La couleur vient du parent (rayon). Un produit inconnu retombe sur le picto « panier ».</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  async componentDidMount() {
+    this.root = this.host || document;
+    try {
+      this.mod = await import('./assets/produits-assets.js');
+    } catch (e) {
+      const g = this.root.querySelector('[data-gallery]');
+      if (g) g.innerHTML = '<div style="color:var(--color-red-strong); font-size:14px;">Impossible de charger assets/produits-assets.js</div>';
+      return;
+    }
+    this.renderLegend();
+    this.renderGallery();
+    this.renderDemo();
+  }
+
+  token(svg, tint, ink, size) {
+    return `<div style="width:${size}px; height:${size}px; border-radius:${Math.round(size*0.27)}px; background:${tint}; color:${ink}; display:flex; align-items:center; justify-content:center; flex:none;">${svg}</div>`;
+  }
+
+  renderLegend() {
+    const { CATEGORIES, PROVENANCE } = this.mod;
+    const cats = this.root.querySelector('[data-legend-cats]');
+    if (cats) cats.innerHTML = Object.keys(CATEGORIES).map((k) => {
+      const c = CATEGORIES[k];
+      return `<span style="display:flex; align-items:center; gap:8px; background:var(--color-paper); border:1px solid var(--color-line); border-radius:999px; padding:5px 12px 5px 6px;">
+        <span style="width:18px; height:18px; border-radius:6px; background:${c.tint}; border:1px solid ${c.ink}33; flex:none;"></span>
+        <span style="font-size:12.5px; font-weight:600;">${c.label}</span>
+      </span>`;
+    }).join('');
+
+    const prov = this.root.querySelector('[data-legend-prov]');
+    if (prov) prov.innerHTML = Object.keys(PROVENANCE).map((k) => {
+      const p = PROVENANCE[k];
+      const svg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">${p.svg}</svg>`;
+      return `<span style="display:flex; align-items:center; gap:8px;">
+        <span style="width:24px; height:24px; border-radius:7px; background:${p.tint}; color:${p.ink}; display:flex; align-items:center; justify-content:center; flex:none;">${svg}</span>
+        <span style="font-size:13px; font-weight:600;">${p.label}</span>
+      </span>`;
+    }).join('');
+  }
+
+  renderGallery() {
+    const { CATEGORIES, productsByCategory, productSvg } = this.mod;
+    const byCat = productsByCategory();
+    const gallery = this.root.querySelector('[data-gallery]');
+    if (!gallery) return;
+    gallery.innerHTML = Object.keys(CATEGORIES).map((catKey) => {
+      const c = CATEGORIES[catKey];
+      const items = byCat[catKey] || [];
+      const tiles = items.map((p) => {
+        const svg = productSvg(p.key, { size: 30 });
+        return `<div style="display:flex; flex-direction:column; align-items:center; gap:8px; width:104px;">
+          ${this.token(svg, c.tint, c.ink, 62)}
+          <span style="font-size:12.5px; font-weight:600; text-align:center; line-height:1.25; text-wrap:balance;">${p.label}</span>
+          <code style="font-size:10px; color:var(--color-ink-soft);">${p.key}</code>
+        </div>`;
+      }).join('');
+      return `<div>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+          <span style="width:12px; height:12px; border-radius:4px; background:${c.tint}; border:1px solid ${c.ink}33;"></span>
+          <span style="font-family:var(--font-display); font-size:19px; font-weight:600;">${c.label}</span>
+          <span style="font-size:12px; color:var(--color-ink-soft);">${items.length}</span>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:18px 6px;">${tiles}</div>
+      </div>`;
+    }).join('');
+  }
+
+  renderDemo() {
+    const { CATEGORIES, PROVENANCE, findProduct, productSvg } = this.mod;
+    const rows = [
+      { key: 'brocoli', cat: 'legumes', prov: 'repas', qty: '1' },
+      { key: 'lait', cat: 'cremerie', prov: 'essentiel', qty: '1 L' },
+      { key: 'poisson', cat: 'proteines', prov: 'repas', qty: '1 filet' },
+      { key: 'eponge', cat: 'maison', prov: 'ajoute', qty: '' },
+    ];
+    const el = this.root.querySelector('[data-demo-list]');
+    if (!el) return;
+    el.innerHTML = rows.map((r, i) => {
+      const c = CATEGORIES[r.cat];
+      const p = findProduct(r.key);
+      const pr = PROVENANCE[r.prov];
+      const provSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">${pr.svg}</svg>`;
+      const border = i ? 'border-top:1px solid var(--color-line);' : '';
+      const qty = r.qty ? `<span style="font-size:13px; color:var(--color-ink-soft);">${r.qty}</span>` : '';
+      return `<div style="display:flex; align-items:center; gap:12px; padding:12px 0; ${border}">
+        ${this.token(productSvg(p.key, { size: 22 }), c.tint, c.ink, 38)}
+        <span style="flex:1; font-size:14.5px; font-weight:600;">${p.label}</span>
+        <span style="display:flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:${pr.ink}; background:${pr.tint}; padding:3px 9px 3px 7px; border-radius:999px;">${provSvg}${pr.label}</span>
+        ${qty}
+      </div>`;
+    }).join('');
+  }
+}
+</script>
+</body>
+</html>

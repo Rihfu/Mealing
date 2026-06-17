@@ -12,6 +12,8 @@ export interface ShoppingLine {
   checked: boolean;
   source: ShoppingSource;
   manualId?: string;
+  category?: string | null; // rayon (food.category) pour le tri par rayon ; null = non classé
+  iconSlug?: string | null; // food.external_id ('cat:<slug>') pour le picto produit
 }
 
 /**
@@ -177,15 +179,35 @@ export async function generateShoppingList(
     unit: string | null;
   }>;
 
+  const manual = (unwrap(
+    await db
+      .from('shopping_manual_item')
+      .select('id, food_id, label, quantity, unit, checked')
+      .eq('household_id', params.householdId),
+  ) ?? []) as Array<{
+    id: string;
+    food_id: string | null;
+    label: string;
+    quantity: number | null;
+    unit: string | null;
+    checked: boolean;
+  }>;
+
   const recurringFoodIds = recurring.map((r) => r.food_id).filter((x): x is string => !!x);
-  const allFoodIds = Array.from(new Set([...neededFoodIds, ...recurringFoodIds]));
+  const manualFoodIds = manual.map((m) => m.food_id).filter((x): x is string => !!x);
+  const allFoodIds = Array.from(new Set([...neededFoodIds, ...recurringFoodIds, ...manualFoodIds]));
   const foodNames = new Map<string, string>();
+  const foodCategory = new Map<string, string | null>();
+  const foodSlug = new Map<string, string | null>();
   if (allFoodIds.length > 0) {
-    const foods = (unwrap(await db.from('food').select('id, name').in('id', allFoodIds)) ?? []) as Array<{
-      id: string;
-      name: string;
-    }>;
-    for (const f of foods) foodNames.set(f.id, f.name);
+    const foods = (unwrap(
+      await db.from('food').select('id, name, category, external_id').in('id', allFoodIds),
+    ) ?? []) as Array<{ id: string; name: string; category: string | null; external_id: string | null }>;
+    for (const f of foods) {
+      foodNames.set(f.id, f.name);
+      foodCategory.set(f.id, f.category);
+      foodSlug.set(f.id, f.external_id);
+    }
   }
 
   const checkedKeys = new Set(
@@ -210,6 +232,8 @@ export async function generateShoppingList(
       unit: need.unit,
       checked: checkedKeys.has(key),
       source: 'recipe',
+      category: foodCategory.get(foodId) ?? null,
+      iconSlug: foodSlug.get(foodId) ?? null,
     });
   }
 
@@ -239,15 +263,10 @@ export async function generateShoppingList(
       unit: r.unit ?? undefined,
       checked: checkedKeys.has(key),
       source: 'recurring',
+      category: r.food_id ? (foodCategory.get(r.food_id) ?? null) : null,
+      iconSlug: r.food_id ? (foodSlug.get(r.food_id) ?? null) : null,
     });
   }
-
-  const manual = (unwrap(
-    await db
-      .from('shopping_manual_item')
-      .select('id, label, quantity, unit, checked')
-      .eq('household_id', params.householdId),
-  ) ?? []) as Array<{ id: string; label: string; quantity: number | null; unit: string | null; checked: boolean }>;
 
   for (const m of manual) {
     lines.push({
@@ -258,6 +277,8 @@ export async function generateShoppingList(
       checked: m.checked,
       source: 'manual',
       manualId: m.id,
+      category: m.food_id ? (foodCategory.get(m.food_id) ?? null) : null,
+      iconSlug: m.food_id ? (foodSlug.get(m.food_id) ?? null) : null,
     });
   }
 

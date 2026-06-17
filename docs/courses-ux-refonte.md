@@ -183,13 +183,22 @@ Remplacer la fenêtre figée 14 j par un réglage (hebdo / bi-hebdo / jour de co
 
 | Étape | Chantier | Cadrage | Implémentation |
 |---|---|---|---|
-| 1 | A — Modèle mental | ⏳ | — |
-| 2 | B — Unités normalisées | ⏳ | — |
-| 3 | C — Explication du cycle | ⏳ | — |
-| 4 | D — Catalogue + autocomplétion | ⏳ | — |
-| 5 | E — Achat → Stock daté | ⏳ | — |
-| 6 | H — Cadence configurable | ⏳ | — |
-| — | F — Tri par rayon (après D) | ⏳ | — |
-| — | G — Anti-surplus/doublon (après D) | ⏳ | — |
+| 1 | A — Modèle mental (liste unique + provenance) | ✅ | ✅ UI (maquette Claude Design) |
+| 2 | B — Unités normalisées | ✅ | ✅ `UNIT_OPTIONS` + `<select>` |
+| 3 | C — Explication du cycle | ✅ | ✅ sous-titre + état vide |
+| 4 | D — Catalogue + autocomplétion | ✅ | ✅ back + composant client `add-article.tsx` |
+| — | F — Tri par rayon (sections repliables) | ✅ | ✅ groupement `food.category` + icônes |
+| — | Banque d'assets (icônes produits) | — | ✅ `src/lib/product-assets.tsx` |
+| 5 | E — Achat → Stock daté | ✅ (maquette état 5) | ⏳ à implémenter |
+| — | G — Anti-surplus / anti-doublon | ✅ (maquette état 3) | ⏳ à implémenter |
+| 6 | H — Cadence configurable | ⏳ | ⏳ |
+| — | UX-13 Undo · UX-14 mode magasin mobile | ✅ (maquettes) | ⏳ |
 
 _Mise à jour après chaque chantier._
+
+### Implémentation maquettes Claude Design — 2026-06-18
+Handoff importé dans `design/handoff-courses/` (zip → impossible via connecteur DesignSync, token sans scopes design). Sources : `Mealing - Courses (refonte).dc.html` (8 états), `Mealing - Banque d'assets.dc.html`, `produits-assets.js`.
+
+- **Banque d'assets** → `src/lib/product-assets.tsx` : `PRODUCTS` (~45 pictos doodle), `CATEGORIES` (rayons), `PROVENANCE`, composants `ProductIcon` / `ProvenanceBadge`, `resolveProduct` (alias slugs catalogue → picto).
+- **Courses (refonte)** : `page.tsx` réécrit — en-tête (titre + accent Caveat + sous-titre clair), **liste unique « À acheter » groupée par rayon** (sections repliables, icône + nom + puce de provenance + qté), « Déjà pris » + « Tout décocher », état vide, « Mes essentiels » (ex-récurrents). `add-article.tsx` (client) : autocomplétion (`searchCatalogAction`), formats 1 clic (`food_package`), unité (`<select>`). `shopping.ts` enrichit chaque ligne de `category` + `iconSlug`.
+- **Reste à faire** (maquettes fournies, pas encore codées) : état 5 **Achat → Stock** (chantier E), **anti-surplus/doublon** à l'ajout (G), **undo** (UX-13), **mode magasin** mobile (UX-14).

@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/tokens/effects.css">
+  <link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/styles.css">
+  <script src="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/_ds_bundle.js"></script>
+  <style>
+    body { margin:0; }
+    *::-webkit-scrollbar { height:7px; width:7px; }
+    *::-webkit-scrollbar-thumb { background:#D7CDB9; border-radius:999px; }
+  </style>
+</helmet>
+<div style="background:#E9E4DA; min-width:100%; width:max-content; min-height:100vh; padding:48px; box-sizing:border-box; font-family:var(--font-sans); color:var(--color-ink);">
+
+  <!-- sheet header -->
+  <div style="margin-bottom:40px; max-width:1280px;">
+    <div style="font-family:var(--font-display); font-size:32px; font-weight:600; letter-spacing:-0.01em; line-height:1.05;">Liste de courses — refonte</div>
+    <div style="font-family:var(--font-hand); font-size:23px; color:var(--color-green-strong); margin-top:3px;">une seule liste, triée par rayon — coche au pouce, range au retour</div>
+    <div style="font-size:13px; color:var(--color-ink-soft); margin-top:10px; max-width:680px; line-height:1.6;">Refonte de la section Courses : fini les silos « Repas à venir / Récurrents / Ajouts manuels ». Une liste « À acheter » unique, groupée par rayon, avec une puce de provenance discrète. États 1 → 8, desktop &amp; mobile. Icônes Lucide. Mêmes tokens que les écrans existants.</div>
+  </div>
+
+  <!-- ===================== DESKTOP ===================== -->
+  <div style="font-family:var(--font-sans); font-size:12px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:var(--color-sage-deep); margin:0 0 22px;">Desktop</div>
+
+  <div style="display:flex; gap:48px; align-items:flex-start; margin-bottom:56px;">
+
+    <!-- ===== ÉTAT 1 : liste principale (interactive) ===== -->
+    <div style="flex:none; display:flex; flex-direction:column; gap:13px;">
+      <div style="font-size:13px; font-weight:800; color:var(--color-ink);">État 1 · Liste principale <span style="color:var(--color-ink-soft); font-weight:600;">— rayons repliables, provenance, déjà pris</span></div>
+      <div data-screen-label="Courses — liste" style="width:760px; background:var(--color-paper); border:1px solid var(--color-line); border-radius:20px; box-shadow:var(--shadow-md); overflow:hidden;">
+        <div style="padding:28px 28px 32px; position:relative;">
+
+          <!-- header -->
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+            <div style="flex:1;">
+              <div style="font-family:var(--font-display); font-size:27px; font-weight:600; letter-spacing:-0.01em;">À acheter</div>
+              <div style="font-size:13px; color:var(--color-ink-soft); line-height:1.55; margin-top:5px; max-width:430px;">Ta liste se met à jour toute seule : on part de tes repas, on retire ce que tu as déjà en stock, et tu ajoutes ce que tu veux. Coche au fur et à mesure.</div>
+            </div>
+            <!-- cadence (état 6) -->
+            <div style="flex:none; display:flex; flex-direction:column; align-items:flex-end; gap:7px;">
+              <div style="display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:var(--color-ink-soft);">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>
+                Courses
+              </div>
+              <div style="display:flex; background:var(--color-surface); border:1px solid var(--color-line); border-radius:999px; padding:3px;">
+                <span data-cadence="hebdo" style="font-size:12px; font-weight:800; padding:6px 12px; border-radius:999px; background:var(--color-sage-tint); color:var(--color-sage-deep); cursor:pointer;">Chaque sem.</span>
+                <span data-cadence="bi" style="font-size:12px; font-weight:600; padding:6px 12px; border-radius:999px; color:var(--color-ink-soft); cursor:pointer;">2 sem.</span>
+                <span data-cadence="fixe" style="font-size:12px; font-weight:600; padding:6px 12px; border-radius:999px; color:var(--color-ink-soft); cursor:pointer; white-space:nowrap;">Jour fixe</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- progress + actions row -->
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; margin:20px 0 18px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:13px; font-weight:700;"><span data-remaining>9</span> à prendre</span>
+              <span style="width:4px; height:4px; border-radius:999px; background:var(--border-strong);"></span>
+              <span style="font-size:13px; color:var(--color-ink-soft);"><span data-taken>0</span> déjà pris</span>
+            </div>
+            <button data-done style="background:var(--color-green-strong); color:#fff; border:none; border-radius:11px; padding:10px 16px; font-family:var(--font-sans); font-size:13.5px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:7px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="m5 11 4-7"/><path d="m19 11-4-7"/><path d="M2 11h20"/><path d="m3.5 11 1.6 7.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6l1.6-7.4"/><path d="M4.5 15.5h15"/></svg>
+              J'ai fait mes courses
+            </button>
+          </div>
+
+          <!-- AISLES -->
+          <div data-list style="display:flex; flex-direction:column; gap:14px;">
+
+            <!-- Fruits & légumes -->
+            <div data-aisle-section>
+              <div data-aisle-head style="display:flex; align-items:center; gap:9px; padding:6px 2px 9px; cursor:pointer; user-select:none;">
+                <span data-chevron style="color:var(--color-ink-soft); display:flex; transition:transform .15s;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+                <span style="color:var(--color-sage-deep); display:flex;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.27 21.7s.94-1.7 1.7-2.46a4 4 0 1 1 5.66-5.66 4 4 0 0 1-5.66 5.66"/><path d="M9 12c-1.5 1.5-3 4.5-3 6"/><path d="M7.5 14c0-3 1.5-6.5 5.5-9.5C16 2 19 2.5 21 3c.5 2 1 5-1.5 8C16 14.5 12.5 16 9.5 16"/></svg></span>
+                <span style="font-family:var(--font-display); font-size:16px; font-weight:600; flex:1;">Fruits &amp; légumes</span>
+                <span style="font-size:12px; color:var(--color-ink-soft);">3</span>
+              </div>
+              <div data-aisle-body data-aisle="Fruits &amp; légumes" style="display:flex; flex-direction:column; gap:8px;"></div>
+            </div>
+
+            <!-- Frais & crémerie -->
+            <div data-aisle-section>
+              <div data-aisle-head style="display:flex; align-items:center; gap:9px; padding:6px 2px 9px; cursor:pointer; user-select:none;">
+                <span data-chevron style="color:var(--color-ink-soft); display:flex; transition:transform .15s;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+                <span style="color:var(--color-sage-deep); display:flex;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8"/><path d="M9 2v2.789a4 4 0 0 1-.672 2.219l-.656.984A4 4 0 0 0 7 10.212V20a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-9.788a4 4 0 0 0-.672-2.22l-.656-.984A4 4 0 0 1 15 4.788V2"/><path d="M7 15a6.47 6.47 0 0 1 5 0 6.47 6.47 0 0 0 5 0"/></svg></span>
+                <span style="font-family:var(--font-display); font-size:16px; font-weight:600; flex:1;">Frais &amp; crémerie</span>
+                <span style="font-size:12px; color:var(--color-ink-soft);">2</span>
+              </div>
+              <div data-aisle-body data-aisle="Frais &amp; crémerie" style="display:flex; flex-direction:column; gap:8px;"></div>
+            </div>
+
+            <!-- Épicerie -->
+            <div data-aisle-section>
+              <div data-aisle-head style="display:flex; align-items:center; gap:9px; padding:6px 2px 9px; cursor:pointer; user-select:none;">
+                <span data-chevron style="color:var(--color-ink-soft); display:flex; transition:transform .15s;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+                <span style="color:var(--color-sage-deep); display:flex;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22 16 8"/><path d="M3.47 12.53 5 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L5 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z"/><path d="m8 8 1.5 1.5"/><path d="M11.5 11.5 13 13"/><path d="M14.42 5.41a4 4 0 0 1 5.66 5.66l-1.06 1.06-5.66-5.66z"/></svg></span>
+                <span style="font-family:var(--font-display); font-size:16px; font-weight:600; flex:1;">Épicerie</span>
+                <span style="font-size:12px; color:var(--color-ink-soft);">2</span>
+              </div>
+              <div data-aisle-body data-aisle="Épicerie" style="display:flex; flex-direction:column; gap:8px;"></div>
+            </div>
+
+            <!-- Maison & entretien -->
+            <div data-aisle-section>
+              <div data-aisle-head style="display:flex; align-items:center; gap:9px; padding:6px 2px 9px; cursor:pointer; user-select:none;">
+                <span data-chevron style="color:var(--color-ink-soft); display:flex; transition:transform .15s;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+                <span style="color:var(--color-sage-deep); display:flex;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg></span>
+                <span style="font-family:var(--font-display); font-size:16px; font-weight:600; flex:1;">Maison &amp; entretien</span>
+                <span style="font-size:12px; color:var(--color-ink-soft);">2</span>
+              </div>
+              <div data-aisle-body data-aisle="Maison &amp; entretien" style="display:flex; flex-direction:column; gap:8px;"></div>
+            </div>
+
+          </div>
+
+          <!-- Déjà pris -->
+          <div style="margin-top:22px; border-top:1px solid var(--color-line); padding-top:16px;">
+            <div data-taken-head style="display:flex; align-items:center; gap:9px; cursor:pointer; user-select:none;">
+              <span data-taken-chevron style="color:var(--color-ink-soft); display:flex; transform:rotate(-90deg); transition:transform .15s;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+              <span style="font-family:var(--font-display); font-size:15px; font-weight:600; color:var(--color-ink-soft); flex:1;">Déjà pris (<span data-taken2>0</span>)</span>
+              <span data-uncheck-all style="font-size:12px; font-weight:700; color:var(--color-sage-deep); cursor:pointer;">Tout décocher</span>
+            </div>
+            <div data-taken-body style="display:none; flex-direction:column; gap:8px; margin-top:10px;"></div>
+          </div>
+
+          <!-- undo toast (état 7) -->
+          <div data-toast style="display:none; position:absolute; left:50%; bottom:20px; transform:translateX(-50%); background:var(--color-ink); color:var(--color-paper); border-radius:999px; padding:11px 14px 11px 18px; box-shadow:var(--shadow-lg); align-items:center; gap:14px; font-size:13.5px; white-space:nowrap;">
+            <span data-toast-msg>Article retiré</span>
+            <span data-toast-undo style="display:flex; align-items:center; gap:5px; font-weight:800; color:var(--color-green); cursor:pointer;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5 5.5 5.5 0 0 1-5.5 5.5H11"/></svg>Annuler</span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ÉTAT 3 add panel goes here via sentinel -->
+    <div data-board-col style="flex:none; width:360px; display:flex; flex-direction:column; gap:48px;">
+      <!-- ===== ÉTAT 3 : ajouter un article (autocomplete) ===== -->
+      <div style="display:flex; flex-direction:column; gap:13px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">État 3 · Ajouter <span style="color:var(--color-ink-soft); font-weight:600;">— autocomplétion, formats, unité</span></div>
+        <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:18px; padding:20px; box-shadow:var(--shadow-md);">
+          <div style="font-family:var(--font-display); font-size:18px; font-weight:600; margin-bottom:14px;">Ajouter un article</div>
+
+          <div style="position:relative; margin-bottom:11px;">
+            <div style="display:flex; align-items:center; gap:9px; background:var(--color-paper); border:1.5px solid var(--color-green); border-radius:12px; padding:11px 13px;">
+              <span style="color:var(--color-ink-soft); display:flex;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+              <span style="flex:1; font-size:14.5px; color:var(--color-ink);">riz<span style="display:inline-block; width:1.5px; height:17px; background:var(--color-green); vertical-align:middle; margin-left:1px;"></span></span>
+            </div>
+            <!-- suggestions -->
+            <div style="margin-top:8px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:12px; box-shadow:var(--shadow-md); overflow:hidden;">
+              <div style="display:flex; align-items:center; gap:10px; padding:11px 13px; cursor:pointer; border-bottom:1px solid var(--color-line);">
+                <span style="flex:none; color:var(--color-ink-soft); display:flex;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22 16 8"/><path d="M3.47 12.53 5 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L5 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z"/><path d="m14.42 5.41a4 4 0 0 1 5.66 5.66l-1.06 1.06-5.66-5.66z"/></svg></span>
+                <span style="flex:1; font-size:14px; font-weight:600;">Riz basmati</span>
+                <span style="font-size:11px; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:2px 8px; border-radius:999px; font-weight:700;">Épicerie</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px; padding:11px 13px; cursor:pointer; border-bottom:1px solid var(--color-line);">
+                <span style="flex:none; color:var(--color-ink-soft); display:flex;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22 16 8"/><path d="M3.47 12.53 5 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L5 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z"/><path d="m14.42 5.41a4 4 0 0 1 5.66 5.66l-1.06 1.06-5.66-5.66z"/></svg></span>
+                <span style="flex:1; font-size:14px; font-weight:600;">Riz complet</span>
+                <span style="font-size:11px; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:2px 8px; border-radius:999px; font-weight:700;">Épicerie</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px; padding:11px 13px; cursor:pointer;">
+                <span style="flex:none; color:var(--color-sage-deep); display:flex;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                <span style="flex:1; font-size:14px; font-weight:600;">Ajouter « riz »</span>
+                <span style="font-size:11px; color:var(--color-ink-soft);">texte libre</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- doublon alert (non bloquant) -->
+          <div style="display:flex; align-items:flex-start; gap:8px; background:var(--color-butter-tint); border:1px solid var(--color-butter); border-radius:10px; padding:9px 11px; margin-bottom:13px;">
+            <span style="flex:none; color:#8a6d1f; display:flex; margin-top:1px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+            <span style="font-size:12px; color:#7a5e12; line-height:1.5;">Du riz est déjà sur ta liste (250 g, pour Saumon riz &amp; brocoli). Ajouter quand même ?</span>
+          </div>
+
+          <!-- formats 1 clic -->
+          <div style="font-size:11px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--color-ink-soft); margin-bottom:8px;">Formats courants</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+            <span style="font-size:13px; font-weight:700; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:7px 13px; border-radius:999px; cursor:pointer;">Riz 1 kg</span>
+            <span style="font-size:13px; font-weight:700; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:7px 13px; border-radius:999px; cursor:pointer;">Riz 500 g</span>
+          </div>
+
+          <!-- qty + unit -->
+          <div style="display:flex; gap:10px; margin-bottom:14px;">
+            <input value="1" style="width:78px; box-sizing:border-box; font-family:var(--font-sans); font-size:14px; padding:11px 13px; border:1px solid var(--color-line); border-radius:12px; background:var(--color-paper); color:var(--color-ink);">
+            <div style="flex:1; display:flex; align-items:center; justify-content:space-between; border:1px solid var(--color-line); border-radius:12px; padding:11px 13px; background:var(--color-paper); cursor:pointer;">
+              <span style="font-size:14px; font-weight:700;">kg</span>
+              <span style="color:var(--color-ink-soft); display:flex;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+          </div>
+          <div style="font-size:11px; color:var(--color-ink-soft); margin:-6px 0 14px; line-height:1.5;">Unités : —, pièce, g, kg, ml, cl, L, paquet, boîte, sachet, botte</div>
+
+          <button style="width:100%; background:var(--color-green-strong); color:#fff; border:none; border-radius:12px; padding:13px; font-family:var(--font-sans); font-size:14px; font-weight:700; cursor:pointer;">Ajouter à la liste</button>
+        </div>
+      </div>
+
+      <!-- ===== ÉTAT 4 : mes essentiels ===== -->
+      <div style="display:flex; flex-direction:column; gap:13px;">
+        <div style="font-size:13px; font-weight:800; color:var(--color-ink);">État 4 · Mes essentiels <span style="color:var(--color-ink-soft); font-weight:600;">— ex-« récurrents »</span></div>
+        <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:18px; padding:20px; box-shadow:var(--shadow-md);">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <span style="color:#8a6d1f; display:flex;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></span>
+            <span style="font-family:var(--font-display); font-size:18px; font-weight:600;">Mes essentiels</span>
+          </div>
+          <div style="font-size:12px; color:var(--color-ink-soft); line-height:1.5; margin-bottom:15px;">Les produits que tu rachètes régulièrement. Ils reviennent tout seuls à chaque liste.</div>
+
+          <div style="display:flex; align-items:center; gap:10px; padding:11px 0;"><span style="flex:1; font-size:14.5px; font-weight:600;">Café</span><span style="font-size:12px; color:var(--color-ink-soft);">1 paquet</span><span style="color:var(--color-ink-soft); cursor:pointer; display:flex;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span></div>
+          <div style="height:1px; background:var(--color-line);"></div>
+          <div style="display:flex; align-items:center; gap:10px; padding:11px 0;"><span style="flex:1; font-size:14.5px; font-weight:600;">Lait</span><span style="font-size:12px; color:var(--color-ink-soft);">1 L</span><span style="color:var(--color-ink-soft); cursor:pointer; display:flex;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span></div>
+          <div style="height:1px; background:var(--color-line);"></div>
+          <div style="display:flex; align-items:center; gap:10px; padding:11px 0;"><span style="flex:1; font-size:14.5px; font-weight:600;">Carottes</span><span style="font-size:12px; color:var(--color-ink-soft);">1 kg</span><span style="color:var(--color-ink-soft); cursor:pointer; display:flex;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span></div>
+
+          <button style="width:100%; background:transparent; border:1px dashed var(--border-strong); color:var(--color-sage-deep); border-radius:12px; padding:11px; font-family:var(--font-sans); font-size:13.5px; font-weight:700; cursor:pointer; margin-top:14px; display:flex; align-items:center; justify-content:center; gap:6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Ajouter un essentiel</button>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- État 2 + État 5 -->
+  <div style="display:flex; gap:48px; align-items:flex-start; margin-bottom:56px;">
+
+    <!-- ===== ÉTAT 5 : achat -> stock ===== -->
+    <div style="flex:none; display:flex; flex-direction:column; gap:13px;">
+      <div style="font-size:13px; font-weight:800; color:var(--color-ink);">État 5 · J'ai fait mes courses <span style="color:var(--color-ink-soft); font-weight:600;">— les achats entrent au stock</span></div>
+      <div data-screen-label="Courses — achat vers stock" style="width:560px; background:var(--color-paper); border:1px solid var(--color-line); border-radius:20px; box-shadow:var(--shadow-md); overflow:hidden;">
+        <div style="padding:26px 26px 28px;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+            <span style="width:36px; height:36px; border-radius:999px; background:var(--color-sage-tint); color:var(--color-sage-deep); display:flex; align-items:center; justify-content:center;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+            <div>
+              <div style="font-family:var(--font-display); font-size:21px; font-weight:600;">Bien joué — on range ?</div>
+              <div style="font-size:12.5px; color:var(--color-ink-soft);">5 articles cochés entrent dans ton stock, datés d'aujourd'hui.</div>
+            </div>
+          </div>
+
+          <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:14px; padding:6px 16px; margin:18px 0 16px; box-shadow:var(--shadow-sm);">
+            <div style="display:flex; align-items:center; gap:12px; padding:11px 0;"><span style="flex:1; font-size:14px; font-weight:600;">Riz <span style="font-size:12px; color:var(--color-ink-soft); font-weight:400;">· 250 g</span></span><span style="font-size:11px; color:var(--color-sage-deep);">Épicerie</span><span style="font-size:11.5px; font-weight:700; color:var(--color-green-strong); background:var(--color-sage-tint); padding:2px 9px; border-radius:999px;">frais</span></div>
+            <div style="height:1px; background:var(--color-line);"></div>
+            <div style="display:flex; align-items:center; gap:12px; padding:11px 0;"><span style="flex:1; font-size:14px; font-weight:600;">Lait <span style="font-size:12px; color:var(--color-ink-soft); font-weight:400;">· 1 L</span></span><span style="font-size:11px; color:var(--color-sage-deep);">Frais</span><span style="font-size:11.5px; font-weight:700; color:var(--color-green-strong); background:var(--color-sage-tint); padding:2px 9px; border-radius:999px;">à ouvrir</span></div>
+            <div style="height:1px; background:var(--color-line);"></div>
+            <div style="display:flex; align-items:center; gap:12px; padding:11px 0;"><span style="flex:1; font-size:14px; font-weight:600;">Brocoli <span style="font-size:12px; color:var(--color-ink-soft); font-weight:400;">· 1</span></span><span style="font-size:11px; color:var(--color-sage-deep);">Légumes</span><span style="font-size:11.5px; font-weight:700; color:#8a6d1f; background:var(--color-butter-tint); padding:2px 9px; border-radius:999px;">à consommer · 3 j</span></div>
+          </div>
+
+          <div style="display:flex; align-items:flex-start; gap:8px; font-size:12px; color:var(--color-ink-soft); line-height:1.5; margin-bottom:18px;">
+            <span style="flex:none; color:var(--color-sage-deep); display:flex; margin-top:1px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+            <span>La date d'achat fixe la péremption estimée. Tu pourras tout ajuster dans le stock — c'est réversible.</span>
+          </div>
+
+          <div style="display:flex; gap:10px;">
+            <button style="flex:1; background:var(--color-green-strong); color:#fff; border:none; border-radius:12px; padding:13px; font-family:var(--font-sans); font-size:14px; font-weight:700; cursor:pointer;">Ranger dans le stock</button>
+            <button style="flex:none; background:var(--color-surface); color:var(--color-ink); border:1px solid var(--color-line); border-radius:12px; padding:13px 18px; font-family:var(--font-sans); font-size:14px; font-weight:700; cursor:pointer;">Plus tard</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== ÉTAT 2 : vide ===== -->
+    <div style="flex:none; display:flex; flex-direction:column; gap:13px;">
+      <div style="font-size:13px; font-weight:800; color:var(--color-ink);">État 2 · Rien à acheter</div>
+      <div data-screen-label="Courses — vide" style="width:560px; min-height:420px; background:var(--color-paper); border:1px solid var(--color-line); border-radius:20px; box-shadow:var(--shadow-md); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:48px 40px; box-sizing:border-box;">
+        <span style="width:72px; height:72px; border-radius:999px; background:var(--color-sage-tint); color:var(--color-sage-deep); display:flex; align-items:center; justify-content:center; margin-bottom:18px;"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 11 4-7"/><path d="m19 11-4-7"/><path d="M2 11h20"/><path d="m3.5 11 1.6 7.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6l1.6-7.4"/><path d="M4.5 15.5h15"/></svg></span>
+        <div style="font-family:var(--font-display); font-size:24px; font-weight:600;">Tout est dans le placard</div>
+        <div style="font-family:var(--font-hand); font-size:22px; color:var(--color-green-strong); margin-top:2px;">rien à acheter pour l'instant !</div>
+        <div style="font-size:13.5px; color:var(--color-ink-soft); line-height:1.55; margin:12px 0 22px; max-width:340px;">Ta liste se remplit toute seule dès que tu planifies des repas ou qu'un essentiel vient à manquer.</div>
+        <div style="display:flex; gap:10px;">
+          <button style="background:var(--color-green-strong); color:#fff; border:none; border-radius:12px; padding:12px 18px; font-family:var(--font-sans); font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:7px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Ajouter un article</button>
+          <button style="background:var(--color-surface); color:var(--color-sage-deep); border:1px solid var(--color-line); border-radius:12px; padding:12px 18px; font-family:var(--font-sans); font-size:14px; font-weight:700; cursor:pointer;">Voir le planning</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===================== MOBILE ===================== -->
+  <div style="font-family:var(--font-sans); font-size:12px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:var(--color-sage-deep); margin:0 0 22px;">Mobile</div>
+  <div style="display:flex; gap:48px; align-items:flex-start;">
+    <!-- ===== ÉTAT 8 : mode magasin ===== -->
+    <div style="flex:none; display:flex; flex-direction:column; gap:13px;">
+      <div style="font-size:13px; font-weight:800; color:var(--color-ink);">État 8 · Mode magasin <span style="color:var(--color-ink-soft); font-weight:600;">— gros boutons, une main</span></div>
+      <div data-screen-label="Courses — mode magasin" style="width:390px; background:var(--color-ink); border-radius:46px; padding:11px; box-shadow:var(--shadow-lg);">
+        <div style="background:var(--color-paper); border-radius:36px; overflow:hidden; height:780px; display:flex; flex-direction:column; position:relative;">
+          <div style="height:34px; display:flex; align-items:center; justify-content:center;"><span style="width:96px; height:6px; border-radius:999px; background:var(--color-line);"></span></div>
+          <!-- top -->
+          <div style="padding:6px 20px 14px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="font-family:var(--font-display); font-size:23px; font-weight:600;">En magasin</div>
+              <span style="font-size:12.5px; font-weight:700; color:var(--color-sage-deep); background:var(--color-sage-tint); padding:6px 12px; border-radius:999px;">Carrefour</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:9px; margin-top:12px;">
+              <div style="flex:1; height:9px; border-radius:999px; background:var(--color-line); overflow:hidden;"><div style="width:30%; height:100%; background:var(--color-green); border-radius:999px;"></div></div>
+              <span style="font-size:12.5px; font-weight:700; white-space:nowrap;">3 / 9</span>
+            </div>
+          </div>
+          <!-- scroll list -->
+          <div style="flex:1; overflow-y:auto; padding:0 16px 130px;">
+            <div style="font-family:var(--font-display); font-size:15px; font-weight:600; color:var(--color-sage-deep); margin:8px 4px 9px;">Fruits &amp; légumes</div>
+            <div style="display:flex; align-items:center; gap:14px; min-height:64px; padding:12px 16px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; margin-bottom:10px; box-shadow:var(--shadow-sm);">
+              <span style="flex:none; width:32px; height:32px; border-radius:9px; border:2px solid var(--border-strong);"></span>
+              <span style="flex:1; font-size:17px; font-weight:600;">Brocoli</span>
+              <span style="font-size:14px; color:var(--color-ink-soft);">1</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:14px; min-height:64px; padding:12px 16px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; margin-bottom:10px; box-shadow:var(--shadow-sm);">
+              <span style="flex:none; width:32px; height:32px; border-radius:9px; border:2px solid var(--border-strong);"></span>
+              <span style="flex:1; font-size:17px; font-weight:600;">Basilic</span>
+              <span style="font-size:14px; color:var(--color-ink-soft);">1 botte</span>
+            </div>
+            <div style="font-family:var(--font-display); font-size:15px; font-weight:600; color:var(--color-sage-deep); margin:18px 4px 9px;">Épicerie</div>
+            <div style="display:flex; align-items:center; gap:14px; min-height:64px; padding:12px 16px; background:var(--color-paper); border:1px solid var(--color-line); border-radius:16px; margin-bottom:10px;">
+              <span style="flex:none; width:32px; height:32px; border-radius:9px; border:2px solid var(--color-green); background:var(--color-green); display:flex; align-items:center; justify-content:center; color:#fff;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <span style="flex:1; font-size:17px; font-weight:600; color:var(--color-ink-soft); text-decoration:line-through;">Riz</span>
+              <span style="font-size:14px; color:var(--color-ink-soft); text-decoration:line-through;">250 g</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:14px; min-height:64px; padding:12px 16px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; margin-bottom:10px; box-shadow:var(--shadow-sm);">
+              <span style="flex:none; width:32px; height:32px; border-radius:9px; border:2px solid var(--border-strong);"></span>
+              <span style="flex:1; font-size:17px; font-weight:600;">Café</span>
+              <span style="font-size:14px; color:var(--color-ink-soft);">1 paquet</span>
+            </div>
+            <div style="font-family:var(--font-display); font-size:15px; font-weight:600; color:var(--color-sage-deep); margin:18px 4px 9px;">Frais &amp; crémerie</div>
+            <div style="display:flex; align-items:center; gap:14px; min-height:64px; padding:12px 16px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; margin-bottom:10px; box-shadow:var(--shadow-sm);">
+              <span style="flex:none; width:32px; height:32px; border-radius:9px; border:2px solid var(--border-strong);"></span>
+              <span style="flex:1; font-size:17px; font-weight:600;">Lait</span>
+              <span style="font-size:14px; color:var(--color-ink-soft);">1 L</span>
+            </div>
+          </div>
+          <!-- sticky cta -->
+          <div style="position:absolute; left:0; right:0; bottom:0; padding:16px 18px 26px; background:linear-gradient(to top, var(--color-paper) 70%, transparent);">
+            <button style="width:100%; background:var(--color-green-strong); color:#fff; border:none; border-radius:16px; padding:17px; font-family:var(--font-sans); font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>J'ai fait mes courses</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== liste mobile (État 1) ===== -->
+    <div style="flex:none; display:flex; flex-direction:column; gap:13px;">
+      <div style="font-size:13px; font-weight:800; color:var(--color-ink);">État 1 · Liste (mobile)</div>
+      <div data-screen-label="Courses — liste mobile" style="width:390px; background:var(--color-ink); border-radius:46px; padding:11px; box-shadow:var(--shadow-lg);">
+        <div style="background:var(--color-paper); border-radius:36px; overflow:hidden; height:780px; display:flex; flex-direction:column;">
+          <div style="height:34px; display:flex; align-items:center; justify-content:center;"><span style="width:96px; height:6px; border-radius:999px; background:var(--color-line);"></span></div>
+          <div style="padding:6px 20px 0; flex:1; overflow-y:auto;">
+            <div style="font-family:var(--font-display); font-size:26px; font-weight:600; letter-spacing:-0.01em;">À acheter</div>
+            <div style="font-size:12.5px; color:var(--color-ink-soft); line-height:1.5; margin-top:5px;">Ta liste se met à jour toute seule. Coche au fur et à mesure.</div>
+
+            <div style="display:flex; align-items:center; gap:9px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:12px; padding:11px 13px; margin:16px 0;">
+              <span style="color:var(--color-ink-soft); display:flex;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+              <span style="flex:1; font-size:14px; color:var(--color-ink-soft);">Ajouter un article…</span>
+              <span style="color:var(--color-sage-deep); display:flex;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+              <span style="color:var(--color-sage-deep); display:flex;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.27 21.7s.94-1.7 1.7-2.46a4 4 0 1 1 5.66-5.66 4 4 0 0 1-5.66 5.66"/><path d="M7.5 14c0-3 1.5-6.5 5.5-9.5C16 2 19 2.5 21 3c.5 2 1 5-1.5 8C16 14.5 12.5 16 9.5 16"/></svg></span>
+              <span style="font-family:var(--font-display); font-size:16px; font-weight:600; flex:1;">Fruits &amp; légumes</span>
+              <span style="color:var(--color-ink-soft); display:flex;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; min-height:56px; padding:11px 14px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:14px; margin-bottom:9px; box-shadow:var(--shadow-sm);">
+              <span style="flex:none; width:26px; height:26px; border-radius:8px; border:1.75px solid var(--border-strong);"></span>
+              <span style="flex:none; width:24px; height:24px; border-radius:7px; background:var(--color-sage-tint); color:var(--color-sage-deep); display:flex; align-items:center; justify-content:center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg></span>
+              <span style="flex:1; font-size:15px; font-weight:600;">Brocoli</span>
+              <span style="font-size:13px; color:var(--color-ink-soft);">1</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; min-height:56px; padding:11px 14px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:14px; margin-bottom:9px; box-shadow:var(--shadow-sm);">
+              <span style="flex:none; width:26px; height:26px; border-radius:8px; border:1.75px solid var(--border-strong);"></span>
+              <span style="flex:none; width:24px; height:24px; border-radius:7px; background:var(--color-butter-tint); color:#8a6d1f; display:flex; align-items:center; justify-content:center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></span>
+              <span style="flex:1; font-size:15px; font-weight:600;">Carottes</span>
+              <span style="font-size:13px; color:var(--color-ink-soft);">1 kg</span>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:8px; margin:18px 0 10px;">
+              <span style="color:var(--color-sage-deep); display:flex;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22 16 8"/><path d="M3.47 12.53 5 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L5 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z"/><path d="m14.42 5.41a4 4 0 0 1 5.66 5.66l-1.06 1.06-5.66-5.66z"/></svg></span>
+              <span style="font-family:var(--font-display); font-size:16px; font-weight:600; flex:1;">Épicerie</span>
+              <span style="color:var(--color-ink-soft); display:flex;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; min-height:56px; padding:11px 14px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:14px; margin-bottom:9px; box-shadow:var(--shadow-sm);">
+              <span style="flex:none; width:26px; height:26px; border-radius:8px; border:1.75px solid var(--border-strong);"></span>
+              <span style="flex:none; width:24px; height:24px; border-radius:7px; background:var(--color-sage-tint); color:var(--color-sage-deep); display:flex; align-items:center; justify-content:center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg></span>
+              <span style="flex:1; font-size:15px; font-weight:600;">Riz</span>
+              <span style="font-size:13px; color:var(--color-ink-soft);">250 g</span>
+            </div>
+
+            <div style="border-top:1px solid var(--color-line); margin-top:16px; padding:14px 0 8px; display:flex; align-items:center; gap:8px;">
+              <span style="color:var(--color-ink-soft); display:flex; transform:rotate(-90deg);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+              <span style="font-family:var(--font-display); font-size:14.5px; font-weight:600; color:var(--color-ink-soft); flex:1;">Déjà pris (1)</span>
+              <span style="font-size:12px; font-weight:700; color:var(--color-sage-deep);">Tout décocher</span>
+            </div>
+          </div>
+          <div style="padding:12px 18px 24px;">
+            <button style="width:100%; background:var(--color-green-strong); color:#fff; border:none; border-radius:14px; padding:15px; font-family:var(--font-sans); font-size:15px; font-weight:700; cursor:pointer;">J'ai fait mes courses</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== achat -> stock mobile (État 5) ===== -->
+    <div style="flex:none; display:flex; flex-direction:column; gap:13px;">
+      <div style="font-size:13px; font-weight:800; color:var(--color-ink);">État 5 · Achat → stock (mobile)</div>
+      <div data-screen-label="Courses — achat stock mobile" style="width:390px; background:var(--color-ink); border-radius:46px; padding:11px; box-shadow:var(--shadow-lg);">
+        <div style="background:var(--color-paper); border-radius:36px; overflow:hidden; height:780px; display:flex; flex-direction:column; position:relative;">
+          <div style="height:34px; display:flex; align-items:center; justify-content:center;"><span style="width:96px; height:6px; border-radius:999px; background:var(--color-line);"></span></div>
+          <div style="flex:1; overflow-y:auto; padding:8px 20px 24px;">
+            <span style="width:60px; height:60px; border-radius:999px; background:var(--color-sage-tint); color:var(--color-sage-deep); display:flex; align-items:center; justify-content:center; margin:6px 0 14px;"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+            <div style="font-family:var(--font-display); font-size:24px; font-weight:600;">Bien joué !</div>
+            <div style="font-size:13.5px; color:var(--color-ink-soft); line-height:1.55; margin-top:5px;">5 articles entrent dans ton stock, datés d'aujourd'hui.</div>
+
+            <div style="background:var(--color-surface); border:1px solid var(--color-line); border-radius:16px; padding:4px 16px; margin-top:18px; box-shadow:var(--shadow-sm);">
+              <div style="display:flex; align-items:center; gap:10px; padding:13px 0;"><span style="flex:1; font-size:15px; font-weight:600;">Riz <span style="font-size:12px; color:var(--color-ink-soft); font-weight:400;">· 250 g</span></span><span style="font-size:11px; font-weight:700; color:var(--color-green-strong); background:var(--color-sage-tint); padding:2px 9px; border-radius:999px;">frais</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:10px; padding:13px 0;"><span style="flex:1; font-size:15px; font-weight:600;">Brocoli <span style="font-size:12px; color:var(--color-ink-soft); font-weight:400;">· 1</span></span><span style="font-size:11px; font-weight:700; color:#8a6d1f; background:var(--color-butter-tint); padding:2px 9px; border-radius:999px;">3 j</span></div>
+              <div style="height:1px; background:var(--color-line);"></div>
+              <div style="display:flex; align-items:center; gap:10px; padding:13px 0;"><span style="flex:1; font-size:15px; font-weight:600;">Lait <span style="font-size:12px; color:var(--color-ink-soft); font-weight:400;">· 1 L</span></span><span style="font-size:11px; font-weight:700; color:var(--color-green-strong); background:var(--color-sage-tint); padding:2px 9px; border-radius:999px;">à ouvrir</span></div>
+            </div>
+            <div style="font-size:12px; color:var(--color-ink-soft); line-height:1.5; margin-top:14px;">Tu pourras tout ajuster dans le stock — c'est réversible.</div>
+          </div>
+          <div style="padding:12px 18px 24px;">
+            <button style="width:100%; background:var(--color-green-strong); color:#fff; border:none; border-radius:14px; padding:15px; font-family:var(--font-sans); font-size:15px; font-weight:700; cursor:pointer; margin-bottom:8px;">Ranger dans le stock</button>
+            <button style="width:100%; background:transparent; color:var(--color-ink-soft); border:none; padding:8px; font-family:var(--font-sans); font-size:14px; font-weight:600; cursor:pointer;">Plus tard</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  async componentDidMount() {
+    this.root = this.host || document;
+    this.taken = 0;
+    try { this.bank = await import('./assets/produits-assets.js'); } catch (e) { this.bank = null; }
+    this.renderItems();
+    this.wire();
+  }
+
+  aisleMeta(aisle) {
+    const map = {
+      "Fruits & légumes": { tint: "var(--color-sage-tint)", ink: "var(--color-sage-deep)" },
+      "Frais & crémerie": { tint: "var(--color-butter-tint)", ink: "#8a6d1f" },
+      "Épicerie": { tint: "var(--color-sage-tint)", ink: "var(--color-sage-deep)" },
+      "Maison & entretien": { tint: "var(--color-clay-tint)", ink: "#a96a4a" },
+    };
+    return map[aisle] || { tint: "var(--color-sage-tint)", ink: "var(--color-sage-deep)" };
+  }
+
+  data() {
+    return {
+      "Fruits & légumes": [
+        { name: "Brocoli", qty: "1", src: "repas", prod: "brocoli" },
+        { name: "Basilic", qty: "1 botte", src: "repas", prod: "herbes" },
+        { name: "Carottes", qty: "1 kg", src: "essentiel", prod: "carotte" },
+      ],
+      "Frais & crémerie": [
+        { name: "Yaourt nature", qty: "4", src: "repas", prod: "yaourt" },
+        { name: "Lait", qty: "1 L", src: "essentiel", prod: "lait" },
+      ],
+      "Épicerie": [
+        { name: "Riz", qty: "250 g", src: "repas", prod: "riz" },
+        { name: "Café", qty: "1 paquet", src: "essentiel", prod: "cafe" },
+      ],
+      "Maison & entretien": [
+        { name: "Éponges", qty: "", src: "ajoute", prod: "eponge" },
+        { name: "Sacs poubelle", qty: "", src: "ajoute", prod: "poubelle" },
+      ],
+    };
+  }
+
+  srcMeta(src) {
+    if (src === "repas") return { label: "repas", color: "var(--color-sage-deep)", bg: "var(--color-sage-tint)", icon: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>' };
+    if (src === "essentiel") return { label: "essentiel", color: "#8a6d1f", bg: "var(--color-butter-tint)", icon: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>' };
+    return { label: "ajouté", color: "#a96a4a", bg: "var(--color-clay-tint)", icon: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>' };
+  }
+
+  rowHtml(it, aisle) {
+    const m = this.srcMeta(it.src);
+    const a = this.aisleMeta(aisle);
+    const fig = this.bank ? this.bank.productSvg(it.prod, { size: 22 }) : "";
+    const qty = it.qty ? `<span data-qty style="font-size:13px; color:var(--color-ink-soft);">${it.qty}</span>` : "";
+    const provSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">${m.icon}</svg>`;
+    return `<div data-item data-aisle="${aisle}" data-on="0" style="display:flex; align-items:center; gap:12px; min-height:56px; padding:9px 14px; background:var(--color-surface); border:1px solid var(--color-line); border-radius:13px; cursor:pointer; box-shadow:var(--shadow-sm);">
+      <span data-box style="flex:none; width:24px; height:24px; border-radius:7px; border:1.75px solid var(--border-strong); display:flex; align-items:center; justify-content:center; color:#fff;"></span>
+      <span data-fig style="flex:none; width:38px; height:38px; border-radius:11px; background:${a.tint}; color:${a.ink}; display:flex; align-items:center; justify-content:center;">${fig}</span>
+      <span data-label style="flex:1; font-size:14.5px; font-weight:600;">${it.name}</span>
+      <span data-prov title="${m.label}" style="flex:none; display:flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:${m.color}; background:${m.bg}; padding:3px 9px 3px 7px; border-radius:999px;">${provSvg}${m.label}</span>
+      ${qty}
+    </div>`;
+  }
+
+  renderItems() {
+    const d = this.data();
+    Object.keys(d).forEach((aisle) => {
+      const body = this.root.querySelector(`[data-aisle-body][data-aisle="${aisle}"]`);
+      if (body) body.innerHTML = d[aisle].map((it) => this.rowHtml(it, aisle)).join("");
+    });
+    this.updateCounts();
+  }
+
+  updateCounts() {
+    const all = this.root.querySelectorAll("[data-item]");
+    const taken = this.root.querySelectorAll('[data-item][data-on="1"]').length;
+    const remaining = all.length - taken;
+    const set = (sel, v) => this.root.querySelectorAll(sel).forEach((e) => (e.textContent = v));
+    set("[data-remaining]", remaining);
+    set("[data-taken]", taken);
+    set("[data-taken2]", taken);
+  }
+
+  wire() {
+    this.root.querySelectorAll("[data-item]").forEach((row) => this.bindRow(row));
+
+    this.root.querySelectorAll("[data-aisle-head]").forEach((head) => {
+      head.addEventListener("click", () => {
+        const body = head.nextElementSibling;
+        const chev = head.querySelector("[data-chevron]");
+        const open = body.style.display !== "none";
+        body.style.display = open ? "none" : "flex";
+        if (chev) chev.style.transform = open ? "rotate(-90deg)" : "rotate(0deg)";
+      });
+    });
+
+    const takenHead = this.root.querySelector("[data-taken-head]");
+    if (takenHead) {
+      takenHead.addEventListener("click", (e) => {
+        if (e.target.closest("[data-uncheck-all]")) return;
+        const body = this.root.querySelector("[data-taken-body]");
+        const chev = this.root.querySelector("[data-taken-chevron]");
+        const open = body.style.display !== "none";
+        body.style.display = open ? "none" : "flex";
+        if (chev) chev.style.transform = open ? "rotate(-90deg)" : "rotate(0deg)";
+      });
+    }
+
+    const uncheckAll = this.root.querySelector("[data-uncheck-all]");
+    if (uncheckAll) uncheckAll.addEventListener("click", () => {
+      this.root.querySelectorAll('[data-item][data-on="1"]').forEach((row) => this.setItem(row, false));
+      this.updateCounts();
+    });
+
+    const done = this.root.querySelector("[data-done]");
+    if (done) done.addEventListener("click", () => this.openCheckout());
+  }
+
+  bindRow(row) {
+    row.addEventListener("click", () => {
+      const on = row.getAttribute("data-on") === "1";
+      this.setItem(row, !on);
+      this.updateCounts();
+      if (!on) this.showToast("Coché · entrera au stock au retour");
+    });
+  }
+
+  setItem(row, on) {
+    row.setAttribute("data-on", on ? "1" : "0");
+    const box = row.querySelector("[data-box]");
+    const label = row.querySelector("[data-label]");
+    const qty = row.querySelector("[data-qty]");
+    const prov = row.querySelector("[data-prov]");
+    const fig = row.querySelector("[data-fig]");
+    if (on) {
+      if (fig) fig.style.opacity = "0.45";
+      box.style.border = "1.75px solid var(--color-green)";
+      box.style.background = "var(--color-green)";
+      box.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+      label.style.color = "var(--color-ink-soft)";
+      label.style.textDecoration = "line-through";
+      if (qty) qty.style.textDecoration = "line-through";
+      if (prov) prov.style.opacity = "0.4";
+      row.style.background = "var(--color-paper)";
+      const takenBody = this.root.querySelector("[data-taken-body]");
+      if (takenBody) {
+        takenBody.appendChild(row);
+        if (this.taken === 0) { takenBody.style.display = "flex"; const chev = this.root.querySelector("[data-taken-chevron]"); if (chev) chev.style.transform = "rotate(0deg)"; }
+      }
+    } else {
+      if (fig) fig.style.opacity = "1";
+      box.style.border = "1.75px solid var(--border-strong)";
+      box.style.background = "transparent";
+      box.innerHTML = "";
+      label.style.color = "var(--color-ink)";
+      label.style.textDecoration = "none";
+      if (qty) qty.style.textDecoration = "none";
+      if (prov) prov.style.opacity = "1";
+      row.style.background = "var(--color-surface)";
+      const aisle = row.getAttribute("data-aisle");
+      const body = this.root.querySelector(`[data-aisle-body][data-aisle="${aisle}"]`);
+      if (body) body.appendChild(row);
+    }
+  }
+
+  showToast(msg) {
+    const toast = this.root.querySelector("[data-toast]");
+    if (!toast) return;
+    const m = toast.querySelector("[data-toast-msg]");
+    if (m) m.textContent = msg;
+    toast.style.display = "flex";
+    clearTimeout(this._t);
+    this._t = setTimeout(() => { toast.style.display = "none"; }, 2600);
+  }
+
+  openCheckout() {
+    const modal = this.root.querySelector("[data-checkout]");
+    if (modal) modal.style.display = "flex";
+  }
+}
+</script>
+</body>
+</html>

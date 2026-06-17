@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { getAuthContext } from '@/lib/auth';
+import { searchFoodCatalog, importFoodByRef, type FoodSuggestion } from '@/lib/core';
+import type { NutritionSource } from '@/lib/providers/nutrition';
 
 async function requireHousehold() {
   const { supabase, userId, profile } = await getAuthContext();
@@ -45,13 +47,29 @@ export async function toggleManualCheckAction(formData: FormData): Promise<void>
   revalidatePath('/courses');
 }
 
+/** Autocomplétion d'aliments (catalogue local + fournisseurs). */
+export async function searchCatalogAction(query: string): Promise<FoodSuggestion[]> {
+  const { supabase } = await requireHousehold();
+  return searchFoodCatalog(supabase, query, { limit: 8 });
+}
+
 export async function addManualAction(formData: FormData): Promise<void> {
   const { supabase, householdId } = await requireHousehold();
   const label = String(formData.get('label') ?? '').trim();
   if (!label) return;
+
+  // Identité produit (D) : food_id direct, ou import paresseux d'une suggestion externe.
+  let foodId = String(formData.get('food_id') ?? '') || null;
+  const source = String(formData.get('source') ?? '') as NutritionSource | '';
+  const externalId = String(formData.get('external_id') ?? '');
+  if (!foodId && (source === 'usda' || source === 'openfoodfacts') && externalId) {
+    foodId = await importFoodByRef(supabase, source, externalId);
+  }
+
   await supabase.from('shopping_manual_item').insert({
     household_id: householdId,
     label,
+    food_id: foodId,
     quantity: num(formData.get('quantity')) ?? null,
     unit: String(formData.get('unit') ?? '') || null,
   });
