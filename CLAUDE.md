@@ -124,6 +124,31 @@ Doc de référence : `docs/courses-ux-refonte.md` · tests/bugs : `docs/courses-
 - **`GROQ_API_KEY` / `USDA_API_KEY` requises au runtime** (zod dans `env.server.ts`). Si absentes : la page `/login` (publique) s'affiche, mais **toute page de l'app plante en 500** (chaîne `core` → `providers/{nutrition,ai}` → `env.server`). Un changement de variable d'env Netlify n'est pris en compte qu'après un **redeploy**.
 - **Emails Supabase intégrés rate-limités** (quelques/heure, test only) → « email rate limit exceeded ». Pour la prod : configurer un **SMTP custom** (Auth → Settings → SMTP). Astuce test : confirmer un compte via SQL (`update auth.users set email_confirmed_at = now() …`).
 
+### Reprise du chantier Courses — amorçage pour une nouvelle session (à froid)
+
+Une nouvelle session n'a **aucune mémoire** de la précédente. Pour reprendre le travail sur la Liste de courses :
+
+**Lire d'abord (tout le contexte développé y est) :**
+- `docs/courses-ux-refonte.md` — **document de référence** : inventaire complet des problèmes UX (UX-01→15), étude de marché (apps concurrentes + leurs limites), feuille de route A→H + UX-13/14 avec l'**état de chaque chantier** (fait / à faire), invariants à respecter.
+- `docs/courses-retravail-findings.md` — journal des tests + bugs trouvés/corrigés.
+- `design/handoff-courses/` — maquettes Claude Design (8 états, desktop + mobile) ; `docs/claude-design-courses-brief.md` — le brief envoyé au design.
+
+**Fichiers clés de la section :**
+- `src/lib/core/shopping.ts` — `generateShoppingList` (liste dynamique, chaque ligne porte `category`/`iconSlug`/`foodId`), `getShoppingWindow` (cadence foyer), `checkoutPurchasedToStock` (achat→stock), `remainingAfterStock` (déduction avec unités).
+- `src/lib/core/foods.ts` — `searchFoodCatalog` (autocomplétion hybride local+USDA/OFF), `importFoodByRef`.
+- `src/lib/units.ts` — **source unique** des unités (UI + conversions). `src/lib/product-assets.tsx` — icônes produits doodle + rayons + provenance (`resolveProduct`).
+- `src/app/(app)/courses/` — `page.tsx` (server, rendu liste par rayon), `actions.ts` (server actions → `core/`), `add-article.tsx` / `purchase-checkout.tsx` / `undo-toast.tsx` (composants **client**).
+
+**Conventions à respecter (sinon on casse l'archi) :**
+- Mutations via **server actions → fonctions `core/`** ; jamais de logique métier dans les composants.
+- Interactivité (autocomplete, modale, toast) = **composants client** ; le reste reste server (RSC).
+- Stock : l'achat est un **flux entrant** ; ne JAMAIS décrémenter le stock par les courses/planning (specs 3.4).
+- Unités : toujours passer par `src/lib/units.ts`. Catalogue : tables `food` (+ colonne `category` = rayon) et `food_package` ; aliments de catalogue = `source='manual'`, `external_id='cat:<slug>'` ; icônes résolues par slug.
+
+**BDD (Supabase, projet `wbnyngsngppwlsggkorm`)** : le **MCP Supabase** est disponible (`execute_sql`, `apply_migration`, `generate_typescript_types`, `list_tables`…). Après toute migration → régénérer `src/lib/supabase/database.types.ts`. Migrations dans `supabase/migrations/` (dernière : `0010`). C'est le **même** projet en dev et en prod.
+
+**Vérifier le rendu** : `npm run dev` (`http://localhost:3000`) ou la prod `https://mealings.netlify.app` ; extension **Claude in Chrome** connectée pour piloter un onglet (lire console/réseau). Compte de test : foyer « Maison » / profil **SAWADA** (`d4bc16e7-19fa-4976-92f9-c6b6d1662e90`). ⚠️ Piège outil constaté : en pilotant le navigateur, le **1er clic juste après une navigation est souvent absorbé** (hydratation du composant client) — re-cliquer ; et préférer les clics par coordonnées si une `ref` semble périmée.
+
 ### Prochaine session — actions à effectuer
 
 1. **Poursuivre l'optimisation de la section Liste de courses** (chantier principal — beaucoup de détails restent à ajuster ; voir `docs/courses-ux-refonte.md`). Détails observés en prod à traiter en priorité :
