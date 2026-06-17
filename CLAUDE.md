@@ -113,14 +113,29 @@ Doc de référence : `docs/courses-ux-refonte.md` · tests/bugs : `docs/courses-
 - **Bugs corrigés** : déduction stock sans unités, besoins masqués sur unité ≠, collision de clés d'état.
 - **Reste optionnel** : UX-14 (vue « mode magasin » mobile dédiée).
 
+### Déploiement production — EN LIGNE (juin 2026)
+
+- **Live : https://mealings.netlify.app** (Netlify, auto-deploy depuis `main`). Connexion + écrans (Stock, Courses, etc.) fonctionnels.
+- Backend : **même** projet Supabase qu'en dev (`wbnyngsngppwlsggkorm`) → migrations 0001-0010 et seed catalogue déjà appliqués, rien à re-migrer.
+- Variables d'env Netlify configurées : `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GROQ_API_KEY`, `USDA_API_KEY` (+ `SUPABASE_SERVICE_ROLE_KEY` optionnelle).
+
+**Pièges Netlify / Supabase rencontrés (à retenir) :**
+- **Supabase Site URL doit inclure `https://`** — sinon le lien de confirmation email redirige vers `…supabase.co/<site>` → « requested path is invalid ». Redirect URL : `https://mealings.netlify.app/auth/callback` (+ `/**`, + `http://localhost:3000/auth/callback`).
+- **`GROQ_API_KEY` / `USDA_API_KEY` requises au runtime** (zod dans `env.server.ts`). Si absentes : la page `/login` (publique) s'affiche, mais **toute page de l'app plante en 500** (chaîne `core` → `providers/{nutrition,ai}` → `env.server`). Un changement de variable d'env Netlify n'est pris en compte qu'après un **redeploy**.
+- **Emails Supabase intégrés rate-limités** (quelques/heure, test only) → « email rate limit exceeded ». Pour la prod : configurer un **SMTP custom** (Auth → Settings → SMTP). Astuce test : confirmer un compte via SQL (`update auth.users set email_confirmed_at = now() …`).
+
 ### Prochaine session — actions à effectuer
 
-1. **Tests & vérification utilisateur** (étape en cours) : valider les parcours dans le navigateur. Capacité disponible : extension **Claude in Chrome** connectée (piloter un vrai onglet, lire console/réseau) + skill `verify` + skill `playwright-cli`. Prérequis : `npm run dev` lancé sur `http://localhost:3000`.
-2. **Passe composants + icônes** : composants React partagés (Button, Field, Card, Badge, Nav, Bubble) + icônes **Lucide** (lib à installer) ; convertir les écrans aux primitives plutôt qu'aux classes utilitaires.
-3. **Nettoyage git** : supprimer la branche `design-system-foundations` (origin) maintenant que son contenu est dans `main`.
-4. *(Optionnel)* **`/design-sync`** : une fois les composants codés, les pousser vers le projet Claude Design pour boucler la synchro (nécessite d'autoriser l'accès design sur le login claude.ai).
-5. **Mise en production** : `netlify.toml` en place et **`npm run build` validé** (build de prod OK). Reste, côté tableau de bord (non committable) : renseigner les variables d'env Netlify (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GROQ_API_KEY`, `USDA_API_KEY` requises ; `SUPABASE_SERVICE_ROLE_KEY` optionnelle) et configurer Supabase Auth (Site URL = domaine Netlify + Redirect URL `…/auth/callback`).
-6. **PWA** : `manifest` + icônes installables (favicon déjà posé via `src/app/icon.svg`).
+1. **Poursuivre l'optimisation de la section Liste de courses** (chantier principal — beaucoup de détails restent à ajuster ; voir `docs/courses-ux-refonte.md`). Détails observés en prod à traiter en priorité :
+   - En usage réel, **tous les articles tombent dans le rayon « Autres » avec la puce « ajouté »** : les ajouts en texte libre ne sont pas liés au catalogue (`food_id`), donc pas de rayon ni d'icône. → rendre le rapprochement catalogue plus systématique (ex. relier automatiquement un ajout libre à un aliment du catalogue par libellé normalisé).
+   - Des articles **déjà présents en stock apparaissent quand même** dans « À acheter » (l'anti-doublon/anti-surplus n'agit qu'à l'ajout, pas rétroactivement sur les manuels existants).
+   - Reste aussi : **UX-14 mode magasin mobile**, et finitions diverses.
+2. **Tests & vérification** : extension **Claude in Chrome** connectée (piloter un onglet, lire console/réseau) + skills `verify` / `playwright-cli`. Local : `npm run dev` sur `http://localhost:3000` ; prod : `https://mealings.netlify.app`.
+3. **Passe composants + icônes** : composants React partagés (Button, Field, Card, Badge, Nav, Bubble) + icônes **Lucide** (lib à installer) ; convertir les écrans aux primitives plutôt qu'aux classes utilitaires.
+4. **SMTP custom Supabase** : configurer un fournisseur d'emails (Auth → Settings → SMTP) pour fiabiliser confirmation/reset (l'envoi intégré est rate-limité — voir « Déploiement production »).
+5. **Nettoyage git** : supprimer la branche `design-system-foundations` (origin) maintenant que son contenu est dans `main`.
+6. *(Optionnel)* **`/design-sync`** : une fois les composants codés, les pousser vers le projet Claude Design pour boucler la synchro (nécessite d'autoriser l'accès design sur le login claude.ai).
+7. **PWA** : `manifest` + icônes installables (favicon déjà posé via `src/app/icon.svg`).
 
 ---
 
