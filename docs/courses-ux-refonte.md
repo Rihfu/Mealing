@@ -149,7 +149,15 @@ ce que devient un article. Lève le « et ensuite ? ».
 ### Chantier D — Catalogue d'aliments + autocomplétion *(UX-03, UX-04, UX-08 ; débloque F, G, E)*
 Fondation : peupler/relier un catalogue (USDA/OFF déjà intégrés) + autocomplétion à la saisie +
 formats courants + **identité produit stable** (lien `food_id`). Sans ça, le reste reste cosmétique.
-- **Statut** : ⏳
+- **Décisions validées** : D.1 hybride · D.2 seed FR de base · D.3 `food_id` sur les manuels ·
+  D.4 table de conditionnements · D.5 périmètre Courses.
+- **Statut** : 🚧 **backend fait** — migrations `0008_food_catalog` (schéma : `food.category`,
+  table `food_package`, `shopping_manual_item.food_id` + index d'unicité catalogue) et
+  `0009_seed_food_catalog` (76 aliments FR / 8 rayons / 29 conditionnements) appliquées ;
+  types régénérés (`database.types.ts`) ; `core/foods.ts` : `searchFoodCatalog` (hybride local +
+  fournisseurs), `importFoodByRef` (import paresseux). Vérifié sur données réelles.
+- **Reste (avec le design)** : composant client d'autocomplétion (input débouncé → action →
+  suggestions + formats + unité pré-remplie ; sélection externe → import). UI = écran #3 du brief.
 
 ### Chantier E — Flux Achat → Stock *(UX-07, UX-09)*
 Valider les courses pousse les articles cochés dans le **stock**, **datés** (→ péremption Phase 3).

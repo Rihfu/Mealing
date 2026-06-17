@@ -119,6 +119,7 @@ export type Database = {
         Row: {
           barcode: string | null
           base_amount: number
+          category: string | null
           created_at: string
           created_by: string | null
           default_unit: string
@@ -130,6 +131,7 @@ export type Database = {
         Insert: {
           barcode?: string | null
           base_amount?: number
+          category?: string | null
           created_at?: string
           created_by?: string | null
           default_unit?: string
@@ -141,6 +143,7 @@ export type Database = {
         Update: {
           barcode?: string | null
           base_amount?: number
+          category?: string | null
           created_at?: string
           created_by?: string | null
           default_unit?: string
@@ -150,6 +153,47 @@ export type Database = {
           source?: string
         }
         Relationships: []
+      }
+      food_package: {
+        Row: {
+          created_at: string
+          food_id: string
+          id: string
+          is_default: boolean
+          label: string
+          position: number
+          quantity: number
+          unit: string | null
+        }
+        Insert: {
+          created_at?: string
+          food_id: string
+          id?: string
+          is_default?: boolean
+          label: string
+          position?: number
+          quantity: number
+          unit?: string | null
+        }
+        Update: {
+          created_at?: string
+          food_id?: string
+          id?: string
+          is_default?: boolean
+          label?: string
+          position?: number
+          quantity?: number
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_package_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: false
+            referencedRelation: "food"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       household: {
         Row: {
@@ -712,6 +756,7 @@ export type Database = {
         Row: {
           added_at: string
           checked: boolean
+          food_id: string | null
           household_id: string
           id: string
           label: string
@@ -721,6 +766,7 @@ export type Database = {
         Insert: {
           added_at?: string
           checked?: boolean
+          food_id?: string | null
           household_id: string
           id?: string
           label: string
@@ -730,6 +776,7 @@ export type Database = {
         Update: {
           added_at?: string
           checked?: boolean
+          food_id?: string | null
           household_id?: string
           id?: string
           label?: string
@@ -737,6 +784,13 @@ export type Database = {
           unit?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "shopping_manual_item_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: false
+            referencedRelation: "food"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "shopping_manual_item_household_id_fkey"
             columns: ["household_id"]
