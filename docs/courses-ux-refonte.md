@@ -189,7 +189,7 @@ Remplacer la fenêtre figée 14 j par un réglage (hebdo / bi-hebdo / jour de co
 | 4 | D — Catalogue + autocomplétion | ✅ | ✅ back + composant client `add-article.tsx` |
 | — | F — Tri par rayon (sections repliables) | ✅ | ✅ groupement `food.category` + icônes |
 | — | Banque d'assets (icônes produits) | — | ✅ `src/lib/product-assets.tsx` |
-| 5 | E — Achat → Stock daté | ✅ (maquette état 5) | ⏳ à implémenter |
+| 5 | E — Achat → Stock daté | ✅ | ✅ checkout → stock (fusion + nettoyage), vérifié en direct |
 | — | G — Anti-surplus / anti-doublon | ✅ (maquette état 3) | ⏳ à implémenter |
 | 6 | H — Cadence configurable | ⏳ | ⏳ |
 | — | UX-13 Undo · UX-14 mode magasin mobile | ✅ (maquettes) | ⏳ |
@@ -201,4 +201,5 @@ Handoff importé dans `design/handoff-courses/` (zip → impossible via connecte
 
 - **Banque d'assets** → `src/lib/product-assets.tsx` : `PRODUCTS` (~45 pictos doodle), `CATEGORIES` (rayons), `PROVENANCE`, composants `ProductIcon` / `ProvenanceBadge`, `resolveProduct` (alias slugs catalogue → picto).
 - **Courses (refonte)** : `page.tsx` réécrit — en-tête (titre + accent Caveat + sous-titre clair), **liste unique « À acheter » groupée par rayon** (sections repliables, icône + nom + puce de provenance + qté), « Déjà pris » + « Tout décocher », état vide, « Mes essentiels » (ex-récurrents). `add-article.tsx` (client) : autocomplétion (`searchCatalogAction`), formats 1 clic (`food_package`), unité (`<select>`). `shopping.ts` enrichit chaque ligne de `category` + `iconSlug`.
-- **Reste à faire** (maquettes fournies, pas encore codées) : état 5 **Achat → Stock** (chantier E), **anti-surplus/doublon** à l'ajout (G), **undo** (UX-13), **mode magasin** mobile (UX-14).
+- **Chantier E — Achat → Stock** ✅ : bouton « J'ai fait mes courses » (`purchase-checkout.tsx`, confirmation « Bien joué — on range ? ») → `checkoutToStockAction` → `checkoutPurchasedToStock` (core). Les lignes cochées entrent au stock (fusion si l'article existe : présent + cumul si même unité ; sinon création), datées du jour (created_at → péremption). Puis les achats quittent la liste (coches effacées, manuels achetés supprimés). Flux entrant uniquement — ne touche pas à la décrémentation (specs 3.4). `ShoppingLine` porte désormais `foodId`. Vérifié en direct (« Riz · 500 g » coché → entré au stock daté du jour).
+- **Reste à faire** (maquettes fournies, pas encore codées) : **anti-surplus/doublon** à l'ajout (G), **undo** (UX-13), **mode magasin** mobile (UX-14).

@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { getAuthContext } from '@/lib/auth';
-import { searchFoodCatalog, importFoodByRef, type FoodSuggestion } from '@/lib/core';
+import { searchFoodCatalog, importFoodByRef, checkoutPurchasedToStock, type FoodSuggestion } from '@/lib/core';
+import { addDays, isoDate } from '@/lib/dates';
 import type { NutritionSource } from '@/lib/providers/nutrition';
 
 async function requireHousehold() {
@@ -26,6 +27,16 @@ export async function toggleCheckAction(formData: FormData): Promise<void> {
     { onConflict: 'household_id,item_key' },
   );
   revalidatePath('/courses');
+}
+
+/** « J'ai fait mes courses » : les articles cochés entrent dans le stock (chantier E). */
+export async function checkoutToStockAction(): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  const from = isoDate(new Date());
+  const to = isoDate(addDays(new Date(), 13));
+  await checkoutPurchasedToStock(supabase, { householdId, from, to });
+  revalidatePath('/courses');
+  revalidatePath('/stock');
 }
 
 /** Décoche toutes les lignes (fin d'une session de courses). Ne supprime rien. */

@@ -3,6 +3,7 @@ import { generateShoppingList, type ShoppingLine } from '@/lib/core';
 import { addDays, isoDate } from '@/lib/dates';
 import { CATEGORIES, ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-assets';
 import { AddArticle } from './add-article';
+import { PurchaseCheckout } from './purchase-checkout';
 import {
   addRecurringAction,
   clearCheckedAction,
@@ -121,7 +122,21 @@ export default async function CoursesPage() {
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <div className="flex flex-col gap-4">
           <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
-            <h2 className="mb-2 font-display text-lg font-semibold">À acheter</h2>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h2 className="font-display text-lg font-semibold">À acheter</h2>
+              {done.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-ink-soft">{done.length} déjà pris</span>
+                  <PurchaseCheckout
+                    items={done.map((l) => ({
+                      name: l.name,
+                      qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
+                      category: l.category ?? null,
+                    }))}
+                  />
+                </div>
+              )}
+            </div>
 
             {active.length === 0 ? (
               <p className="py-6 text-center text-sm text-ink-soft">

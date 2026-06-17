@@ -1,6 +1,6 @@
 import type { DB } from './types';
 import { unwrap } from './types';
-import { type Quantity, toBase, fromBase } from '@/lib/units';
+import { type Quantity, toBase, fromBase, normalizeUnit } from '@/lib/units';
 
 export type ShoppingSource = 'recipe' | 'recurring' | 'manual';
 
@@ -12,6 +12,7 @@ export interface ShoppingLine {
   checked: boolean;
   source: ShoppingSource;
   manualId?: string;
+  foodId?: string | null; // aliment lié (identité produit) si connu
   category?: string | null; // rayon (food.category) pour le tri par rayon ; null = non classé
   iconSlug?: string | null; // food.external_id ('cat:<slug>') pour le picto produit
 }
@@ -232,6 +233,7 @@ export async function generateShoppingList(
       unit: need.unit,
       checked: checkedKeys.has(key),
       source: 'recipe',
+      foodId,
       category: foodCategory.get(foodId) ?? null,
       iconSlug: foodSlug.get(foodId) ?? null,
     });
@@ -263,6 +265,7 @@ export async function generateShoppingList(
       unit: r.unit ?? undefined,
       checked: checkedKeys.has(key),
       source: 'recurring',
+      foodId: r.food_id ?? null,
       category: r.food_id ? (foodCategory.get(r.food_id) ?? null) : null,
       iconSlug: r.food_id ? (foodSlug.get(r.food_id) ?? null) : null,
     });
@@ -277,12 +280,90 @@ export async function generateShoppingList(
       checked: m.checked,
       source: 'manual',
       manualId: m.id,
+      foodId: m.food_id ?? null,
       category: m.food_id ? (foodCategory.get(m.food_id) ?? null) : null,
       iconSlug: m.food_id ? (foodSlug.get(m.food_id) ?? null) : null,
     });
   }
 
   return lines;
+}
+
+/**
+ * « J'ai fait mes courses » (chantier E) : les lignes cochées entrent dans le stock,
+ * datées d'aujourd'hui (created_at → péremption Phase 3). Fusion simple : si un article
+ * de stock existe déjà (même aliment ou même libellé), on le marque présent et on cumule
+ * la quantité quand l'unité correspond ; sinon on crée la ligne. Puis les achats quittent
+ * la liste (coches effacées, articles manuels achetés supprimés).
+ *
+ * Ne touche jamais à la décrémentation (specs 3.4) : c'est un FLUX ENTRANT.
+ * @returns le nombre d'articles rangés.
+ */
+export async function checkoutPurchasedToStock(
+  db: DB,
+  params: { householdId: string; from: string; to: string },
+): Promise<{ added: number }> {
+  const lines = (await generateShoppingList(db, params)).filter((l) => l.checked);
+  if (lines.length === 0) return { added: 0 };
+
+  const stock = (unwrap(
+    await db
+      .from('stock')
+      .select('id, food_id, label, tracking_mode, quantity, unit')
+      .eq('household_id', params.householdId),
+  ) ?? []) as Array<{
+    id: string;
+    food_id: string | null;
+    label: string | null;
+    tracking_mode: string;
+    quantity: number | null;
+    unit: string | null;
+  }>;
+
+  const byFood = new Map<string, (typeof stock)[number]>();
+  const byLabel = new Map<string, (typeof stock)[number]>();
+  for (const s of stock) {
+    if (s.food_id) byFood.set(s.food_id, s);
+    else if (s.label) byLabel.set(normalizeLabel(s.label), s);
+  }
+
+  let added = 0;
+  for (const line of lines) {
+    const existing = line.foodId ? byFood.get(line.foodId) : byLabel.get(normalizeLabel(line.name));
+    const hasQty = line.quantity != null;
+
+    if (existing) {
+      const patch: Record<string, unknown> = { present: true };
+      const sameUnit = normalizeUnit(existing.unit) === normalizeUnit(line.unit);
+      if (hasQty && existing.tracking_mode === 'quantity' && sameUnit) {
+        patch.quantity = (existing.quantity ?? 0) + (line.quantity as number);
+      }
+      const { error } = await db.from('stock').update(patch).eq('id', existing.id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await db.from('stock').insert({
+        household_id: params.householdId,
+        food_id: line.foodId ?? null,
+        label: line.foodId ? null : line.name,
+        tracking_mode: hasQty ? 'quantity' : 'presence',
+        quantity: hasQty ? line.quantity : null,
+        unit: line.unit ?? null,
+        present: true,
+      });
+      if (error) throw new Error(error.message);
+    }
+    added++;
+  }
+
+  // Les achats quittent la liste.
+  await db.from('shopping_item_state').delete().eq('household_id', params.householdId);
+  await db
+    .from('shopping_manual_item')
+    .delete()
+    .eq('household_id', params.householdId)
+    .eq('checked', true);
+
+  return { added };
 }
 
 function normalizeLabel(value: string): string {
