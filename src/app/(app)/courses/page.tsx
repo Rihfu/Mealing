@@ -89,15 +89,29 @@ export default async function CoursesPage() {
   const from = isoDate(new Date());
   const to = isoDate(addDays(new Date(), 13));
 
-  const [lines, { data: recurring }, { data: foods }] = await Promise.all([
+  const [lines, { data: recurring }, { data: foods }, { data: stock }] = await Promise.all([
     generateShoppingList(supabase, { householdId, from, to }),
     supabase.from('shopping_recurring_item').select('id, label, food:food_id(name)').eq('household_id', householdId),
     supabase.from('food').select('id, name').order('name', { ascending: true }).limit(500),
+    supabase.from('stock').select('food_id, label, quantity, unit, present').eq('household_id', householdId),
   ]);
 
   // Actif (à acheter) groupé par rayon ; coché → « Déjà pris ».
   const active = lines.filter((l) => !l.checked);
   const done = lines.filter((l) => l.checked);
+
+  // Contexte anti-doublon / anti-surplus (G) pour le formulaire d'ajout.
+  const onListRefs = active.map((l) => ({
+    foodId: l.foodId ?? null,
+    name: l.name,
+    qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
+  }));
+  const inStockRefs = (stock ?? []).map((s) => ({
+    foodId: s.food_id ?? null,
+    label: s.label ?? null,
+    qty: s.quantity != null ? `${s.quantity} ${s.unit ?? ''}`.trim() : '',
+    present: s.present,
+  }));
 
   const byRayon = new Map<string, ShoppingLine[]>();
   for (const l of active) {
@@ -193,7 +207,7 @@ export default async function CoursesPage() {
         <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
           <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
             <h2 className="mb-3 font-display text-lg font-semibold">Ajouter un article</h2>
-            <AddArticle />
+            <AddArticle onList={onListRefs} inStock={inStockRefs} />
           </section>
 
           <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">

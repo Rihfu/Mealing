@@ -1,17 +1,41 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { addManualAction, searchCatalogAction } from './actions';
 import { UNIT_OPTIONS } from '@/lib/units';
 import { ProductIcon } from '@/lib/product-assets';
 import type { FoodSuggestion } from '@/lib/core';
+
+/** Contexte (anti-doublon / anti-surplus) : ce qui est déjà sur la liste / en stock. */
+export interface ListRef {
+  foodId: string | null;
+  name: string;
+  qty: string;
+}
+export interface StockRef {
+  foodId: string | null;
+  label: string | null;
+  qty: string;
+  present: boolean;
+}
+
+/** Normalisation légère pour rapprocher des libellés (accents/casse/pluriel). */
+function norm(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[^a-z0-9 ]/g, ' ') // retire accents (marques combinantes) + ponctuation
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/s$/, '');
+}
 
 /**
  * Ajout d'un article avec autocomplétion (catalogue + fournisseurs), formats
  * courants en 1 clic et unité normalisée (chantiers B + D). La mutation finale
  * passe par la server action addManualAction (convention : logique en core/).
  */
-export function AddArticle() {
+export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; inStock?: StockRef[] }) {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<FoodSuggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -19,6 +43,21 @@ export function AddArticle() {
   const [quantity, setQuantity] = useState('');
   const [unit, setUnit] = useState('');
   const formRef = useRef<HTMLFormElement>(null);
+
+  // Anti-doublon / anti-surplus (G) : avertir si l'article est déjà sur la liste ou en stock.
+  const warning = useMemo(() => {
+    const name = (selected?.name ?? query).trim();
+    if (name.length < 2) return null;
+    const fid = selected?.foodId ?? null;
+    const n = norm(name);
+    const listed = onList.find((x) => (fid && x.foodId === fid) || norm(x.name) === n);
+    if (listed) return { kind: 'list' as const, qty: listed.qty };
+    const stocked = inStock.find(
+      (x) => x.present && ((fid && x.foodId === fid) || (x.label != null && norm(x.label) === n)),
+    );
+    if (stocked) return { kind: 'stock' as const, qty: stocked.qty };
+    return null;
+  }, [query, selected, onList, inStock]);
 
   // Recherche débouncée tant qu'aucune suggestion n'est sélectionnée.
   useEffect(() => {
@@ -168,6 +207,19 @@ export function AddArticle() {
           ))}
         </select>
       </div>
+
+      {warning && (
+        <p
+          className="flex items-start gap-2 rounded-xl px-3 py-2 text-xs leading-snug"
+          style={{ background: 'var(--color-butter-tint)', color: '#7a5e12' }}
+        >
+          <span>
+            {warning.kind === 'list'
+              ? `« ${(selected?.name ?? query).trim()} » est déjà sur ta liste${warning.qty ? ` (${warning.qty})` : ''}. Ajouter quand même ?`
+              : `Tu as déjà « ${(selected?.name ?? query).trim()} » en stock${warning.qty ? ` (${warning.qty})` : ''}. Ajouter quand même ?`}
+          </span>
+        </p>
+      )}
 
       <button className="btn-primary py-2.5">Ajouter à la liste</button>
     </form>
