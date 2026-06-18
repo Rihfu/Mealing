@@ -194,7 +194,7 @@ Remplacer la fenêtre figée 14 j par un réglage (hebdo / bi-hebdo / jour de co
 | 6 | H — Cadence configurable | ✅ | ✅ horizon foyer (3/7/14 j), vérifié en direct |
 | — | UX-13 Undo (suppression) | ✅ | ✅ toast « supprimé · Annuler » (manuels + essentiels) |
 | — | Rayons : clé stable (fix dérive) + auto-lien catalogue + marqueur stock | ✅ | ✅ migration 0011 + `findCatalogFoodIdByLabel` + pastille « déjà en stock » |
-| — | UX-14 mode magasin mobile | ✅ (maquette) | ⏳ |
+| — | UX-14 mode magasin mobile | ✅ (maquette) | ✅ `/courses/magasin` (gros boutons, progression, CTA collant) |
 
 _Mise à jour après chaque chantier._
 
@@ -254,3 +254,9 @@ Règle le double agacement des imports USDA/OFF (noms verbeux + marques ; aucun 
 - **Branchement** : `importFood` (core/foods) appelle le classifieur (import dynamique, try/catch) **uniquement à la création** d'un aliment externe → `food.name` = nom FR, `food.category` = rayon. **Nutrition inchangée** : toujours issue du fournisseur (garde-fou n°3). Repli si IA absente : nom brut + rayon vide.
 - **Affichage courses** : `addManualAction` utilise le nom de l'aliment lié (générique/curé) comme libellé de la ligne plutôt que la saisie brute → l'app reste générale (ex. « Cheese, parmesan, grated… » → « Parmesan »).
 - **Vérifié en direct** : « SALMON » (USDA) importé → **« Saumon »**, rangé en **Viandes & poissons**, **9 valeurs nutritionnelles conservées**. `tsc`/`eslint` OK, aucune erreur console. Données de test nettoyées.
+
+### UX-14 mode magasin + finition modale « Ranger » — 2026-06-18
+- **Mode magasin** (`src/app/(app)/courses/magasin/page.tsx`, État 8 de la maquette) : vue plein écran « En magasin » — barre de progression (cochés/total), liste par rayon en **gros boutons** (taper la ligne = cocher, ≥64 px), coché = case verte + barré sur place, **CTA collant** « J'ai fait mes courses » (`PurchaseCheckout` en variante `fullWidth`). Entrée via un bouton **« Mode magasin »** dans l'en-tête de la liste (visible s'il y a des articles).
+- **Refactor** : groupement par rayon extrait dans `src/app/(app)/courses/rayons.ts` (`catView`, `groupByRayon`), partagé par `page.tsx` et le mode magasin.
+- **Finition** : la modale « Ranger » avait ses coins **arrondis à gauche mais carrés à droite** car la barre de défilement s'appliquait à la carte arrondie ; corrigé en scrollant un **wrapper intérieur** (la carte extérieure `overflow-hidden rounded-2xl` clippe les coins).
+- **Vérifié en direct** : mode magasin (coche → barré + progression 1/6 + CTA collant), modale « Ranger » coins OK, aucune erreur console.

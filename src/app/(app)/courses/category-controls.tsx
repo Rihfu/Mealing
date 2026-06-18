@@ -168,10 +168,13 @@ export function RangerButton({
           style={{ background: 'rgba(40,38,34,0.32)' }}
           onClick={() => !pending && setOpen(false)}
         >
+          {/* Carte arrondie : le scroll est sur le wrapper intérieur pour que la
+              barre de défilement n'écrase pas les coins arrondis (côté droit). */}
           <div
-            className="max-h-[85vh] w-full max-w-md overflow-auto rounded-2xl border border-line bg-surface p-5 shadow-soft"
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-line bg-surface shadow-soft"
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="max-h-[85vh] overflow-y-auto p-5">
             <h3 className="font-display text-lg font-semibold">
               Ranger « {label} »
             </h3>
@@ -258,6 +261,7 @@ export function RangerButton({
               <button type="button" onClick={() => setOpen(false)} disabled={pending} className="px-2 text-sm text-ink-soft">
                 Annuler
               </button>
+            </div>
             </div>
           </div>
         </div>

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
 import {
@@ -7,14 +8,8 @@ import {
   type ShoppingLine,
   type HouseholdCategory,
 } from '@/lib/core';
-import {
-  categoryDef,
-  categoryLabel,
-  CATEGORY_ORDER,
-  ProductIcon,
-  ProvenanceBadge,
-  type ProvenanceKey,
-} from '@/lib/product-assets';
+import { categoryLabel, ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-assets';
+import { catView, groupByRayon } from './rayons';
 import { AddArticle } from './add-article';
 import { PurchaseCheckout } from './purchase-checkout';
 import { RangerButton, MyAisles } from './category-controls';
@@ -38,19 +33,6 @@ const SOURCE_TO_PROV: Record<ShoppingLine['source'], ProvenanceKey> = {
   recurring: 'essentiel',
   manual: 'ajoute',
 };
-
-// Tri par rayon : `line.category` porte une clé stable — intégrée (product-assets)
-// OU un id de rayon personnalisé du foyer (shopping_category).
-const OTHER_KEY = 'autres';
-
-/** Vue d'affichage d'un rayon (intégré ou custom) ; null = non classé (« Autres »). */
-function catView(key: string | null | undefined, customCats: HouseholdCategory[]) {
-  const def = categoryDef(key);
-  if (def) return { label: def.label, tint: def.tint, ink: def.ink, iconSlug: null as string | null, isCustom: false };
-  const c = key ? customCats.find((x) => x.id === key) : undefined;
-  if (c) return { label: c.label, tint: c.tint ?? 'var(--color-clay-tint)', ink: '#a96a4a', iconSlug: c.iconSlug, isCustom: true };
-  return null;
-}
 
 function tileStyle(categoryKey: string | null | undefined, customCats: HouseholdCategory[]) {
   const v = catView(categoryKey, customCats);
@@ -156,20 +138,33 @@ export default async function CoursesPage() {
     present: s.present,
   }));
 
-  const byRayon = new Map<string, ShoppingLine[]>();
-  for (const l of active) {
-    const r = catView(l.category, customCats) ? (l.category as string) : OTHER_KEY;
-    (byRayon.get(r) ?? byRayon.set(r, []).get(r)!).push(l);
-  }
-  const rayonsToShow = [...CATEGORY_ORDER, ...customCats.map((c) => c.id), OTHER_KEY].filter((r) => byRayon.has(r));
+  const rayonGroups = groupByRayon(active, customCats);
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-display text-2xl font-semibold tracking-tight">Liste de courses</h1>
-        <p className="font-hand mt-0.5 text-lg text-green-strong">
-          une seule liste, triée par rayon — coche au pouce, range au retour
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="font-display text-2xl font-semibold tracking-tight">Liste de courses</h1>
+            <p className="font-hand mt-0.5 text-lg text-green-strong">
+              une seule liste, triée par rayon — coche au pouce, range au retour
+            </p>
+          </div>
+          {active.length > 0 && (
+            <Link
+              href="/courses/magasin"
+              className="btn-secondary flex items-center gap-2 py-2 text-sm"
+              title="Vue plein écran, gros boutons — pour cocher en magasin"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 5h2l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h7.6a1.5 1.5 0 0 0 1.5-1.2L21 8H7" />
+                <circle cx="10" cy="20" r="1.4" />
+                <circle cx="18" cy="20" r="1.4" />
+              </svg>
+              Mode magasin
+            </Link>
+          )}
+        </div>
         <p className="mt-2 max-w-xl text-sm text-ink-soft">
           Ta liste se met à jour toute seule : on part de tes repas, on retire ce que tu as déjà en stock, et tu
           ajoutes ce que tu veux. Coche au fur et à mesure de tes courses.
@@ -219,29 +214,25 @@ export default async function CoursesPage() {
                 qu’un essentiel vient à manquer.
               </p>
             ) : (
-              rayonsToShow.map((rayon) => {
-                const items = byRayon.get(rayon)!;
-                const view = catView(rayon, customCats);
-                return (
-                  <details key={rayon} open className="border-t border-line first:border-t-0">
-                    <summary className="flex cursor-pointer list-none items-center gap-2 py-2 font-display text-sm font-semibold">
-                      <span
-                        className="flex h-5 w-5 items-center justify-center rounded-md text-[10px]"
-                        style={{ background: view?.tint ?? 'var(--color-line)', color: view?.ink ?? 'var(--color-ink-soft)' }}
-                      >
-                        {view?.isCustom && view.iconSlug ? <ProductIcon slug={view.iconSlug} size={12} /> : '●'}
-                      </span>
-                      <span className="flex-1">{view?.label ?? 'Autres'}</span>
-                      <span className="text-xs font-normal text-ink-soft">{items.length}</span>
-                    </summary>
-                    <ul className="divide-y divide-line pl-1">
-                      {items.map((l) => (
-                        <LineRow key={l.key + l.source} line={l} customCats={customCats} />
-                      ))}
-                    </ul>
-                  </details>
-                );
-              })
+              rayonGroups.map(({ key, view, items }) => (
+                <details key={key} open className="border-t border-line first:border-t-0">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 py-2 font-display text-sm font-semibold">
+                    <span
+                      className="flex h-5 w-5 items-center justify-center rounded-md text-[10px]"
+                      style={{ background: view?.tint ?? 'var(--color-line)', color: view?.ink ?? 'var(--color-ink-soft)' }}
+                    >
+                      {view?.isCustom && view.iconSlug ? <ProductIcon slug={view.iconSlug} size={12} /> : '●'}
+                    </span>
+                    <span className="flex-1">{view?.label ?? 'Autres'}</span>
+                    <span className="text-xs font-normal text-ink-soft">{items.length}</span>
+                  </summary>
+                  <ul className="divide-y divide-line pl-1">
+                    {items.map((l) => (
+                      <LineRow key={l.key + l.source} line={l} customCats={customCats} />
+                    ))}
+                  </ul>
+                </details>
+              ))
             )}
           </section>
 

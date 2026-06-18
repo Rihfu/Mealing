@@ -13,7 +13,7 @@ export interface CheckoutItem {
  * « J'ai fait mes courses » (chantier E) : confirme puis range les articles cochés
  * dans le stock (datés du jour). Action réversible côté stock.
  */
-export function PurchaseCheckout({ items }: { items: CheckoutItem[] }) {
+export function PurchaseCheckout({ items, fullWidth = false }: { items: CheckoutItem[]; fullWidth?: boolean }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const n = items.length;
@@ -28,7 +28,16 @@ export function PurchaseCheckout({ items }: { items: CheckoutItem[] }) {
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className="btn-primary py-2">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={fullWidth ? 'btn-primary flex w-full items-center justify-center gap-2 py-4 text-base' : 'btn-primary py-2'}
+      >
+        {fullWidth && (
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+        )}
         J’ai fait mes courses
       </button>
 
