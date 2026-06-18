@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
 import { computeRecipeNutrition } from '@/lib/core';
+import { AddMissingToShopping } from './add-missing-to-shopping';
 
 export default async function RecetteDetailPage({
   params,
@@ -62,6 +63,7 @@ export default async function RecetteDetailPage({
                 );
               })}
             </ul>
+            <AddMissingToShopping recipeId={recipe.id} />
           </section>
 
           {recipe.instructions && (

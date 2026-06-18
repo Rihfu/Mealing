@@ -1,7 +1,7 @@
 import type { DB } from './types';
 import { unwrap } from './types';
 import { loadCatalogIndex, matchCatalog } from './foods';
-import { loadFoodPrefs } from './categories';
+import { loadFoodPrefs, setFoodPref } from './categories';
 import { type Quantity, type Dim, toBase, fromBase, normalizeUnit } from '@/lib/units';
 import { normalizeLabel } from '@/lib/text';
 import { addDays, isoDate } from '@/lib/dates';
@@ -106,46 +106,9 @@ export async function generateShoppingList(
     }
   }
 
-  const stock = (unwrap(
-    await db
-      .from('stock')
-      .select('food_id, label, tracking_mode, quantity, unit, present')
-      .eq('household_id', params.householdId),
-  ) ?? []) as Array<{
-    food_id: string | null;
-    label: string | null;
-    tracking_mode: string;
-    quantity: number | null;
-    unit: string | null;
-    present: boolean;
-  }>;
-
-  // Stock agrégé par aliment, converti dans une unité de base (cf. helpers d'unités plus bas).
-  // `undefined` = pas de stock quantifié ; `null` = stock quantifié mais en unité non
-  // convertible / dimensions mêlées → on ne peut pas vérifier la couverture, donc on ne déduit pas.
-  const stockBaseByFood = new Map<string, Quantity | null>();
-  const presentFoods = new Set<string>();
-  const stockByLabel = new Map<string, { qty?: number; unit?: string; present: boolean }>();
-
-  for (const s of stock) {
-    if (s.food_id) {
-      if (s.tracking_mode === 'quantity') {
-        addStockBase(stockBaseByFood, s.food_id, toBase(s.quantity ?? 0, s.unit));
-      } else if (s.present) {
-        presentFoods.add(s.food_id);
-      }
-    }
-
-    const label = s.label?.trim();
-    if (label) {
-      const key = normalizeLabel(label);
-      const cur = stockByLabel.get(key) ?? { present: false, unit: s.unit ?? undefined };
-      cur.present = cur.present || s.present || (s.quantity ?? 0) > 0;
-      if (s.quantity != null) cur.qty = (cur.qty ?? 0) + s.quantity;
-      if (!cur.unit && s.unit) cur.unit = s.unit;
-      stockByLabel.set(key, cur);
-    }
-  }
+  // Stock agrégé (présence + quantités réconciliées par dimension) — logique de
+  // couverture partagée avec recipeMissingIngredients (cf. loadStockCoverage).
+  const { stock, presentFoods, stockBaseByFood, stockByLabel } = await loadStockCoverage(db, params.householdId);
 
   const neededFoodIds: string[] = [];
   const netNeed = new Map<string, { qty: number; unit?: string }>();
@@ -364,6 +327,47 @@ export async function generateShoppingList(
   return lines;
 }
 
+/**
+ * Variante de `generateShoppingList` qui classe automatiquement les lignes tombées
+ * en « Autres » — typiquement le **texte libre d'une recette** (ex. « bœuf en cubes »)
+ * que le catalogue + synonymes ne rapprochent pas : on demande un rayon à l'IA
+ * (liste fermée, best-effort) et on le **mémorise** comme préférence foyer (une fois
+ * par libellé, reclassé ensuite). Le rayon est appliqué en mémoire pour un rendu
+ * immédiat. `generateShoppingList` reste pur (checkout, etc.) ; seules les pages
+ * Courses utilisent cette variante. Garde-fou n°3 : le rayon n'est pas une donnée
+ * nutritionnelle (les valeurs viennent toujours du fournisseur).
+ */
+export async function generateShoppingListAutoSorted(
+  db: DB,
+  params: { householdId: string; from: string; to: string },
+): Promise<ShoppingLine[]> {
+  const lines = await generateShoppingList(db, params);
+  // Non classés = texte libre sans rayon ni aliment de catalogue (manuel/récurrent
+  // déjà classés à l'ajout ; ici surtout les ingrédients libres de recette).
+  const unsorted = lines.filter((l) => !l.category && !l.foodId && l.name && l.name !== '(aliment)');
+  if (unsorted.length === 0) return lines;
+  try {
+    const { classifyImportedFood } = await import('@/lib/ai/categorize-food');
+    await Promise.all(
+      unsorted.slice(0, 16).map(async (l) => {
+        const res = await classifyImportedFood(l.name).catch(() => null);
+        if (res?.category) {
+          await setFoodPref(db, params.householdId, {
+            label: l.name,
+            foodId: null,
+            categoryKey: res.category,
+            iconSlug: null,
+          });
+          l.category = res.category; // rendu immédiat ; mémorisé pour les prochaines fois
+        }
+      }),
+    );
+  } catch {
+    // IA indisponible / erreur : on laisse ces lignes en « Autres » (best-effort).
+  }
+  return lines;
+}
+
 // Accumulateur de quantite sensible aux unites (somme par dimension via toBase/fromBase).
 interface QtyAcc {
   any: boolean;
@@ -543,4 +547,122 @@ function remainingAfterStock(
   const remainingBase = needBase.value - stockBase.value;
   if (remainingBase <= 0) return 0;
   return fromBase(remainingBase, needUnit) ?? remainingBase;
+}
+
+interface StockRow {
+  food_id: string | null;
+  label: string | null;
+  tracking_mode: string;
+  quantity: number | null;
+  unit: string | null;
+  present: boolean;
+}
+
+interface StockCoverage {
+  stock: StockRow[];
+  /** Aliments suivis en présence et présents (couverture supposée). */
+  presentFoods: Set<string>;
+  /** Stock par aliment converti en unité de base. `undefined` = pas de stock quantifié ;
+   *  `null` = quantifié mais unité non réconciliable / dimensions mêlées (on ne déduit pas). */
+  stockBaseByFood: Map<string, Quantity | null>;
+  /** Stock par libellé normalisé (aliments libres). */
+  stockByLabel: Map<string, { qty?: number; unit?: string; present: boolean }>;
+}
+
+/** Charge et agrège le stock d'un foyer pour le calcul de couverture (partagé). */
+async function loadStockCoverage(db: DB, householdId: string): Promise<StockCoverage> {
+  const stock = (unwrap(
+    await db
+      .from('stock')
+      .select('food_id, label, tracking_mode, quantity, unit, present')
+      .eq('household_id', householdId),
+  ) ?? []) as StockRow[];
+
+  const stockBaseByFood = new Map<string, Quantity | null>();
+  const presentFoods = new Set<string>();
+  const stockByLabel = new Map<string, { qty?: number; unit?: string; present: boolean }>();
+
+  for (const s of stock) {
+    if (s.food_id) {
+      if (s.tracking_mode === 'quantity') {
+        addStockBase(stockBaseByFood, s.food_id, toBase(s.quantity ?? 0, s.unit));
+      } else if (s.present) {
+        presentFoods.add(s.food_id);
+      }
+    }
+    const label = s.label?.trim();
+    if (label) {
+      const key = normalizeLabel(label);
+      const cur = stockByLabel.get(key) ?? { present: false, unit: s.unit ?? undefined };
+      cur.present = cur.present || s.present || (s.quantity ?? 0) > 0;
+      if (s.quantity != null) cur.qty = (cur.qty ?? 0) + s.quantity;
+      if (!cur.unit && s.unit) cur.unit = s.unit;
+      stockByLabel.set(key, cur);
+    }
+  }
+  return { stock, presentFoods, stockBaseByFood, stockByLabel };
+}
+
+/** Un ingrédient de recette non couvert par le stock (à proposer aux courses). */
+export interface RecipeMissingIngredient {
+  foodId: string | null; // aliment lié (identité produit) si l'ingrédient en a un
+  label: string; // nom de l'aliment lié sinon texte libre de la recette
+  quantity: number | null;
+  unit: string | null;
+}
+
+/**
+ * Ingrédients d'une recette NON couverts par le stock du foyer — pour proposer de
+ * les ajouter à la liste de courses depuis le détail recette. Même logique de
+ * couverture que `generateShoppingList` (présence + réconciliation d'unités) ;
+ * ne touche à rien, lecture seule.
+ */
+export async function recipeMissingIngredients(
+  db: DB,
+  householdId: string,
+  recipeId: string,
+): Promise<RecipeMissingIngredient[]> {
+  const ingredients = (unwrap(
+    await db
+      .from('recipe_ingredient')
+      .select('food_id, free_text, quantity, unit, food:food_id(name)')
+      .eq('recipe_id', recipeId),
+  ) ?? []) as Array<{
+    food_id: string | null;
+    free_text: string | null;
+    quantity: number | null;
+    unit: string | null;
+    food: { name: string } | { name: string }[] | null;
+  }>;
+
+  const { presentFoods, stockBaseByFood, stockByLabel } = await loadStockCoverage(db, householdId);
+  const missing: RecipeMissingIngredient[] = [];
+
+  for (const ing of ingredients) {
+    if (ing.food_id) {
+      if (presentFoods.has(ing.food_id)) continue; // présence en stock → couvert
+      const foodName = (Array.isArray(ing.food) ? ing.food[0] : ing.food)?.name ?? '';
+      if (ing.quantity == null) {
+        missing.push({ foodId: ing.food_id, label: foodName, quantity: null, unit: ing.unit });
+        continue;
+      }
+      const remaining = remainingAfterStock(ing.quantity, ing.unit ?? undefined, stockBaseByFood.get(ing.food_id));
+      if (remaining > 0) missing.push({ foodId: ing.food_id, label: foodName, quantity: roundQty(remaining), unit: ing.unit });
+      continue;
+    }
+
+    const label = ing.free_text?.trim();
+    if (!label) continue;
+    const stockItem = stockByLabel.get(normalizeLabel(label));
+    if (!stockItem?.present) {
+      missing.push({ foodId: null, label, quantity: ing.quantity, unit: ing.unit });
+      continue;
+    }
+    // Présent mais sans quantité chiffrée → couverture supposée.
+    if (ing.quantity == null || stockItem.qty == null) continue;
+    const remaining = remainingAfterStock(ing.quantity, ing.unit ?? undefined, toBase(stockItem.qty, stockItem.unit));
+    if (remaining > 0) missing.push({ foodId: null, label, quantity: roundQty(remaining), unit: ing.unit });
+  }
+
+  return missing;
 }

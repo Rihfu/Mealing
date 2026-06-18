@@ -9,6 +9,7 @@ import {
   RAYON_PALETTE,
   ProductIcon,
 } from '@/lib/product-assets';
+import { normalizeLabel } from '@/lib/text';
 import {
   setFoodCategoryAction,
   clearFoodCategoryAction,
@@ -290,9 +291,17 @@ export function ManageAislesButton({ customCategories }: { customCategories: Cus
   const [tint, setTint] = useState(DEFAULT_TINT);
   const [icon, setIcon] = useState<string | null>(null);
 
+  // Anti-doublon : un rayon prédéfini OU custom porte déjà ce nom → inutile de le recréer.
+  const norm = normalizeLabel(label);
+  const dup = norm
+    ? BUILTINS.find((b) => normalizeLabel(b.label) === norm) ??
+      customCategories.find((c) => normalizeLabel(c.label) === norm) ??
+      null
+    : null;
+
   function create() {
     const lbl = label.trim();
-    if (!lbl) return;
+    if (!lbl || dup) return;
     startTransition(async () => {
       await createCategoryAction({ label: lbl, iconSlug: icon, tint });
       setLabel('');
@@ -322,9 +331,28 @@ export function ManageAislesButton({ customCategories }: { customCategories: Cus
 
       {open && (
         <Modal onClose={() => setOpen(false)} pending={pending}>
-          <h3 className="font-display text-lg font-semibold">Nouveau rayon</h3>
+          <h3 className="font-display text-lg font-semibold">Rayons</h3>
+
+          {/* Rayons prédéfinis : déjà disponibles, inutile de les recréer. On les
+              montre d'abord pour éviter les doublons (« Viande » existe déjà). */}
+          <p className="mt-1 text-sm text-ink-soft">
+            Ces rayons existent déjà — pour y ranger un article, utilise « Ranger » sur sa ligne.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {BUILTINS.map((b) => (
+              <span
+                key={b.key}
+                className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-ink-soft"
+              >
+                <span className="h-3 w-3 rounded-full" style={{ background: b.tint }} />
+                {b.label}
+              </span>
+            ))}
+          </div>
+
+          <h4 className="mt-5 font-display text-sm font-semibold">Créer un rayon perso</h4>
           <p className="mt-0.5 text-sm text-ink-soft">
-            Crée ton propre rayon (plats préparés, végétal…) puis range tes articles dedans avec « Ranger ».
+            Seulement si aucun rayon ci-dessus ne convient (plats préparés, végétal…).
           </p>
 
           <input
@@ -333,6 +361,11 @@ export function ManageAislesButton({ customCategories }: { customCategories: Cus
             placeholder="Nom du rayon"
             className="field-input mt-3 w-full"
           />
+          {dup && (
+            <p className="mt-1.5 text-xs font-semibold text-clay-deep">
+              « {dup.label} » existe déjà — inutile de le recréer, range tes articles dedans avec « Ranger ».
+            </p>
+          )}
           <p className="mb-1 mt-3 text-xs text-ink-soft">Couleur</p>
           <ColorSwatches value={tint} onPick={setTint} />
           <p className="mb-1 mt-3 text-xs text-ink-soft">Icône</p>
@@ -341,7 +374,7 @@ export function ManageAislesButton({ customCategories }: { customCategories: Cus
           <button
             type="button"
             onClick={create}
-            disabled={pending || !label.trim()}
+            disabled={pending || !label.trim() || !!dup}
             className="btn-primary mt-4 w-full py-2.5 disabled:opacity-60"
           >
             {pending ? 'On crée…' : 'Créer le rayon'}

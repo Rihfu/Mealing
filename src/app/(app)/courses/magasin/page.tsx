@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { generateShoppingList, getShoppingWindow, listHouseholdCategories, type ShoppingLine } from '@/lib/core';
+import { generateShoppingListAutoSorted, getShoppingWindow, listHouseholdCategories, type ShoppingLine } from '@/lib/core';
 import { groupByRayon } from '../rayons';
 import { PurchaseCheckout } from '../purchase-checkout';
 import { toggleCheckAction } from '../actions';
@@ -58,7 +58,7 @@ export default async function MagasinPage() {
 
   const { from, to } = await getShoppingWindow(supabase, householdId);
   const [lines, customCats] = await Promise.all([
-    generateShoppingList(supabase, { householdId, from, to }),
+    generateShoppingListAutoSorted(supabase, { householdId, from, to }),
     listHouseholdCategories(supabase, householdId),
   ]);
 

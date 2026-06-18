@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { generateShoppingList, getShoppingWindow, listHouseholdCategories, type ShoppingLine } from '@/lib/core';
+import { generateShoppingListAutoSorted, getShoppingWindow, listHouseholdCategories, type ShoppingLine } from '@/lib/core';
 import { categoryLabel } from '@/lib/product-assets';
 import { groupByRayon } from './rayons';
 import { AddArticle } from './add-article';
@@ -48,7 +48,7 @@ export default async function CoursesPage() {
   const { from, to, days } = await getShoppingWindow(supabase, householdId);
 
   const [lines, customCats, { data: stock }] = await Promise.all([
-    generateShoppingList(supabase, { householdId, from, to }),
+    generateShoppingListAutoSorted(supabase, { householdId, from, to }),
     listHouseholdCategories(supabase, householdId),
     supabase.from('stock').select('food_id, label, quantity, unit, present').eq('household_id', householdId),
   ]);
