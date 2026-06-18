@@ -108,6 +108,21 @@ export async function addManualAction(formData: FormData): Promise<void> {
     if (f?.name) displayLabel = f.name;
   }
 
+  // Texte libre non reconnu (ni catalogue ni import) : on demande à l'IA un rayon
+  // (best-effort, liste fermée) et on le MÉMORISE comme préférence foyer → la ligne
+  // est classée au lieu de « Autres », et reclassée à la prochaine occurrence.
+  // Garde-fou n°3 respecté : le rayon n'est pas une donnée nutritionnelle.
+  if (!foodId) {
+    let aiCategory: string | null = null;
+    try {
+      const { classifyImportedFood } = await import('@/lib/ai/categorize-food');
+      aiCategory = (await classifyImportedFood(label))?.category ?? null;
+    } catch {
+      aiCategory = null;
+    }
+    if (aiCategory) await setFoodPref(supabase, householdId, { label, categoryKey: aiCategory });
+  }
+
   await supabase.from('shopping_manual_item').insert({
     household_id: householdId,
     label: displayLabel,

@@ -81,6 +81,34 @@ export function categoryLabel(key?: string | null): string | null {
   return categoryDef(key)?.label ?? null;
 }
 
+/**
+ * Palette de teintes proposée pour les rayons personnalisés (pastels Mealing).
+ * `tint` = fond du jeton (stocké dans `shopping_category.tint`), `ink` = encre.
+ * Élargie pour la personnalisation ; `rayonInk` retrouve l'encre depuis la teinte.
+ */
+export interface RayonColor {
+  label: string;
+  tint: string;
+  ink: string;
+}
+export const RAYON_PALETTE: RayonColor[] = [
+  { label: 'Vert', tint: 'var(--color-sage-tint)', ink: 'var(--color-sage-deep)' },
+  { label: 'Beurre', tint: 'var(--color-butter-tint)', ink: '#8a6d1f' },
+  { label: 'Terracotta', tint: 'var(--color-clay-tint)', ink: '#a96a4a' },
+  { label: 'Bleu', tint: '#dce8f1', ink: '#3f6b85' },
+  { label: 'Lavande', tint: '#e7e1f3', ink: '#6b5e9c' },
+  { label: 'Rose', tint: '#f3e0e7', ink: '#a05c74' },
+  { label: 'Menthe', tint: '#d8ece2', ink: '#3f7d63' },
+  { label: 'Pêche', tint: '#f8e3d3', ink: '#b56a3c' },
+  { label: 'Prune', tint: '#e8dde3', ink: '#7a5567' },
+  { label: 'Ardoise', tint: '#e2e5e3', ink: '#5b6660' },
+];
+
+/** Encre lisible associée à une teinte de rayon (défaut terracotta si inconnue). */
+export function rayonInk(tint?: string | null): string {
+  return RAYON_PALETTE.find((p) => p.tint === tint)?.ink ?? '#a96a4a';
+}
+
 export type ProvenanceKey = 'repas' | 'essentiel' | 'ajoute';
 
 export interface ProvenanceDef {

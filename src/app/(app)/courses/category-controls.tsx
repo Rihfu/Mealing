@@ -1,7 +1,14 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { CATEGORY_ORDER, CATEGORIES, PRODUCTS, CATEGORY_ICONS, ProductIcon } from '@/lib/product-assets';
+import {
+  CATEGORY_ORDER,
+  CATEGORIES,
+  PRODUCTS,
+  CATEGORY_ICONS,
+  RAYON_PALETTE,
+  ProductIcon,
+} from '@/lib/product-assets';
 import {
   setFoodCategoryAction,
   clearFoodCategoryAction,
@@ -16,13 +23,27 @@ export interface CustomCategory {
   iconSlug: string | null;
 }
 
-const TINTS = [
-  { label: 'Vert', val: 'var(--color-sage-tint)' },
-  { label: 'Beurre', val: 'var(--color-butter-tint)' },
-  { label: 'Terracotta', val: 'var(--color-clay-tint)' },
-];
-
+const DEFAULT_TINT = RAYON_PALETTE[0].tint;
 const BUILTINS = CATEGORY_ORDER.map((key) => ({ key, ...CATEGORIES[key] }));
+
+/** Pastilles de couleur (palette de rayons). */
+function ColorSwatches({ value, onPick }: { value: string; onPick: (tint: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {RAYON_PALETTE.map((c) => (
+        <button
+          key={c.tint}
+          type="button"
+          onClick={() => onPick(c.tint)}
+          className={`h-7 w-7 rounded-full border ${value === c.tint ? 'ring-2 ring-green-strong' : 'border-line'}`}
+          style={{ background: c.tint }}
+          title={c.label}
+          aria-label={c.label}
+        />
+      ))}
+    </div>
+  );
+}
 
 /** Jeton de rayon sélectionnable. */
 function RayonChip({
@@ -89,6 +110,24 @@ function IconGrid({
   );
 }
 
+/** Coque de modale (overlay + carte arrondie à scroll intérieur). */
+function Modal({ onClose, pending, children }: { onClose: () => void; pending: boolean; children: React.ReactNode }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(40,38,34,0.32)' }}
+      onClick={() => !pending && onClose()}
+    >
+      <div
+        className="w-full max-w-md overflow-hidden rounded-2xl border border-line bg-surface shadow-soft"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="max-h-[85vh] overflow-y-auto p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Bouton « Ranger » d'une ligne de courses : ouvre une modale pour déplacer
  * l'article dans un rayon (intégré ou personnalisé), choisir son icône, ou créer
@@ -115,7 +154,7 @@ export function RangerButton({
   // Création de rayon (inline).
   const [creating, setCreating] = useState(false);
   const [newLabel, setNewLabel] = useState('');
-  const [newTint, setNewTint] = useState(TINTS[2].val);
+  const [newTint, setNewTint] = useState(DEFAULT_TINT);
   const [newIcon, setNewIcon] = useState<string | null>(null);
 
   function openModal() {
@@ -124,6 +163,7 @@ export function RangerButton({
     setCreating(false);
     setNewLabel('');
     setNewIcon(null);
+    setNewTint(DEFAULT_TINT);
     setOpen(true);
   }
 
@@ -163,120 +203,92 @@ export function RangerButton({
       </button>
 
       {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(40,38,34,0.32)' }}
-          onClick={() => !pending && setOpen(false)}
-        >
-          {/* Carte arrondie : le scroll est sur le wrapper intérieur pour que la
-              barre de défilement n'écrase pas les coins arrondis (côté droit). */}
-          <div
-            className="w-full max-w-md overflow-hidden rounded-2xl border border-line bg-surface shadow-soft"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="max-h-[85vh] overflow-y-auto p-5">
-            <h3 className="font-display text-lg font-semibold">
-              Ranger « {label} »
-            </h3>
-            <p className="mt-0.5 text-sm text-ink-soft">
-              Choisis un rayon. On s’en souviendra pour la prochaine fois.
-            </p>
+        <Modal onClose={() => setOpen(false)} pending={pending}>
+          <h3 className="font-display text-lg font-semibold">Ranger « {label} »</h3>
+          <p className="mt-0.5 text-sm text-ink-soft">Choisis un rayon. On s’en souviendra pour la prochaine fois.</p>
 
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {BUILTINS.map((b) => (
-                <RayonChip key={b.key} label={b.label} tint={b.tint} active={cat === b.key} onClick={() => setCat(b.key)} />
-              ))}
-              {customCategories.map((c) => (
-                <RayonChip
-                  key={c.id}
-                  label={c.label}
-                  tint={c.tint ?? 'var(--color-clay-tint)'}
-                  active={cat === c.id}
-                  onClick={() => setCat(c.id)}
-                />
-              ))}
-            </div>
-
-            {!creating ? (
-              <button
-                type="button"
-                onClick={() => setCreating(true)}
-                className="mt-2 text-xs font-semibold text-green-strong"
-              >
-                ＋ Nouveau rayon
-              </button>
-            ) : (
-              <div className="mt-3 rounded-xl border border-line p-3">
-                <input
-                  value={newLabel}
-                  onChange={(e) => setNewLabel(e.target.value)}
-                  placeholder="Nom du rayon (ex. Plats préparés)"
-                  className="field-input w-full"
-                />
-                <div className="mt-2 flex items-center gap-1.5">
-                  <span className="text-xs text-ink-soft">Couleur&nbsp;:</span>
-                  {TINTS.map((t) => (
-                    <button
-                      key={t.val}
-                      type="button"
-                      onClick={() => setNewTint(t.val)}
-                      className={`h-6 w-6 rounded-full border ${newTint === t.val ? 'ring-2 ring-green-strong' : 'border-line'}`}
-                      style={{ background: t.val }}
-                      title={t.label}
-                    />
-                  ))}
-                </div>
-                <p className="mt-2 mb-1 text-xs text-ink-soft">Icône du rayon</p>
-                <IconGrid value={newIcon} onPick={setNewIcon} icons={CATEGORY_ICONS} />
-                <button
-                  type="button"
-                  onClick={createAndAssign}
-                  disabled={pending || !newLabel.trim()}
-                  className="btn-secondary mt-2 py-2 text-xs disabled:opacity-60"
-                >
-                  Créer et y ranger
-                </button>
-              </div>
-            )}
-
-            <h4 className="mt-4 font-display text-sm font-semibold">Icône de l’article</h4>
-            <div className="mt-1.5">
-              <IconGrid value={icon} onPick={setIcon} />
-            </div>
-
-            <div className="mt-4 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => save(cat, icon)}
-                disabled={pending}
-                className="btn-primary flex-1 py-2.5 disabled:opacity-60"
-              >
-                {pending ? 'On range…' : 'Enregistrer'}
-              </button>
-              {currentCategory && (
-                <button type="button" onClick={reset} disabled={pending} className="btn-secondary py-2.5 text-xs">
-                  Réinitialiser
-                </button>
-              )}
-              <button type="button" onClick={() => setOpen(false)} disabled={pending} className="px-2 text-sm text-ink-soft">
-                Annuler
-              </button>
-            </div>
-            </div>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {BUILTINS.map((b) => (
+              <RayonChip key={b.key} label={b.label} tint={b.tint} active={cat === b.key} onClick={() => setCat(b.key)} />
+            ))}
+            {customCategories.map((c) => (
+              <RayonChip
+                key={c.id}
+                label={c.label}
+                tint={c.tint ?? DEFAULT_TINT}
+                active={cat === c.id}
+                onClick={() => setCat(c.id)}
+              />
+            ))}
           </div>
-        </div>
+
+          {!creating ? (
+            <button type="button" onClick={() => setCreating(true)} className="mt-2 text-xs font-semibold text-green-strong">
+              ＋ Nouveau rayon
+            </button>
+          ) : (
+            <div className="mt-3 rounded-xl border border-line p-3">
+              <input
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                placeholder="Nom du rayon (ex. Plats préparés)"
+                className="field-input w-full"
+              />
+              <p className="mb-1 mt-2 text-xs text-ink-soft">Couleur</p>
+              <ColorSwatches value={newTint} onPick={setNewTint} />
+              <p className="mb-1 mt-2 text-xs text-ink-soft">Icône du rayon</p>
+              <IconGrid value={newIcon} onPick={setNewIcon} icons={CATEGORY_ICONS} />
+              <button
+                type="button"
+                onClick={createAndAssign}
+                disabled={pending || !newLabel.trim()}
+                className="btn-secondary mt-2 py-2 text-xs disabled:opacity-60"
+              >
+                Créer et y ranger
+              </button>
+            </div>
+          )}
+
+          <h4 className="mt-4 font-display text-sm font-semibold">Icône de l’article</h4>
+          <div className="mt-1.5">
+            <IconGrid value={icon} onPick={setIcon} />
+          </div>
+
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => save(cat, icon)}
+              disabled={pending}
+              className="btn-primary flex-1 py-2.5 disabled:opacity-60"
+            >
+              {pending ? 'On range…' : 'Enregistrer'}
+            </button>
+            {currentCategory && (
+              <button type="button" onClick={reset} disabled={pending} className="btn-secondary py-2.5 text-xs">
+                Réinitialiser
+              </button>
+            )}
+            <button type="button" onClick={() => setOpen(false)} disabled={pending} className="px-2 text-sm text-ink-soft">
+              Annuler
+            </button>
+          </div>
+        </Modal>
       )}
     </>
   );
 }
 
-/** Aside « Mes rayons » : liste les rayons personnalisés du foyer + création/suppression. */
-export function MyAisles({ customCategories }: { customCategories: CustomCategory[] }) {
+/**
+ * Bouton « ＋ Ajouter un rayon » (placé en bas de « À acheter ») : ouvre une
+ * mini-fenêtre pour créer un rayon personnalisé (nom + couleur + icône) et gérer
+ * (supprimer) les rayons existants.
+ */
+export function ManageAislesButton({ customCategories }: { customCategories: CustomCategory[] }) {
+  const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [label, setLabel] = useState('');
+  const [tint, setTint] = useState(DEFAULT_TINT);
   const [icon, setIcon] = useState<string | null>(null);
-  const [tint, setTint] = useState(TINTS[2].val);
-  const [picking, setPicking] = useState(false);
 
   function create() {
     const lbl = label.trim();
@@ -285,7 +297,7 @@ export function MyAisles({ customCategories }: { customCategories: CustomCategor
       await createCategoryAction({ label: lbl, iconSlug: icon, tint });
       setLabel('');
       setIcon(null);
-      setPicking(false);
+      setTint(DEFAULT_TINT);
     });
   }
 
@@ -296,66 +308,84 @@ export function MyAisles({ customCategories }: { customCategories: CustomCategor
   }
 
   return (
-    <div className="text-sm">
-      <ul className="mb-3 divide-y divide-line">
-        {customCategories.map((c) => (
-          <li key={c.id} className="flex items-center justify-between gap-3 py-2">
-            <span className="flex items-center gap-2">
-              <span
-                className="flex h-7 w-7 items-center justify-center rounded-lg"
-                style={{ background: c.tint ?? 'var(--color-clay-tint)' }}
-              >
-                <ProductIcon slug={c.iconSlug} size={16} />
-              </span>
-              {c.label}
-            </span>
-            <button
-              type="button"
-              onClick={() => remove(c.id)}
-              disabled={pending}
-              className="text-xs font-semibold text-clay-deep hover:underline"
-            >
-              supprimer
-            </button>
-          </li>
-        ))}
-        {customCategories.length === 0 && (
-          <li className="py-2 text-sm text-ink-soft">Aucun rayon personnalisé pour l’instant.</li>
-        )}
-      </ul>
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line py-2.5 text-sm font-semibold text-green-strong hover:border-green-strong hover:bg-sage-tint/30"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        Ajouter un rayon
+      </button>
 
-      <div className="flex flex-col gap-2">
-        <input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder="Nouveau rayon (ex. Plats préparés)"
-          className="field-input"
-        />
-        <div className="flex items-center gap-2">
+      {open && (
+        <Modal onClose={() => setOpen(false)} pending={pending}>
+          <h3 className="font-display text-lg font-semibold">Nouveau rayon</h3>
+          <p className="mt-0.5 text-sm text-ink-soft">
+            Crée ton propre rayon (plats préparés, végétal…) puis range tes articles dedans avec « Ranger ».
+          </p>
+
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Nom du rayon"
+            className="field-input mt-3 w-full"
+          />
+          <p className="mb-1 mt-3 text-xs text-ink-soft">Couleur</p>
+          <ColorSwatches value={tint} onPick={setTint} />
+          <p className="mb-1 mt-3 text-xs text-ink-soft">Icône</p>
+          <IconGrid value={icon} onPick={setIcon} icons={CATEGORY_ICONS} />
+
           <button
             type="button"
-            onClick={() => setPicking((v) => !v)}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-line"
-            title="Choisir une icône"
+            onClick={create}
+            disabled={pending || !label.trim()}
+            className="btn-primary mt-4 w-full py-2.5 disabled:opacity-60"
           >
-            <ProductIcon slug={icon} size={18} />
+            {pending ? 'On crée…' : 'Créer le rayon'}
           </button>
-          {TINTS.map((t) => (
-            <button
-              key={t.val}
-              type="button"
-              onClick={() => setTint(t.val)}
-              className={`h-6 w-6 rounded-full border ${tint === t.val ? 'ring-2 ring-green-strong' : 'border-line'}`}
-              style={{ background: t.val }}
-              title={t.label}
-            />
-          ))}
-          <button type="button" onClick={create} disabled={pending || !label.trim()} className="btn-secondary ml-auto py-2 text-xs disabled:opacity-60">
-            Ajouter
+
+          {customCategories.length > 0 && (
+            <>
+              <h4 className="mt-5 font-display text-sm font-semibold">Mes rayons</h4>
+              <ul className="mt-1 divide-y divide-line text-sm">
+                {customCategories.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-3 py-2">
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="flex h-7 w-7 items-center justify-center rounded-lg"
+                        style={{ background: c.tint ?? DEFAULT_TINT }}
+                      >
+                        <ProductIcon slug={c.iconSlug} size={16} />
+                      </span>
+                      {c.label}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => remove(c.id)}
+                      disabled={pending}
+                      className="text-xs font-semibold text-clay-deep hover:underline"
+                    >
+                      supprimer
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            disabled={pending}
+            className="mt-4 w-full py-2 text-sm text-ink-soft"
+          >
+            Fermer
           </button>
-        </div>
-        {picking && <IconGrid value={icon} onPick={(s) => setIcon(s)} icons={CATEGORY_ICONS} />}
-      </div>
-    </div>
+        </Modal>
+      )}
+    </>
   );
 }

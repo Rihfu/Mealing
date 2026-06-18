@@ -1,4 +1,4 @@
-import { categoryDef, CATEGORY_ORDER } from '@/lib/product-assets';
+import { categoryDef, CATEGORY_ORDER, rayonInk } from '@/lib/product-assets';
 import type { HouseholdCategory, ShoppingLine } from '@/lib/core';
 
 // Résolution + groupement des rayons, partagés par la liste (`page.tsx`) et le
@@ -20,7 +20,7 @@ export function catView(key: string | null | undefined, customCats: HouseholdCat
   const def = categoryDef(key);
   if (def) return { label: def.label, tint: def.tint, ink: def.ink, iconSlug: null, isCustom: false };
   const c = key ? customCats.find((x) => x.id === key) : undefined;
-  if (c) return { label: c.label, tint: c.tint ?? 'var(--color-clay-tint)', ink: '#a96a4a', iconSlug: c.iconSlug, isCustom: true };
+  if (c) return { label: c.label, tint: c.tint ?? 'var(--color-clay-tint)', ink: rayonInk(c.tint), iconSlug: c.iconSlug, isCustom: true };
   return null;
 }
 

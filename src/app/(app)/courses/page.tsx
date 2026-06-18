@@ -12,7 +12,7 @@ import { categoryLabel, ProductIcon, ProvenanceBadge, type ProvenanceKey } from 
 import { catView, groupByRayon } from './rayons';
 import { AddArticle } from './add-article';
 import { PurchaseCheckout } from './purchase-checkout';
-import { RangerButton, MyAisles } from './category-controls';
+import { RangerButton, ManageAislesButton } from './category-controls';
 import {
   addRecurringAction,
   clearCheckedAction,
@@ -234,6 +234,10 @@ export default async function CoursesPage() {
                 </details>
               ))
             )}
+
+            <div className="mt-3 border-t border-line pt-3">
+              <ManageAislesButton customCategories={customCats} />
+            </div>
           </section>
 
           {done.length > 0 && (
@@ -290,14 +294,6 @@ export default async function CoursesPage() {
               <input name="label" placeholder="ou un libellé libre" className="field-input" />
               <button className="btn-secondary py-2.5">Ajouter aux essentiels</button>
             </form>
-          </section>
-
-          <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
-            <h2 className="mb-1 font-display text-lg font-semibold">Mes rayons</h2>
-            <p className="mb-3 text-sm text-ink-soft">
-              Crée tes propres rayons (plats préparés, végétal…) et range tes articles dedans avec « Ranger ».
-            </p>
-            <MyAisles customCategories={customCats} />
           </section>
         </aside>
       </div>

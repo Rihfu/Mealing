@@ -32,6 +32,7 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
   const [selected, setSelected] = useState<FoodSuggestion | null>(null);
   const [quantity, setQuantity] = useState('');
   const [unit, setUnit] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   // Anti-doublon / anti-surplus (G) : avertir si l'article est déjà sur la liste ou en stock.
@@ -94,8 +95,13 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
 
   async function handleSubmit(formData: FormData) {
     if (!String(formData.get('label') ?? '').trim()) return;
-    await addManualAction(formData);
-    reset();
+    setSubmitting(true);
+    try {
+      await addManualAction(formData);
+      reset();
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -245,7 +251,9 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
         </p>
       )}
 
-      <button className="btn-primary py-2.5">Ajouter à la liste</button>
+      <button className="btn-primary py-2.5 disabled:opacity-60" disabled={submitting}>
+        {submitting ? 'Ajout…' : 'Ajouter à la liste'}
+      </button>
     </form>
   );
 }

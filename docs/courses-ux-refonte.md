@@ -262,4 +262,12 @@ Règle le double agacement des imports USDA/OFF (noms verbeux + marques ; aucun 
 - **Vérifié en direct** : mode magasin (coche → barré + progression 1/6 + CTA collant), modale « Ranger » coins OK, aucune erreur console.
 
 ### Finition autocomplétion : « Ajouter mon texte » — 2026-06-18
-Bug UX signalé : en tapant un article **hors catalogue** (ex. « Vin de cuisine »), la liste déroulante (suggestions externes) recouvrait le bouton « Ajouter à la liste » → impossible de garder son texte et valider. Corrigé dans `add-article.tsx` : une option **« ＋ Ajouter « \<texte\> » »** apparaît **en tête** du menu dès 2 caractères (avant la section « Suggestions »), et soumet le libellé libre tel quel (`requestSubmit`). Le menu s'ouvre dès la saisie (même sans résultat). Vérifié en direct : « Vin de cuisine » ajouté tel quel → « Autres », bouton « Ranger » dispo.
+Bug UX signalé : en tapant un article **hors catalogue** (ex. « Vin de cuisine »), la liste déroulante (suggestions externes) recouvrait le bouton « Ajouter à la liste » → impossible de garder son texte et valider. Corrigé dans `add-article.tsx` : une option **« ＋ Ajouter « \<texte\> » »** apparaît **en tête** du menu dès 2 caractères (avant la section « Suggestions »), et soumet le libellé libre tel quel (`requestSubmit`). Le menu s'ouvre dès la saisie (même sans résultat). Vérifié en direct.
+
+### Classement IA des ajouts libres + création de rayon plus accessible + palette élargie — 2026-06-18
+Trois retours utilisateur traités ensemble.
+
+- **IA sur le texte libre** : `addManualAction` — quand un ajout libre n'est reconnu ni par le catalogue ni par un import, on appelle `classifyImportedFood` pour obtenir un **rayon** (liste fermée, best-effort) et on le **mémorise** en préférence foyer → la ligne est classée (plus « Autres ») et reclassée ensuite. Nutrition non concernée (garde-fou n°3). Indicateur « Ajout… » sur le bouton (latence IA). Vérifié : « kombucha » → **Boissons**.
+- **Créer un rayon, accessible** : bouton **« ＋ Ajouter un rayon »** en bas de « À acheter » (au lieu de l'aside) → mini-modale (`ManageAislesButton`) : nom + couleur + icône + liste/suppression des rayons existants. L'ancienne section aside « Mes rayons » est retirée. Coque de modale factorisée (`Modal`), scroll intérieur (coins ronds).
+- **Palette élargie** : `RAYON_PALETTE` (product-assets) passe à **10 teintes** pastel (vert, beurre, terracotta, bleu, lavande, rose, menthe, pêche, prune, ardoise) + `rayonInk(tint)` pour l'encre lisible ; `catView` (rayons.ts) et les pickers (`ColorSwatches`) la consomment.
+- Vérifié en direct : bouton + modale (10 couleurs), classement IA « kombucha » → Boissons, aucune erreur console ; données de test nettoyées.
