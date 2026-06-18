@@ -1,27 +1,15 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import {
-  generateShoppingList,
-  getShoppingWindow,
-  listHouseholdCategories,
-  type ShoppingLine,
-  type HouseholdCategory,
-} from '@/lib/core';
-import { categoryLabel, ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-assets';
-import { catView, groupByRayon } from './rayons';
+import { generateShoppingList, getShoppingWindow, listHouseholdCategories, type ShoppingLine } from '@/lib/core';
+import { categoryLabel } from '@/lib/product-assets';
+import { groupByRayon } from './rayons';
 import { AddArticle } from './add-article';
 import { PurchaseCheckout } from './purchase-checkout';
-import { RangerButton, ManageAislesButton } from './category-controls';
-import { ShoppingList, type SGroup } from './shopping-list';
-import {
-  addRecurringAction,
-  clearCheckedAction,
-  setShoppingHorizonAction,
-  toggleCheckAction,
-  toggleManualCheckAction,
-} from './actions';
-import { UndoToastHost, DeleteWithUndo } from './undo-toast';
+import { ManageAislesButton } from './category-controls';
+import { ShoppingList, DoneList, type SGroup, type SLine } from './shopping-list';
+import { clearCheckedAction, setShoppingHorizonAction } from './actions';
+import { UndoToastHost } from './undo-toast';
 
 const CADENCE_OPTIONS = [
   { days: 3, label: 'Quelques jours' },
@@ -29,79 +17,21 @@ const CADENCE_OPTIONS = [
   { days: 14, label: '2 semaines' },
 ];
 
-const SOURCE_TO_PROV: Record<ShoppingLine['source'], ProvenanceKey> = {
-  recipe: 'repas',
-  recurring: 'essentiel',
-  manual: 'ajoute',
-};
-
-function tileStyle(categoryKey: string | null | undefined, customCats: HouseholdCategory[]) {
-  const v = catView(categoryKey, customCats);
-  return { background: v?.tint ?? 'var(--color-sage-tint)', color: v?.ink ?? 'var(--color-sage-deep)' };
-}
-
-function CheckMark({ checked }: { checked: boolean }) {
-  return (
-    <span
-      className={`flex h-5 w-5 items-center justify-center rounded-md border text-xs font-bold ${
-        checked ? 'border-green-strong bg-green-strong text-white' : 'border-line-strong bg-surface text-transparent'
-      }`}
-    >
-      ✓
-    </span>
-  );
-}
-
-function LineRow({ line, customCats }: { line: ShoppingLine; customCats: HouseholdCategory[] }) {
-  const qty = line.quantity != null ? `${line.quantity} ${line.unit ?? ''}`.trim() : '';
-  const isManual = line.source === 'manual';
-  const toggle = isManual ? toggleManualCheckAction : toggleCheckAction;
-  const toggleField = isManual
-    ? { name: 'id', value: line.manualId ?? '' }
-    : { name: 'item_key', value: line.key };
-
-  return (
-    <li className="group flex items-center gap-3 py-2">
-      <form action={toggle}>
-        <input type="hidden" name={toggleField.name} value={toggleField.value} />
-        <input type="hidden" name="checked" value={(!line.checked).toString()} />
-        <button aria-label="Cocher" className="block">
-          <CheckMark checked={line.checked} />
-        </button>
-      </form>
-
-      <span
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-        style={tileStyle(line.category, customCats)}
-      >
-        <ProductIcon slug={line.iconSlug} size={20} />
-      </span>
-
-      <span className={`text-sm ${line.checked ? 'text-ink-soft line-through' : ''}`}>{line.name}</span>
-
-      <span className="ml-auto flex items-center gap-3">
-        {isManual && line.alreadyStocked && (
-          <span
-            className="rounded-full px-2 py-0.5 text-xs font-semibold"
-            style={{ background: 'var(--color-butter-tint)', color: '#8a6d1f' }}
-            title="Tu as déjà cet article en stock"
-          >
-            déjà en stock{line.stockedLabel ? ` (${line.stockedLabel})` : ''}
-          </span>
-        )}
-        <RangerButton
-          label={line.name}
-          foodId={line.foodId ?? null}
-          currentCategory={line.category ?? null}
-          currentIcon={line.iconSlug ?? null}
-          customCategories={customCats}
-        />
-        <ProvenanceBadge kind={SOURCE_TO_PROV[line.source]} />
-        {qty && <span className="text-sm text-ink-soft">{qty}</span>}
-        {isManual && line.manualId && <DeleteWithUndo kind="manual" id={line.manualId} label={line.name} />}
-      </span>
-    </li>
-  );
+/** ShoppingLine (serveur) → SLine (sérialisable pour les listes client). */
+function toSLine(l: ShoppingLine): SLine {
+  return {
+    key: l.key,
+    name: l.name,
+    qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
+    source: l.source,
+    manualId: l.manualId ?? null,
+    foodId: l.foodId ?? null,
+    category: l.category ?? null,
+    iconSlug: l.iconSlug ?? null,
+    checked: l.checked,
+    alreadyStocked: !!l.alreadyStocked,
+    stockedLabel: l.stockedLabel ?? null,
+  };
 }
 
 export default async function CoursesPage() {
@@ -114,11 +44,9 @@ export default async function CoursesPage() {
 
   const { from, to, days } = await getShoppingWindow(supabase, householdId);
 
-  const [lines, customCats, { data: recurring }, { data: foods }, { data: stock }] = await Promise.all([
+  const [lines, customCats, { data: stock }] = await Promise.all([
     generateShoppingList(supabase, { householdId, from, to }),
     listHouseholdCategories(supabase, householdId),
-    supabase.from('shopping_recurring_item').select('id, label, food:food_id(name)').eq('household_id', householdId),
-    supabase.from('food').select('id, name').order('name', { ascending: true }).limit(500),
     supabase.from('stock').select('food_id, label, quantity, unit, present').eq('household_id', householdId),
   ]);
 
@@ -139,28 +67,16 @@ export default async function CoursesPage() {
     present: s.present,
   }));
 
-  const rayonGroups = groupByRayon(active, customCats);
-  // Données sérialisables pour la liste interactive (client) : coche animée + DnD.
-  const activeGroups: SGroup[] = rayonGroups.map((g) => ({
+  // Données sérialisables pour les listes interactives (client) : coche/décoche + DnD.
+  const activeGroups: SGroup[] = groupByRayon(active, customCats).map((g) => ({
     key: g.key,
     label: g.view?.label ?? 'Autres',
     tint: g.view?.tint ?? 'var(--color-line)',
     ink: g.view?.ink ?? 'var(--color-ink-soft)',
     iconSlug: g.view?.isCustom ? (g.view.iconSlug ?? null) : null,
-    items: g.items.map((l) => ({
-      key: l.key,
-      name: l.name,
-      qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
-      source: l.source,
-      manualId: l.manualId ?? null,
-      foodId: l.foodId ?? null,
-      category: l.category ?? null,
-      iconSlug: l.iconSlug ?? null,
-      checked: l.checked,
-      alreadyStocked: !!l.alreadyStocked,
-      stockedLabel: l.stockedLabel ?? null,
-    })),
+    items: g.items.map(toSLine),
   }));
+  const doneLines: SLine[] = done.map(toSLine);
 
   return (
     <div className="flex flex-col gap-6">
@@ -254,11 +170,7 @@ export default async function CoursesPage() {
                 <form action={clearCheckedAction} className="mb-2 flex justify-end">
                   <button className="text-xs font-bold text-green-strong">Tout décocher</button>
                 </form>
-                <ul className="divide-y divide-line">
-                  {done.map((l) => (
-                    <LineRow key={l.key + l.source} line={l} customCats={customCats} />
-                  ))}
-                </ul>
+                <DoneList lines={doneLines} customCategories={customCats} />
               </div>
             </details>
           )}
@@ -268,36 +180,6 @@ export default async function CoursesPage() {
           <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
             <h2 className="mb-3 font-display text-lg font-semibold">Ajouter un article</h2>
             <AddArticle onList={onListRefs} inStock={inStockRefs} />
-          </section>
-
-          <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
-            <h2 className="mb-3 font-display text-lg font-semibold">Mes essentiels</h2>
-            <ul className="mb-3 divide-y divide-line text-sm">
-              {(recurring ?? []).map((r) => {
-                const f = Array.isArray(r.food) ? r.food[0] : r.food;
-                return (
-                  <li key={r.id} className="flex items-center justify-between gap-3 py-2">
-                    <span>{f?.name ?? r.label}</span>
-                    <DeleteWithUndo kind="recurring" id={r.id} label={f?.name ?? r.label ?? ''} />
-                  </li>
-                );
-              })}
-              {(!recurring || recurring.length === 0) && (
-                <li className="py-2 text-sm text-ink-soft">Aucun essentiel pour l’instant.</li>
-              )}
-            </ul>
-            <form action={addRecurringAction} className="flex flex-col gap-2.5 text-sm">
-              <select name="food_id" className="field-input">
-                <option value="">— choisir un aliment —</option>
-                {(foods ?? []).map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
-              <input name="label" placeholder="ou un libellé libre" className="field-input" />
-              <button className="btn-secondary py-2.5">Ajouter aux essentiels</button>
-            </form>
           </section>
         </aside>
       </div>

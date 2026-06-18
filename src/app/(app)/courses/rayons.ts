@@ -15,8 +15,11 @@ export interface RayonView {
   isCustom: boolean;
 }
 
+/** Sous-ensemble d'un rayon custom suffisant pour l'affichage (id/label/teinte/icône). */
+type CustomCat = Pick<HouseholdCategory, 'id' | 'label' | 'tint' | 'iconSlug'>;
+
 /** Vue d'affichage d'un rayon (intégré ou custom) ; null = non classé (« Autres »). */
-export function catView(key: string | null | undefined, customCats: HouseholdCategory[]): RayonView | null {
+export function catView(key: string | null | undefined, customCats: ReadonlyArray<CustomCat>): RayonView | null {
   const def = categoryDef(key);
   if (def) return { label: def.label, tint: def.tint, ink: def.ink, iconSlug: null, isCustom: false };
   const c = key ? customCats.find((x) => x.id === key) : undefined;
