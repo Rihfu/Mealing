@@ -6,7 +6,9 @@ import { UNIT_OPTIONS } from '@/lib/units';
 import { RangerButton, type CustomCategory } from './category-controls';
 import { DeleteWithUndo } from './undo-toast';
 import { catView } from './rayons';
-import { toggleCheckAction, toggleManualCheckAction, setFoodCategoryAction, updateManualItemAction } from './actions';
+import { toggleCheckAction, setFoodCategoryAction, updateManualItemAction } from './actions';
+
+type Source = 'recipe' | 'recurring' | 'manual';
 
 export interface SLine {
   key: string;
@@ -14,8 +16,9 @@ export interface SLine {
   qty: string; // libellé d'affichage (« 1 L »)
   quantity: number | null; // valeur brute (pour l'édition)
   unit: string | null;
-  source: 'recipe' | 'recurring' | 'manual';
-  manualId: string | null;
+  sources: Source[]; // provenances fusionnées (repas / essentiel / ajouté)
+  manualId: string | null; // article manuel unique (édition/suppression)
+  manualOnly: boolean; // ligne 100 % manuelle → qté éditable + supprimable
   foodId: string | null;
   category: string | null;
   iconSlug: string | null;
@@ -33,7 +36,7 @@ export interface SGroup {
   items: SLine[];
 }
 
-const SOURCE_TO_PROV: Record<SLine['source'], ProvenanceKey> = {
+const SOURCE_TO_PROV: Record<Source, ProvenanceKey> = {
   recipe: 'repas',
   recurring: 'essentiel',
   manual: 'ajoute',
@@ -49,15 +52,11 @@ function useToggle(customCategories: CustomCategory[]) {
   function toggle(line: SLine, checked: boolean) {
     setAnimating((s) => new Set(s).add(line.key));
     startTransition(async () => {
+      // État coché unifié par identité de ligne (cf. fusion inter-sources).
       const fd = new FormData();
       fd.set('checked', String(checked));
-      if (line.source === 'manual') {
-        fd.set('id', line.manualId ?? '');
-        await toggleManualCheckAction(fd);
-      } else {
-        fd.set('item_key', line.key);
-        await toggleCheckAction(fd);
-      }
+      fd.set('item_key', line.key);
+      await toggleCheckAction(fd);
       setAnimating((s) => {
         const n = new Set(s);
         n.delete(line.key);
@@ -96,8 +95,9 @@ function Row({
   // Pendant l'animation, on montre l'état CIBLE (coché si on coche, vide si on décoche).
   const filled = animating ? mode === 'active' : done;
 
-  // Édition de la quantité / unité (articles manuels uniquement).
-  const editable = line.source === 'manual' && line.manualId != null;
+  // Édition de la quantité / unité : seulement les lignes 100 % manuelles
+  // (une ligne fusionnée avec une recette/un essentiel n'est pas éditable à la main).
+  const editable = line.manualOnly && line.manualId != null;
   const [editing, setEditing] = useState(false);
   const [q, setQ] = useState('');
   const [u, setU] = useState('');
@@ -139,7 +139,7 @@ function Row({
       <span className={`text-sm ${done ? 'text-ink-soft line-through' : ''}`}>{line.name}</span>
 
       <span className="ml-auto flex items-center gap-2.5">
-        {!done && line.source === 'manual' && line.alreadyStocked && (
+        {!done && line.alreadyStocked && (
           <span
             className="rounded-full px-2 py-0.5 text-xs font-semibold"
             style={{ background: 'var(--color-butter-tint)', color: '#8a6d1f' }}
@@ -155,7 +155,9 @@ function Row({
           currentIcon={line.iconSlug}
           customCategories={customCategories}
         />
-        <ProvenanceBadge kind={SOURCE_TO_PROV[line.source]} />
+        {line.sources.map((s) => (
+          <ProvenanceBadge key={s} kind={SOURCE_TO_PROV[s]} />
+        ))}
         {editable ? (
           editing ? (
             <span className="flex items-center gap-1">
@@ -199,7 +201,7 @@ function Row({
         ) : (
           line.qty && <span className={`text-sm text-ink-soft ${done ? 'line-through' : ''}`}>{line.qty}</span>
         )}
-        {line.source === 'manual' && line.manualId && <DeleteWithUndo kind="manual" id={line.manualId} label={line.name} />}
+        {editable && line.manualId && <DeleteWithUndo kind="manual" id={line.manualId} label={line.name} />}
         {dragHandle}
       </span>
     </li>

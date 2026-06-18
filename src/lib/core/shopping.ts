@@ -2,24 +2,27 @@ import type { DB } from './types';
 import { unwrap } from './types';
 import { loadCatalogIndex, matchCatalog } from './foods';
 import { loadFoodPrefs } from './categories';
-import { type Quantity, toBase, fromBase, normalizeUnit } from '@/lib/units';
+import { type Quantity, type Dim, toBase, fromBase, normalizeUnit } from '@/lib/units';
 import { normalizeLabel } from '@/lib/text';
 import { addDays, isoDate } from '@/lib/dates';
 
 export type ShoppingSource = 'recipe' | 'recurring' | 'manual';
 
 export interface ShoppingLine {
-  key: string; // clé stable d'état coché (ex. 'food:<id>', 'recipe-label:<txt>', 'manual:<id>')
+  key: string; // clé stable d'identité/coché : 'cf:<foodId>' ou 'cl:<libellé normalisé>'
   name: string;
   quantity?: number;
   unit?: string;
   checked: boolean;
-  source: ShoppingSource;
-  manualId?: string;
+  source: ShoppingSource; // provenance principale (rétro-compat)
+  sources: ShoppingSource[]; // toutes les provenances fusionnées dans cette ligne
+  manualId?: string; // article manuel unique (édition/suppression) si la ligne en vient d'un seul
+  manualIds?: string[]; // tous les articles manuels fusionnés (pour le checkout)
+  manualOnly?: boolean; // ligne issue uniquement d'ajouts manuels (qté éditable / supprimable)
   foodId?: string | null; // aliment lié (identité produit) si connu
   category?: string | null; // rayon (food.category, clé stable) pour le tri ; null = non classé
   iconSlug?: string | null; // food.external_id ('cat:<slug>') pour le picto produit
-  alreadyStocked?: boolean; // (manuels) déjà couvert par le stock — anti-surplus rétroactif
+  alreadyStocked?: boolean; // déjà couvert par le stock (info, pour un ajout manuel)
   stockedLabel?: string | null; // quantité en stock à afficher (« 2 L »), '' si présence sans qté
 }
 
@@ -186,10 +189,12 @@ export async function generateShoppingList(
     unit: string | null;
   }>;
 
+  // L'état coché n'est plus porté par la colonne `checked` mais par shopping_item_state
+  // (clé d'identité unifiée), pour fusionner manuel + recette + récurrent sur une ligne.
   const manual = (unwrap(
     await db
       .from('shopping_manual_item')
-      .select('id, food_id, label, quantity, unit, checked')
+      .select('id, food_id, label, quantity, unit')
       .eq('household_id', params.householdId),
   ) ?? []) as Array<{
     id: string;
@@ -197,7 +202,6 @@ export async function generateShoppingList(
     label: string;
     quantity: number | null;
     unit: string | null;
-    checked: boolean;
   }>;
 
   const recurringFoodIds = recurring.map((r) => r.food_id).filter((x): x is string => !!x);
@@ -237,18 +241,21 @@ export async function generateShoppingList(
   const resolve = (
     inputFoodId: string | null | undefined,
     label: string,
-  ): { foodId: string | null; category: string | null; iconSlug: string | null } => {
+  ): { foodId: string | null; name: string; category: string | null; iconSlug: string | null } => {
     let foodId: string | null = inputFoodId ?? null;
+    let name = label;
     let category: string | null = null;
     let iconSlug: string | null = null;
 
     if (inputFoodId && foodCategory.has(inputFoodId)) {
+      name = foodNames.get(inputFoodId) ?? label;
       category = foodCategory.get(inputFoodId) ?? null;
       iconSlug = foodSlug.get(inputFoodId) ?? null;
     } else {
       const m = matchCatalog(catalogIndex, label);
       if (m) {
         foodId = foodId ?? m.id;
+        name = m.name;
         category = m.category;
         iconSlug = `cat:${m.slug}`;
       }
@@ -260,91 +267,91 @@ export async function generateShoppingList(
       if (pref.categoryKey) category = pref.categoryKey;
       if (pref.iconSlug) iconSlug = pref.iconSlug;
     }
-    return { foodId, category, iconSlug };
+    return { foodId, name, category, iconSlug };
   };
 
-  const lines: ShoppingLine[] = [];
+  // Fusion INTER-SOURCES : une seule ligne par identité (aliment lié OU libellé normalisé),
+  // avec somme des quantités SENSIBLE AUX UNITES (g/kg, ml/cl/L... via src/lib/units).
+  interface Merged {
+    key: string;
+    name: string;
+    foodId: string | null;
+    category: string | null;
+    iconSlug: string | null;
+    sources: Set<ShoppingSource>;
+    manualIds: string[];
+    acc: QtyAcc;
+  }
+  const merged = new Map<string, Merged>();
+  const contribute = (input: {
+    source: ShoppingSource;
+    foodId: string | null;
+    label: string;
+    qty: number | null | undefined;
+    unit: string | null | undefined;
+    manualId?: string;
+  }) => {
+    const r = resolve(input.foodId, input.label);
+    const key = r.foodId ? `cf:${r.foodId}` : `cl:${normalizeLabel(input.label)}`;
+    let m = merged.get(key);
+    if (!m) {
+      m = { key, name: r.name, foodId: r.foodId, category: r.category, iconSlug: r.iconSlug, sources: new Set(), manualIds: [], acc: newQtyAcc() };
+      merged.set(key, m);
+    }
+    m.sources.add(input.source);
+    if (input.manualId) m.manualIds.push(input.manualId);
+    if (!m.category && r.category) m.category = r.category;
+    if (!m.iconSlug && r.iconSlug) m.iconSlug = r.iconSlug;
+    addQty(m.acc, input.qty, input.unit);
+  };
 
   for (const [foodId, need] of netNeed) {
-    const key = `food:${foodId}`;
-    const c = resolve(foodId, foodNames.get(foodId) ?? '');
-    lines.push({
-      key,
-      name: foodNames.get(foodId) ?? '(aliment)',
-      quantity: roundQty(need.qty),
-      unit: need.unit,
-      checked: checkedKeys.has(key),
-      source: 'recipe',
-      foodId: c.foodId,
-      category: c.category,
-      iconSlug: c.iconSlug,
-    });
+    contribute({ source: 'recipe', foodId, label: foodNames.get(foodId) ?? '', qty: need.qty, unit: need.unit });
   }
-
-  for (const [labelKey, need] of netLabelNeed) {
-    const key = `recipe-label:${labelKey}`;
-    const c = resolve(null, need.label);
-    lines.push({
-      key,
-      name: need.label,
-      quantity: need.qty == null ? undefined : roundQty(need.qty),
-      unit: need.unit,
-      checked: checkedKeys.has(key),
-      source: 'recipe',
-      foodId: c.foodId,
-      category: c.category,
-      iconSlug: c.iconSlug,
-    });
+  for (const [, need] of netLabelNeed) {
+    contribute({ source: 'recipe', foodId: null, label: need.label, qty: need.qty, unit: need.unit });
   }
-
   for (const r of recurring) {
     if (r.food_id && presentFoods.has(r.food_id)) continue;
     if (!r.food_id && r.label && stockByLabel.get(normalizeLabel(r.label))?.present) continue;
-
-    const key = r.food_id
-      ? `recurring-food:${r.food_id}`
-      : `recurring-label:${normalizeLabel(r.label ?? '')}`;
-    const name = r.food_id ? (foodNames.get(r.food_id) ?? '(aliment)') : (r.label ?? '');
-    const c = resolve(r.food_id, name);
-    lines.push({
-      key,
-      name,
-      quantity: r.default_quantity ?? undefined,
-      unit: r.unit ?? undefined,
-      checked: checkedKeys.has(key),
+    contribute({
       source: 'recurring',
-      foodId: c.foodId,
-      category: c.category,
-      iconSlug: c.iconSlug,
+      foodId: r.food_id,
+      label: r.food_id ? (foodNames.get(r.food_id) ?? '') : (r.label ?? ''),
+      qty: r.default_quantity,
+      unit: r.unit,
     });
   }
-
   for (const m of manual) {
-    // Anti-surplus rétroactif (G) : un manuel n'est jamais masqué (intention explicite,
-    // cf. Q2), mais on signale s'il est déjà couvert par le stock — par aliment lié ou
-    // par libellé normalisé. On affiche la quantité en stock quand elle est connue.
-    const stocked = stock.find(
-      (s) =>
-        (s.present || (s.quantity ?? 0) > 0) &&
-        ((m.food_id != null && s.food_id === m.food_id) ||
-          (!!s.label && normalizeLabel(s.label) === normalizeLabel(m.label))),
-    );
+    contribute({ source: 'manual', foodId: m.food_id, label: m.label, qty: m.quantity, unit: m.unit, manualId: m.id });
+  }
 
-    // Liés à la saisie : food_id direct ; sinon repli catalogue (libellé/synonyme) ;
-    // la préférence foyer (déplacement/mémoire) prime dans resolve().
-    const c = resolve(m.food_id, m.label);
-
+  const lines: ShoppingLine[] = [];
+  for (const m of merged.values()) {
+    const { quantity, unit } = finalizeQty(m.acc);
+    const manualOnly = m.sources.size === 1 && m.sources.has('manual');
+    // Marqueur "deja en stock" : info quand un ajout manuel est deja couvert par le stock.
+    const stocked = m.sources.has('manual')
+      ? stock.find(
+          (s) =>
+            (s.present || (s.quantity ?? 0) > 0) &&
+            ((m.foodId != null && s.food_id === m.foodId) || (!!s.label && normalizeLabel(s.label) === normalizeLabel(m.name))),
+        )
+      : undefined;
     lines.push({
-      key: `manual:${m.id}`,
-      name: m.label,
-      quantity: m.quantity ?? undefined,
-      unit: m.unit ?? undefined,
-      checked: m.checked,
-      source: 'manual',
-      manualId: m.id,
-      foodId: c.foodId,
-      category: c.category,
-      iconSlug: c.iconSlug,
+      key: m.key,
+      name: m.name || '(aliment)',
+      quantity,
+      unit,
+      checked: checkedKeys.has(m.key),
+      source: m.sources.has('recipe') ? 'recipe' : m.sources.has('recurring') ? 'recurring' : 'manual',
+      sources: [...m.sources],
+      manualId: manualOnly && m.manualIds.length === 1 ? m.manualIds[0] : undefined,
+      manualIds: m.manualIds,
+      manualOnly,
+      foodId: m.foodId,
+      category: m.category,
+      iconSlug: m.iconSlug,
       alreadyStocked: !!stocked,
       stockedLabel: stocked
         ? stocked.quantity != null
@@ -355,6 +362,55 @@ export async function generateShoppingList(
   }
 
   return lines;
+}
+
+// Accumulateur de quantite sensible aux unites (somme par dimension via toBase/fromBase).
+interface QtyAcc {
+  any: boolean;
+  raw: number;
+  dim: Dim | null;
+  base: number;
+  convertible: boolean;
+  units: Map<string, number>;
+}
+function newQtyAcc(): QtyAcc {
+  return { any: false, raw: 0, dim: null, base: 0, convertible: true, units: new Map() };
+}
+function addQty(acc: QtyAcc, qty: number | null | undefined, unit: string | null | undefined): void {
+  if (qty == null) return;
+  acc.any = true;
+  acc.raw += qty;
+  if (unit) acc.units.set(unit, (acc.units.get(unit) ?? 0) + 1);
+  const b = toBase(qty, unit);
+  if (b == null) {
+    acc.convertible = false; // unite inconnue / sans unite -> pas de conversion fiable
+    return;
+  }
+  if (acc.dim == null) {
+    acc.dim = b.dim;
+    acc.base = b.value;
+  } else if (acc.dim === b.dim) {
+    acc.base += b.value;
+  } else {
+    acc.convertible = false; // dimensions melees (ex. g + L) -> repli somme brute
+  }
+}
+/** Quantite affichee : somme convertie dans l'unite la plus frequente ; repli somme brute. */
+function finalizeQty(acc: QtyAcc): { quantity?: number; unit?: string } {
+  if (!acc.any) return { quantity: undefined, unit: undefined };
+  let unit: string | undefined;
+  let best = -1;
+  for (const [u, n] of acc.units) {
+    if (n > best) {
+      best = n;
+      unit = u;
+    }
+  }
+  if (acc.convertible && acc.dim != null && unit) {
+    const conv = fromBase(acc.base, unit);
+    if (conv != null) return { quantity: roundQty(conv), unit };
+  }
+  return { quantity: roundQty(acc.raw), unit };
 }
 
 /**
@@ -423,13 +479,13 @@ export async function checkoutPurchasedToStock(
     added++;
   }
 
-  // Les achats quittent la liste.
+  // Les achats quittent la liste : on efface les coches (état par identité) et on
+  // supprime les articles manuels rattachés aux lignes cochées (fusion inter-sources).
   await db.from('shopping_item_state').delete().eq('household_id', params.householdId);
-  await db
-    .from('shopping_manual_item')
-    .delete()
-    .eq('household_id', params.householdId)
-    .eq('checked', true);
+  const manualIds = lines.flatMap((l) => l.manualIds ?? []);
+  if (manualIds.length > 0) {
+    await db.from('shopping_manual_item').delete().in('id', manualIds);
+  }
 
   return { added };
 }

@@ -60,19 +60,8 @@ export async function setShoppingHorizonAction(formData: FormData): Promise<void
 /** Décoche toutes les lignes (fin d'une session de courses). Ne supprime rien. */
 export async function clearCheckedAction(): Promise<void> {
   const { supabase, householdId } = await requireHousehold();
-  await Promise.all([
-    supabase.from('shopping_item_state').delete().eq('household_id', householdId),
-    supabase.from('shopping_manual_item').update({ checked: false }).eq('household_id', householdId),
-  ]);
-  revalidatePath('/courses');
-}
-
-export async function toggleManualCheckAction(formData: FormData): Promise<void> {
-  const { supabase } = await requireHousehold();
-  await supabase
-    .from('shopping_manual_item')
-    .update({ checked: formData.get('checked') === 'true' })
-    .eq('id', String(formData.get('id')));
+  // État coché unifié par identité (shopping_item_state) — cf. fusion inter-sources.
+  await supabase.from('shopping_item_state').delete().eq('household_id', householdId);
   revalidatePath('/courses');
 }
 

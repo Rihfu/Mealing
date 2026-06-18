@@ -4,7 +4,7 @@ import { getAuthContext } from '@/lib/auth';
 import { generateShoppingList, getShoppingWindow, listHouseholdCategories, type ShoppingLine } from '@/lib/core';
 import { groupByRayon } from '../rayons';
 import { PurchaseCheckout } from '../purchase-checkout';
-import { toggleCheckAction, toggleManualCheckAction } from '../actions';
+import { toggleCheckAction } from '../actions';
 
 /** Grosse case à cocher (mode magasin). */
 function BigCheck({ checked }: { checked: boolean }) {
@@ -24,13 +24,11 @@ function BigCheck({ checked }: { checked: boolean }) {
 /** Ligne « gros bouton » : taper n'importe où coche/décoche l'article. */
 function StoreRow({ line }: { line: ShoppingLine }) {
   const qty = line.quantity != null ? `${line.quantity} ${line.unit ?? ''}`.trim() : '';
-  const isManual = line.source === 'manual';
-  const toggle = isManual ? toggleManualCheckAction : toggleCheckAction;
-  const field = isManual ? { name: 'id', value: line.manualId ?? '' } : { name: 'item_key', value: line.key };
 
   return (
-    <form action={toggle}>
-      <input type="hidden" name={field.name} value={field.value} />
+    // État coché unifié par clé d'identité (cf. fusion inter-sources).
+    <form action={toggleCheckAction}>
+      <input type="hidden" name="item_key" value={line.key} />
       <input type="hidden" name="checked" value={(!line.checked).toString()} />
       <button
         className={`flex w-full items-center gap-3.5 rounded-2xl border px-4 text-left ${
@@ -109,7 +107,7 @@ export default async function MagasinPage() {
               </h2>
               <div className="flex flex-col gap-2.5">
                 {items.map((l) => (
-                  <StoreRow key={l.key + l.source} line={l} />
+                  <StoreRow key={l.key} line={l} />
                 ))}
               </div>
             </div>
