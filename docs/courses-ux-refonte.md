@@ -286,3 +286,7 @@ Trois retours utilisateur traités ensemble.
 
 ### Finition autocomplétion : « Utiliser mon texte » ne soumet plus directement — 2026-06-18
 L'option de tête « Ajouter « \<texte\> » » **soumettait le formulaire immédiatement**, sans laisser régler la quantité. Renommée **« Utiliser « \<texte\> » · texte libre »** et son clic **confirme** désormais le libellé (sélection synthétique free-text : ferme la liste, garde le nom dans le champ) **sans soumettre** — l'utilisateur règle ensuite Qté/unité puis « Ajouter à la liste ». Vérifié : « oeufs » → Utiliser → Qté 6 → Ajouter → « Œufs · 6 » en Crémerie & œufs.
+
+### « J'ai fait mes courses » déplacé dans « Déjà pris » + édition qté/unité inline — 2026-06-18
+- **CTA déplacé** : « J'ai fait mes courses » quitte l'en-tête de « À acheter » pour le **bas de la section « Déjà pris »** (full-width), là où c'est logique (action sur les articles cochés). La section « Déjà pris » devient une `section` (carte) : liste repliable `<details open>` + CTA toujours visible dessous. L'en-tête « À acheter » ne montre plus que « N déjà pris ».
+- **Édition qté/unité inline** (articles manuels) : la quantité affichée devient un bouton (« + qté » si vide) qui ouvre un éditeur en ligne (champ nombre + select d'unité + ✓) → `updateManualItemAction` (maj `shopping_manual_item`). Plus besoin de supprimer/re-ajouter. `SLine` porte désormais `quantity`/`unit` bruts. Vérifié : « Riz » → + qté → 500 g enregistré ; CTA bien dans « Déjà pris ».

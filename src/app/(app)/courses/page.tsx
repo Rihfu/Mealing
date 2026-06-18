@@ -23,6 +23,8 @@ function toSLine(l: ShoppingLine): SLine {
     key: l.key,
     name: l.name,
     qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
+    quantity: l.quantity ?? null,
+    unit: l.unit ?? null,
     source: l.source,
     manualId: l.manualId ?? null,
     foodId: l.foodId ?? null,
@@ -132,18 +134,7 @@ export default async function CoursesPage() {
           <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
             <div className="mb-2 flex items-center justify-between gap-3">
               <h2 className="font-display text-lg font-semibold">À acheter</h2>
-              {done.length > 0 && (
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-ink-soft">{done.length} déjà pris</span>
-                  <PurchaseCheckout
-                    items={done.map((l) => ({
-                      name: l.name,
-                      qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
-                      category: categoryLabel(l.category),
-                    }))}
-                  />
-                </div>
-              )}
+              {done.length > 0 && <span className="text-sm text-ink-soft">{done.length} déjà pris</span>}
             </div>
 
             <div className="mb-2">
@@ -161,18 +152,30 @@ export default async function CoursesPage() {
           </section>
 
           {done.length > 0 && (
-            <details className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
-              <summary className="flex cursor-pointer list-none items-center justify-between font-display text-lg font-semibold">
-                <span>Déjà pris ({done.length})</span>
-                <span className="text-sm font-normal text-ink-soft">afficher / masquer</span>
-              </summary>
-              <div className="mt-2">
-                <form action={clearCheckedAction} className="mb-2 flex justify-end">
-                  <button className="text-xs font-bold text-green-strong">Tout décocher</button>
-                </form>
-                <DoneList lines={doneLines} customCategories={customCats} />
+            <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
+              <details open>
+                <summary className="flex cursor-pointer list-none items-center justify-between font-display text-lg font-semibold">
+                  <span>Déjà pris ({done.length})</span>
+                  <span className="text-sm font-normal text-ink-soft">afficher / masquer</span>
+                </summary>
+                <div className="mt-2">
+                  <form action={clearCheckedAction} className="mb-2 flex justify-end">
+                    <button className="text-xs font-bold text-green-strong">Tout décocher</button>
+                  </form>
+                  <DoneList lines={doneLines} customCategories={customCats} />
+                </div>
+              </details>
+              <div className="mt-3 border-t border-line pt-3">
+                <PurchaseCheckout
+                  fullWidth
+                  items={done.map((l) => ({
+                    name: l.name,
+                    qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
+                    category: categoryLabel(l.category),
+                  }))}
+                />
               </div>
-            </details>
+            </section>
           )}
         </div>
 

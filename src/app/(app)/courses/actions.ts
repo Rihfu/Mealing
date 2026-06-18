@@ -177,6 +177,21 @@ export async function deleteCategoryAction(id: string): Promise<void> {
   revalidatePath('/courses');
 }
 
+/** Modifie la quantité / l'unité d'un article manuel (sans le supprimer/re-ajouter). */
+export async function updateManualItemAction(input: {
+  id: string;
+  quantity: number | null;
+  unit: string | null;
+}): Promise<void> {
+  const { supabase } = await requireHousehold();
+  if (!input.id) return;
+  await supabase
+    .from('shopping_manual_item')
+    .update({ quantity: input.quantity, unit: input.unit || null })
+    .eq('id', input.id);
+  revalidatePath('/courses');
+}
+
 /** Données d'un article manuel restaurable (pour l'undo). */
 export interface ManualSnapshot {
   label: string;

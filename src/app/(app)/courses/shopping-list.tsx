@@ -2,15 +2,18 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-assets';
+import { UNIT_OPTIONS } from '@/lib/units';
 import { RangerButton, type CustomCategory } from './category-controls';
 import { DeleteWithUndo } from './undo-toast';
 import { catView } from './rayons';
-import { toggleCheckAction, toggleManualCheckAction, setFoodCategoryAction } from './actions';
+import { toggleCheckAction, toggleManualCheckAction, setFoodCategoryAction, updateManualItemAction } from './actions';
 
 export interface SLine {
   key: string;
   name: string;
-  qty: string;
+  qty: string; // libellé d'affichage (« 1 L »)
+  quantity: number | null; // valeur brute (pour l'édition)
+  unit: string | null;
   source: 'recipe' | 'recurring' | 'manual';
   manualId: string | null;
   foodId: string | null;
@@ -93,6 +96,30 @@ function Row({
   // Pendant l'animation, on montre l'état CIBLE (coché si on coche, vide si on décoche).
   const filled = animating ? mode === 'active' : done;
 
+  // Édition de la quantité / unité (articles manuels uniquement).
+  const editable = line.source === 'manual' && line.manualId != null;
+  const [editing, setEditing] = useState(false);
+  const [q, setQ] = useState('');
+  const [u, setU] = useState('');
+  const [savingQty, startSave] = useTransition();
+
+  function openEdit() {
+    setQ(line.quantity != null ? String(line.quantity) : '');
+    setU(line.unit ?? '');
+    setEditing(true);
+  }
+  function saveQty() {
+    const n = q.trim() === '' ? null : Number(q);
+    startSave(async () => {
+      await updateManualItemAction({
+        id: line.manualId as string,
+        quantity: n != null && !Number.isNaN(n) ? n : null,
+        unit: u || null,
+      });
+      setEditing(false);
+    });
+  }
+
   return (
     <li className={`flex items-center gap-3 py-2 transition-opacity duration-300 ${animating ? 'opacity-40' : ''}`}>
       <button type="button" aria-label={done ? 'Décocher' : 'Cocher'} onClick={onToggle} disabled={pending} className="block">
@@ -129,7 +156,49 @@ function Row({
           customCategories={customCategories}
         />
         <ProvenanceBadge kind={SOURCE_TO_PROV[line.source]} />
-        {line.qty && <span className={`text-sm text-ink-soft ${done ? 'line-through' : ''}`}>{line.qty}</span>}
+        {editable ? (
+          editing ? (
+            <span className="flex items-center gap-1">
+              <input
+                type="number"
+                step="any"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Qté"
+                aria-label="Quantité"
+                className="field-input w-16 px-2 py-1 text-sm"
+              />
+              <select
+                value={u}
+                onChange={(e) => setU(e.target.value)}
+                aria-label="Unité"
+                className="field-input w-[5.5rem] px-1 py-1 text-sm"
+              >
+                {UNIT_OPTIONS.map((o) => (
+                  <option key={o.code} value={o.code}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={saveQty} disabled={savingQty} aria-label="Enregistrer" title="Enregistrer" className="text-green-strong disabled:opacity-60">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={openEdit}
+              title="Modifier la quantité / l'unité"
+              className={`text-sm text-ink-soft hover:text-ink hover:underline ${done ? 'line-through' : ''}`}
+            >
+              {line.qty || '+ qté'}
+            </button>
+          )
+        ) : (
+          line.qty && <span className={`text-sm text-ink-soft ${done ? 'line-through' : ''}`}>{line.qty}</span>
+        )}
         {line.source === 'manual' && line.manualId && <DeleteWithUndo kind="manual" id={line.manualId} label={line.name} />}
         {dragHandle}
       </span>
