@@ -174,7 +174,7 @@ Une nouvelle session n'a **aucune mémoire** de la précédente. Pour reprendre 
 
 Vision transverse de l'utilisateur (juin 2026) : ajouter, **section par section**, une couche « stats » (chiffres + graphes) au-dessus des données historisées. **Ne pas implémenter d'avance** — à proposer/valider quand on travaillera la section concernée.
 
-- **Courses** : sur l'**historique des courses** (cf. ci-dessous), une vue « Statistiques » — fréquence d'achat d'un produit (« tu rachètes le lait ~tous les N jours »), taille moyenne du panier, répartition/poids par rayon dans le temps, produits les plus achetés. Source : `shopping_trip` / `shopping_trip_item`.
+- **Courses** : ✅ **FAIT** (juin 2026) — onglet « Statistiques » de l'historique (`/courses/historique/stats`) : cadence, panier moyen + tendance, top produits, répartition par rayon, provenance, « À racheter bientôt » (actionnable), évolution hebdo, one-shots, **dépenses** (prix optionnel, migration 0015). Voir `docs/courses-ux-refonte.md`. Reste possible : affiner les calculs à l'usage.
 - **Stock** : graphes d'**évolution du stock d'un aliment** dans le temps (entrées/sorties, niveau). ⚠️ Le stock est aujourd'hui un **instantané** (pas d'historique de mouvements) → nécessitera d'abord un **journal d'événements stock** (entrées via courses, sorties via consommation) avant tout graphe. À chiffrer.
 - **Recettes** : chiffres sur les recettes — les plus **reconduites** (depuis `planned_meal`), les plus rapides (`prep+cook`), etc.
 
@@ -183,7 +183,8 @@ Principe : ces vues sont **dérivées** (lecture seule) des données déjà hist
 ### Historique des courses (FAIT — juin 2026)
 
 À chaque « J'ai fait mes courses » validé, un **relevé daté** des articles achetés est archivé, consultable dans **`/courses/historique`** (liste par date, favoris en tête, 5/page, dépliable). **Pas de lien au stock** — pur suivi. Base extensible pour les futures stats Courses (ci-dessus).
-- **Migration `0014_shopping_history`** : `shopping_trip` + `shopping_trip_item` (snapshot immuable), RLS foyer. **Dernière migration en base = 0014.**
+- **Migrations `0014_shopping_history`** (`shopping_trip` + `shopping_trip_item`, snapshot immuable, RLS foyer) **+ `0015_shopping_trip_price`** (`price` optionnel pour les stats dépenses). **Dernière migration en base = 0015.** Rétention historique = **6 mois** (`TRIP_RETENTION_MONTHS`).
+- **Onglet Statistiques** : `src/lib/core/shopping-stats.ts` + `historique/stats/` + `historique/tabs.tsx`. Prix saisi au checkout (`purchase-checkout.tsx`) et dans le relevé. Détail : `docs/courses-ux-refonte.md` (§ Onglet Statistiques).
 - **Backend** : `src/lib/core/shopping-history.ts` (`recordShoppingTrip` branché dans `checkoutPurchasedToStock` ; `listShoppingTrips`, `purgeOldShoppingTrips`, `setTripFavorite`, `renameTrip`, `deleteTrip`, `updateTripItem`, `deleteTripItem`, `reconductTripItems`). Couverture stock factorisée dans `loadStockCoverage` (shopping.ts).
 - **UI** : `src/app/(app)/courses/historique/` (`page.tsx`, `trip-card.tsx`, `actions.ts`) + lien « Historique » dans l'en-tête Courses. Reconduction = modale de sélection cochable → liste actuelle.
 - Détail complet : `docs/courses-ux-refonte.md` (§ « Historique des courses »).

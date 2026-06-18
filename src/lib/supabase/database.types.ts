@@ -981,6 +981,7 @@ export type Database = {
           icon_slug: string | null
           id: string
           label: string
+          price: number | null
           quantity: number | null
           source: string | null
           trip_id: string
@@ -992,6 +993,7 @@ export type Database = {
           icon_slug?: string | null
           id?: string
           label: string
+          price?: number | null
           quantity?: number | null
           source?: string | null
           trip_id: string
@@ -1003,6 +1005,7 @@ export type Database = {
           icon_slug?: string | null
           id?: string
           label?: string
+          price?: number | null
           quantity?: number | null
           source?: string | null
           trip_id?: string

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
 import { listShoppingTrips, purgeOldShoppingTrips, listHouseholdCategories } from '@/lib/core';
 import { TripCard, type HTrip, type HCustomCat } from './trip-card';
+import { HistoriqueTabs } from './tabs';
 
 const DATE_FMT = new Intl.DateTimeFormat('fr-FR', {
   weekday: 'long',
@@ -43,6 +44,7 @@ export default async function HistoriquePage({
       label: i.label,
       quantity: i.quantity,
       unit: i.unit,
+      price: i.price,
       categoryKey: i.categoryKey,
       iconSlug: i.iconSlug,
       source: i.source,
@@ -66,6 +68,7 @@ export default async function HistoriquePage({
           Chaque « J’ai fait mes courses » est archivé ici. Déplie un relevé pour revoir ce que tu avais pris, épingle
           ⭐ ceux à garder, ou reconduis une liste pour la remettre dans tes courses.
         </p>
+        <div className="mt-3"><HistoriqueTabs active="list" /></div>
       </div>
 
       {total === 0 ? (

@@ -25,6 +25,7 @@ export interface HItem {
   label: string;
   quantity: number | null;
   unit: string | null;
+  price: number | null;
   categoryKey: string | null;
   iconSlug: string | null;
   source: string | null;
@@ -53,6 +54,10 @@ const OTHER = '__other__';
 
 function fmtQty(it: { quantity: number | null; unit: string | null }): string {
   return it.quantity != null ? `${it.quantity} ${it.unit ?? ''}`.trim() : '';
+}
+
+function fmtPrice(p: number): string {
+  return `${p.toFixed(2).replace('.', ',')} €`;
 }
 
 function norm(s: string): string {
@@ -105,6 +110,7 @@ function ItemRow({ item, editing }: { item: HItem; editing: boolean }) {
   const [editingQty, setEditingQty] = useState(false);
   const [q, setQ] = useState('');
   const [u, setU] = useState('');
+  const [p, setP] = useState('');
   const [confirmDel, setConfirmDel] = useState(false);
   const [pending, start] = useTransition();
   const prov = item.source ? SOURCE_TO_PROV[item.source] : undefined;
@@ -112,12 +118,19 @@ function ItemRow({ item, editing }: { item: HItem; editing: boolean }) {
   function openQty() {
     setQ(item.quantity != null ? String(item.quantity) : '');
     setU(item.unit ?? '');
+    setP(item.price != null ? String(item.price) : '');
     setEditingQty(true);
   }
   function saveQty() {
     const n = q.trim() === '' ? null : Number(q);
+    const pr = p.trim() === '' ? null : Number(p.replace(',', '.'));
     start(async () => {
-      await updateTripItemAction({ itemId: item.id, quantity: n != null && !Number.isNaN(n) ? n : null, unit: u || null });
+      await updateTripItemAction({
+        itemId: item.id,
+        quantity: n != null && !Number.isNaN(n) ? n : null,
+        unit: u || null,
+        price: pr != null && !Number.isNaN(pr) ? pr : null,
+      });
       setEditingQty(false);
     });
   }
@@ -137,22 +150,30 @@ function ItemRow({ item, editing }: { item: HItem; editing: boolean }) {
         {prov && <ProvenanceBadge kind={prov} />}
         {editing && editingQty ? (
           <span className="flex items-center gap-1">
-            <input type="number" step="any" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Qté" aria-label="Quantité" className="field-input w-16 px-2 py-1 text-sm" />
-            <select value={u} onChange={(e) => setU(e.target.value)} aria-label="Unité" className="field-input w-[5.5rem] px-1 py-1 text-sm">
+            <input type="number" step="any" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Qté" aria-label="Quantité" className="field-input w-14 px-2 py-1 text-sm" />
+            <select value={u} onChange={(e) => setU(e.target.value)} aria-label="Unité" className="field-input w-[4.5rem] px-1 py-1 text-sm">
               {UNIT_OPTIONS.map((o) => (
                 <option key={o.code} value={o.code}>{o.label}</option>
               ))}
             </select>
+            <input type="number" step="any" inputMode="decimal" value={p} onChange={(e) => setP(e.target.value)} placeholder="Prix" aria-label="Prix (€)" className="field-input w-16 px-2 py-1 text-right text-sm" />
+            <span className="text-xs text-ink-soft">€</span>
             <button type="button" onClick={saveQty} disabled={pending} aria-label="Enregistrer" title="Enregistrer" className="text-green-strong disabled:opacity-60">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
             </button>
           </span>
         ) : editing ? (
-          <button type="button" onClick={openQty} title="Modifier la quantité" className="text-sm text-ink-soft hover:text-ink hover:underline">
+          <button type="button" onClick={openQty} title="Modifier quantité / prix" className="text-sm text-ink-soft hover:text-ink hover:underline">
             {fmtQty(item) || '+ qté'}
+            {item.price != null && <span className="text-ink-soft"> · {fmtPrice(item.price)}</span>}
           </button>
         ) : (
-          fmtQty(item) && <span className="text-sm text-ink-soft">{fmtQty(item)}</span>
+          (fmtQty(item) || item.price != null) && (
+            <span className="text-sm text-ink-soft">
+              {fmtQty(item)}
+              {item.price != null && <span>{fmtQty(item) ? ' · ' : ''}{fmtPrice(item.price)}</span>}
+            </span>
+          )
         )}
         {editing &&
           (confirmDel ? (

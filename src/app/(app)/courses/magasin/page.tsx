@@ -122,6 +122,7 @@ export default async function MagasinPage() {
             <PurchaseCheckout
               fullWidth
               items={done.map((l) => ({
+                key: l.key,
                 name: l.name,
                 qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
                 category: null,

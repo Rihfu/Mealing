@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { checkoutToStockAction } from './actions';
 
 export interface CheckoutItem {
+  key: string; // clé d'identité de la ligne (pour rattacher le prix au relevé)
   name: string;
   qty: string;
   category: string | null;
@@ -11,17 +12,30 @@ export interface CheckoutItem {
 
 /**
  * « J'ai fait mes courses » (chantier E) : confirme puis range les articles cochés
- * dans le stock (datés du jour). Action réversible côté stock.
+ * dans le stock (datés du jour). Saisie de prix OPTIONNELLE par article → archivée
+ * dans l'historique pour les stats de dépenses. Action réversible côté stock.
  */
 export function PurchaseCheckout({ items, fullWidth = false }: { items: CheckoutItem[]; fullWidth?: boolean }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [prices, setPrices] = useState<Record<string, string>>({});
   const n = items.length;
   const s = n > 1 ? 's' : '';
 
+  function setPrice(key: string, v: string) {
+    setPrices((p) => ({ ...p, [key]: v }));
+  }
+
   function confirm() {
+    // Prix valides (> 0) uniquement, indexés par clé de ligne.
+    const map: Record<string, number> = {};
+    for (const it of items) {
+      const raw = prices[it.key];
+      const v = raw != null && raw.trim() !== '' ? Number(raw.replace(',', '.')) : NaN;
+      if (!Number.isNaN(v) && v > 0) map[it.key] = v;
+    }
     startTransition(async () => {
-      await checkoutToStockAction();
+      await checkoutToStockAction(Object.keys(map).length > 0 ? map : undefined);
       setOpen(false);
     });
   }
@@ -48,29 +62,42 @@ export function PurchaseCheckout({ items, fullWidth = false }: { items: Checkout
           onClick={() => !pending && setOpen(false)}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-soft"
+            className="flex max-h-[88vh] w-full max-w-md flex-col rounded-2xl border border-line bg-surface p-6 shadow-soft"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="font-display text-xl font-semibold">Bien joué — on range ?</h3>
             <p className="mt-1 text-sm text-ink-soft">
-              {n} article{s} coché{s} entre{n > 1 ? 'nt' : ''} dans ton stock, daté{s} d’aujourd’hui.
+              {n} article{s} coché{s} entre{n > 1 ? 'nt' : ''} dans ton stock, daté{s} d’aujourd’hui. Ajoute le prix
+              si tu veux suivre tes dépenses (optionnel).
             </p>
 
-            <ul className="my-4 max-h-60 divide-y divide-line overflow-auto rounded-xl border border-line px-3">
-              {items.map((it, i) => (
-                <li key={i} className="flex items-center gap-2 py-2 text-sm">
-                  <span className="flex-1 font-semibold">
-                    {it.name}
-                    {it.qty && <span className="font-normal text-ink-soft"> · {it.qty}</span>}
+            <ul className="my-4 flex-1 divide-y divide-line overflow-auto rounded-xl border border-line px-3">
+              {items.map((it) => (
+                <li key={it.key} className="flex items-center gap-2 py-2 text-sm">
+                  <span className="min-w-0 flex-1 font-semibold">
+                    <span className="block truncate">{it.name}</span>
+                    {it.qty && <span className="text-xs font-normal text-ink-soft">{it.qty}</span>}
                   </span>
-                  {it.category && <span className="text-xs text-ink-soft">{it.category}</span>}
+                  <span className="flex shrink-0 items-center gap-1">
+                    <input
+                      type="number"
+                      step="any"
+                      inputMode="decimal"
+                      value={prices[it.key] ?? ''}
+                      onChange={(e) => setPrice(it.key, e.target.value)}
+                      placeholder="—"
+                      aria-label={`Prix de ${it.name}`}
+                      className="field-input w-20 px-2 py-1 text-right text-sm"
+                    />
+                    <span className="text-ink-soft">€</span>
+                  </span>
                 </li>
               ))}
             </ul>
 
             <p className="mb-4 text-xs text-ink-soft">
-              La date d’achat fixe la péremption estimée. Tu pourras tout ajuster dans le stock — c’est
-              réversible.
+              La date d’achat fixe la péremption estimée. Tu pourras tout ajuster (et compléter les prix) dans le
+              stock et l’historique — c’est réversible.
             </p>
 
             <div className="flex gap-2">

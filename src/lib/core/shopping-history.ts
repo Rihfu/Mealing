@@ -17,6 +17,7 @@ export interface ShoppingTripItem {
   label: string;
   quantity: number | null;
   unit: string | null;
+  price: number | null; // prix payé pour la ligne (optionnel) — stats dépenses
   categoryKey: string | null; // clé de rayon (snapshot)
   foodId: string | null;
   iconSlug: string | null;
@@ -38,6 +39,7 @@ type TripItemRow = {
   label: string;
   quantity: number | null;
   unit: string | null;
+  price: number | null;
   category_key: string | null;
   food_id: string | null;
   icon_slug: string | null;
@@ -50,6 +52,7 @@ function mapItem(r: TripItemRow): ShoppingTripItem {
     label: r.label,
     quantity: r.quantity,
     unit: r.unit,
+    price: r.price,
     categoryKey: r.category_key,
     foodId: r.food_id,
     iconSlug: r.icon_slug,
@@ -65,6 +68,7 @@ export async function recordShoppingTrip(
   db: DB,
   householdId: string,
   lines: ShoppingLine[],
+  prices?: Record<string, number>, // prix optionnels par clé de ligne (saisis au checkout)
 ): Promise<string | null> {
   if (lines.length === 0) return null;
   const trip = unwrap(
@@ -76,6 +80,7 @@ export async function recordShoppingTrip(
     label: l.name,
     quantity: l.quantity ?? null,
     unit: l.unit ?? null,
+    price: prices?.[l.key] ?? null,
     category_key: l.category ?? null,
     food_id: l.foodId ?? null,
     icon_slug: l.iconSlug ?? null,
@@ -86,13 +91,16 @@ export async function recordShoppingTrip(
   return trip.id;
 }
 
+/** Rétention de l'historique (mois) : assez profond pour les stats de rachat. */
+export const TRIP_RETENTION_MONTHS = 6;
+
 /**
- * Purge auto : supprime les relevés NON favoris de plus d'un mois. Best-effort,
- * appelé à l'ouverture de l'historique (pas de cron — suffisant en usage perso).
+ * Purge auto : supprime les relevés NON favoris de plus de `TRIP_RETENTION_MONTHS`.
+ * Best-effort, appelé à l'ouverture de l'historique (pas de cron — usage perso).
  */
 export async function purgeOldShoppingTrips(db: DB, householdId: string): Promise<void> {
   const cutoff = new Date();
-  cutoff.setMonth(cutoff.getMonth() - 1);
+  cutoff.setMonth(cutoff.getMonth() - TRIP_RETENTION_MONTHS);
   await db
     .from('shopping_trip')
     .delete()
@@ -125,7 +133,7 @@ export async function listShoppingTrips(
     await db
       .from('shopping_trip')
       .select(
-        'id, purchased_at, is_favorite, name, shopping_trip_item(id, label, quantity, unit, category_key, food_id, icon_slug, source)',
+        'id, purchased_at, is_favorite, name, shopping_trip_item(id, label, quantity, unit, price, category_key, food_id, icon_slug, source)',
       )
       .eq('household_id', householdId)
       .order('is_favorite', { ascending: false })
@@ -172,12 +180,14 @@ export async function deleteTrip(db: DB, tripId: string): Promise<void> {
 export async function updateTripItem(
   db: DB,
   itemId: string,
-  patch: { quantity: number | null; unit: string | null },
+  patch: { quantity?: number | null; unit?: string | null; price?: number | null },
 ): Promise<void> {
-  const { error } = await db
-    .from('shopping_trip_item')
-    .update({ quantity: patch.quantity, unit: patch.unit || null })
-    .eq('id', itemId);
+  const row: Record<string, unknown> = {};
+  if (patch.quantity !== undefined) row.quantity = patch.quantity;
+  if (patch.unit !== undefined) row.unit = patch.unit || null;
+  if (patch.price !== undefined) row.price = patch.price;
+  if (Object.keys(row).length === 0) return;
+  const { error } = await db.from('shopping_trip_item').update(row).eq('id', itemId);
   if (error) throw new Error(error.message);
 }
 

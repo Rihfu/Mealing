@@ -10,6 +10,7 @@ import {
   updateTripItem,
   deleteTripItem,
   reconductTripItems,
+  findCatalogFoodIdByLabel,
 } from '@/lib/core';
 
 async function requireHousehold() {
@@ -41,14 +42,16 @@ export async function deleteTripAction(tripId: string): Promise<void> {
   revalidatePath('/courses/historique');
 }
 
-/** Modifie la quantité/unité d'un article d'un relevé. */
+/** Modifie la quantité / l'unité / le prix d'un article d'un relevé. */
 export async function updateTripItemAction(input: {
   itemId: string;
-  quantity: number | null;
-  unit: string | null;
+  quantity?: number | null;
+  unit?: string | null;
+  price?: number | null;
 }): Promise<void> {
   const { supabase } = await requireHousehold();
-  if (input.itemId) await updateTripItem(supabase, input.itemId, { quantity: input.quantity, unit: input.unit });
+  if (input.itemId)
+    await updateTripItem(supabase, input.itemId, { quantity: input.quantity, unit: input.unit, price: input.price });
   revalidatePath('/courses/historique');
 }
 
@@ -68,4 +71,28 @@ export async function reconductTripAction(itemIds: string[]): Promise<number> {
   const n = await reconductTripItems(supabase, householdId, itemIds);
   revalidatePath('/courses');
   return n;
+}
+
+/**
+ * Ajoute un produit (depuis « À racheter bientôt ») à la liste de courses actuelle.
+ * Lié au catalogue (food_id snapshot sinon rapprochement par libellé) → bon rayon + fusion.
+ */
+export async function addProductToListAction(input: {
+  label: string;
+  foodId: string | null;
+  quantity: number | null;
+  unit: string | null;
+}): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  const label = input.label.trim();
+  if (!label) return;
+  const foodId = input.foodId ?? (await findCatalogFoodIdByLabel(supabase, label));
+  await supabase.from('shopping_manual_item').insert({
+    household_id: householdId,
+    label,
+    food_id: foodId,
+    quantity: input.quantity,
+    unit: input.unit || null,
+  });
+  revalidatePath('/courses');
 }

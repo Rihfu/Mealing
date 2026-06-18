@@ -430,14 +430,15 @@ function finalizeQty(acc: QtyAcc): { quantity?: number; unit?: string } {
  */
 export async function checkoutPurchasedToStock(
   db: DB,
-  params: { householdId: string; from: string; to: string },
+  params: { householdId: string; from: string; to: string; prices?: Record<string, number> },
 ): Promise<{ added: number }> {
   const lines = (await generateShoppingList(db, params)).filter((l) => l.checked);
   if (lines.length === 0) return { added: 0 };
 
   // Historique des courses : on archive un relevé daté de ce qui part de la liste
   // (suivi des achats passés, sans lien avec le stock — cf. shopping-history).
-  await recordShoppingTrip(db, params.householdId, lines);
+  // Les prix éventuels saisis au checkout sont indexés par clé de ligne.
+  await recordShoppingTrip(db, params.householdId, lines, params.prices);
 
   const stock = (unwrap(
     await db

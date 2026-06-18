@@ -39,11 +39,12 @@ export async function toggleCheckAction(formData: FormData): Promise<void> {
   revalidatePath('/courses');
 }
 
-/** « J'ai fait mes courses » : les articles cochés entrent dans le stock (chantier E). */
-export async function checkoutToStockAction(): Promise<void> {
+/** « J'ai fait mes courses » : les articles cochés entrent dans le stock (chantier E).
+ *  `prices` (optionnel) = prix saisis au checkout, par clé de ligne → archivés au relevé. */
+export async function checkoutToStockAction(prices?: Record<string, number>): Promise<void> {
   const { supabase, householdId } = await requireHousehold();
   const { from, to } = await getShoppingWindow(supabase, householdId);
-  await checkoutPurchasedToStock(supabase, { householdId, from, to });
+  await checkoutPurchasedToStock(supabase, { householdId, from, to, prices });
   revalidatePath('/courses');
   revalidatePath('/stock');
 }

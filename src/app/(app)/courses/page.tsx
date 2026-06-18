@@ -184,6 +184,7 @@ export default async function CoursesPage() {
                 <PurchaseCheckout
                   fullWidth
                   items={done.map((l) => ({
+                    key: l.key,
                     name: l.name,
                     qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
                     category: categoryLabel(l.category),
