@@ -260,3 +260,6 @@ Règle le double agacement des imports USDA/OFF (noms verbeux + marques ; aucun 
 - **Refactor** : groupement par rayon extrait dans `src/app/(app)/courses/rayons.ts` (`catView`, `groupByRayon`), partagé par `page.tsx` et le mode magasin.
 - **Finition** : la modale « Ranger » avait ses coins **arrondis à gauche mais carrés à droite** car la barre de défilement s'appliquait à la carte arrondie ; corrigé en scrollant un **wrapper intérieur** (la carte extérieure `overflow-hidden rounded-2xl` clippe les coins).
 - **Vérifié en direct** : mode magasin (coche → barré + progression 1/6 + CTA collant), modale « Ranger » coins OK, aucune erreur console.
+
+### Finition autocomplétion : « Ajouter mon texte » — 2026-06-18
+Bug UX signalé : en tapant un article **hors catalogue** (ex. « Vin de cuisine »), la liste déroulante (suggestions externes) recouvrait le bouton « Ajouter à la liste » → impossible de garder son texte et valider. Corrigé dans `add-article.tsx` : une option **« ＋ Ajouter « \<texte\> » »** apparaît **en tête** du menu dès 2 caractères (avant la section « Suggestions »), et soumet le libellé libre tel quel (`requestSubmit`). Le menu s'ouvre dès la saisie (même sans résultat). Vérifié en direct : « Vin de cuisine » ajouté tel quel → « Autres », bouton « Ranger » dispo.
