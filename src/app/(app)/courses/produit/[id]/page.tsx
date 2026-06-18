@@ -1,16 +1,11 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { computeProductStats, getFoodNutrition, getConservationForFood } from '@/lib/core';
+import { computeProductStats, getFoodNutrition } from '@/lib/core';
 import { categoryDef, categoryLabel, ProductIcon } from '@/lib/product-assets';
-import { NutritionSection, TipsSection } from './sections';
+import { NutritionSection, TipsSection, ConservationSection } from './sections';
 
 const eur = (n: number) => `${n.toFixed(2).replace('.', ',')} €`;
-const STORAGE_LABEL: Record<string, string> = {
-  placard: 'Placard',
-  frigo: 'Réfrigérateur',
-  congelateur: 'Congélateur',
-};
 const DATE_FMT = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' });
 const fmtDate = (iso: string) => DATE_FMT.format(new Date(iso));
 
@@ -74,12 +69,7 @@ export default async function ProduitPage({ params }: { params: Promise<{ id: st
   const product = await computeProductStats(supabase, householdId, id);
   if (!product) notFound();
 
-  const slug = product.iconSlug?.startsWith('cat:') ? product.iconSlug.slice(4) : null;
-  const [nutrition, conservation] = await Promise.all([
-    getFoodNutrition(supabase, id),
-    getConservationForFood(supabase, { name: product.name, slug }),
-  ]);
-
+  const nutrition = await getFoodNutrition(supabase, id);
   const def = categoryDef(product.category);
   const prov = product.provenance;
 
@@ -157,26 +147,10 @@ export default async function ProduitPage({ params }: { params: Promise<{ id: st
         <NutritionSection foodId={id} initial={nutrition} />
       </Card>
 
-      {/* Conservation par lieu de stockage (normes FR, indicatif) */}
-      {conservation && (
-        <Card title="Conservation" hint={`repère « ${conservation.category} »`}>
-          <ul className="divide-y divide-line">
-            {conservation.options.map((o) => (
-              <li key={o.storage} className="py-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-display text-sm font-semibold">{STORAGE_LABEL[o.storage] ?? o.storage}</span>
-                  <span className="ml-auto text-sm text-ink-soft">
-                    {o.unopenedDays != null && <span>fermé&nbsp;<b className="text-ink">~{o.unopenedDays} j</b></span>}
-                    {o.openedDays != null && <span> · ouvert&nbsp;<b className="text-ink">~{o.openedDays} j</b></span>}
-                  </span>
-                </div>
-                {o.note && <p className="mt-0.5 text-xs text-ink-soft">{o.note}</p>}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 text-xs text-ink-soft">Durées indicatives (conservation classique en France) — la gestion fine se fait dans le Stock.</p>
-        </Card>
-      )}
+      {/* Conservation par lieu de stockage (estimation IA, usages FR, indicatif) */}
+      <Card title="Conservation" hint="par lieu de stockage">
+        <ConservationSection foodId={id} />
+      </Card>
 
       {/* Conseils IA (à la demande) */}
       <Card title="Conseils" hint="indicatifs">

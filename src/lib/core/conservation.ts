@@ -1,7 +1,6 @@
 import type { DB } from './types';
 import { unwrap } from './types';
 import { isoDate } from '@/lib/dates';
-import { mapToConservationCategory } from '@/lib/food-conservation';
 
 export interface StockExpiry {
   id: string;
@@ -101,41 +100,4 @@ export async function getStockWithExpiry(
   });
 
   return result;
-}
-
-/** Conservation par condition de stockage (normes FR, indicatif). */
-export interface ConservationOption {
-  storage: string; // 'placard' | 'frigo' | 'congelateur'
-  unopenedDays: number | null;
-  openedDays: number | null;
-  note: string | null;
-}
-
-export interface FoodConservation {
-  category: string; // catégorie FoodKeeper retenue (via le pont nom/slug)
-  options: ConservationOption[]; // par lieu de stockage, triées par pertinence
-}
-
-/**
- * Conservation d'un aliment, PAR LIEU DE STOCKAGE (placard / frigo / congélateur),
- * curée pour la France (table conservation_guideline). Null si non mappable.
- */
-export async function getConservationForFood(
-  db: DB,
-  food: { name: string; slug?: string | null },
-): Promise<FoodConservation | null> {
-  const category = mapToConservationCategory(food.name, food.slug);
-  if (!category) return null;
-  const rows = (unwrap(
-    await db
-      .from('conservation_guideline')
-      .select('storage, unopened_days, opened_days, note, position')
-      .eq('food_category', category)
-      .order('position', { ascending: true }),
-  ) ?? []) as Array<{ storage: string; unopened_days: number | null; opened_days: number | null; note: string | null; position: number }>;
-  if (rows.length === 0) return null;
-  return {
-    category,
-    options: rows.map((r) => ({ storage: r.storage, unopenedDays: r.unopened_days, openedDays: r.opened_days, note: r.note })),
-  };
 }

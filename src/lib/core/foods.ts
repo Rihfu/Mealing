@@ -319,11 +319,36 @@ export async function getFoodNutrition(db: DB, foodId: string): Promise<FoodNutr
 export async function fetchAndStoreNutrition(db: DB, foodId: string): Promise<number> {
   const { data: food } = await db.from('food').select('id, name').eq('id', foodId).maybeSingle();
   if (!food) return 0;
-  const summaries = await searchAllSources(food.name, { limit: 1 });
-  if (summaries.length === 0) return 0;
-  const s = summaries[0];
-  const detail = await getNutritionProvider(s.source).getByExternalId(s.externalId);
-  if (!detail || detail.nutrients.length === 0) return 0;
+
+  // Les bases fournisseurs (USDA surtout) sont anglophones : le nom FR générique
+  // ne matche pas. On traduit le terme de recherche (l'IA ne fournit QUE le mot-clé ;
+  // les valeurs viennent du fournisseur, garde-fou n°3). Repli sur le nom FR.
+  let englishTerm = '';
+  try {
+    const { toEnglishFoodTerm } = await import('@/lib/ai/translate-food');
+    englishTerm = await toEnglishFoodTerm(food.name);
+  } catch {
+    englishTerm = '';
+  }
+
+  const queries = [englishTerm, food.name].filter((q): q is string => !!q.trim());
+  const seen = new Set<string>();
+  let detail: FoodDetail | null = null;
+  for (const q of queries) {
+    const summaries = await searchAllSources(q, { limit: 5 });
+    for (const s of summaries) {
+      const k = `${s.source}:${s.externalId}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const d = await getNutritionProvider(s.source).getByExternalId(s.externalId);
+      if (d && d.nutrients.length > 0) {
+        detail = d;
+        break;
+      }
+    }
+    if (detail) break;
+  }
+  if (!detail) return 0;
 
   const codes = detail.nutrients.map((n) => n.code);
   const types = (unwrap(

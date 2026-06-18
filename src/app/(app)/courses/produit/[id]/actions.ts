@@ -33,3 +33,12 @@ export async function getProductTipsAction(foodId: string): Promise<string[]> {
   const { getProductTips } = await import('@/lib/ai/product-tips');
   return getProductTips(food.name, food.category);
 }
+
+/** Estimation IA (indicative, par lieu de stockage) de la conservation — à la demande. */
+export async function getConservationAction(foodId: string) {
+  const { supabase } = await requireAuth();
+  const { data: food } = await supabase.from('food').select('name, category').eq('id', foodId).maybeSingle();
+  if (!food) return [];
+  const { getProductConservation } = await import('@/lib/ai/product-conservation');
+  return getProductConservation(food.name, food.category);
+}

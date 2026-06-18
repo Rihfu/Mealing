@@ -1,8 +1,59 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { fetchNutritionAction, getProductTipsAction } from './actions';
+import { fetchNutritionAction, getProductTipsAction, getConservationAction } from './actions';
 import type { FoodNutritionValue } from '@/lib/core';
+
+const STORAGE_LABEL: Record<string, string> = {
+  placard: 'Placard',
+  frigo: 'Réfrigérateur',
+  congelateur: 'Congélateur',
+};
+
+interface ConservationEstimate {
+  storage: 'placard' | 'frigo' | 'congelateur';
+  duration: string;
+  note?: string;
+}
+
+/** Conservation par lieu de stockage : estimation IA indicative, à la demande. */
+export function ConservationSection({ foodId }: { foodId: string }) {
+  const [options, setOptions] = useState<ConservationEstimate[] | null>(null);
+  const [pending, start] = useTransition();
+
+  function estimate() {
+    start(async () => setOptions((await getConservationAction(foodId)) as ConservationEstimate[]));
+  }
+
+  if (options == null) {
+    return (
+      <button type="button" onClick={estimate} disabled={pending} className="btn-secondary py-2 text-sm disabled:opacity-60">
+        {pending ? 'Estimation…' : '🧊 Estimer la conservation'}
+      </button>
+    );
+  }
+  if (options.length === 0) {
+    return <p className="text-sm text-ink-soft">Pas d’estimation disponible pour cet aliment.</p>;
+  }
+  return (
+    <>
+      <ul className="divide-y divide-line">
+        {options.map((o) => (
+          <li key={o.storage} className="py-2.5">
+            <div className="flex items-center gap-2">
+              <span className="font-display text-sm font-semibold">{STORAGE_LABEL[o.storage] ?? o.storage}</span>
+              <span className="ml-auto text-sm font-semibold text-ink">{o.duration}</span>
+            </div>
+            {o.note && <p className="mt-0.5 text-xs text-ink-soft">{o.note}</p>}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-xs italic text-ink-soft">
+        Repères indicatifs (usages FR, estimés automatiquement) — la gestion fine se fait dans le Stock.
+      </p>
+    </>
+  );
+}
 
 /** Nutrition : valeurs stockées si dispo, sinon bouton de récupération USDA/OFF. */
 export function NutritionSection({ foodId, initial }: { foodId: string; initial: FoodNutritionValue[] | null }) {
