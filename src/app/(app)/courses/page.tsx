@@ -13,6 +13,7 @@ import { catView, groupByRayon } from './rayons';
 import { AddArticle } from './add-article';
 import { PurchaseCheckout } from './purchase-checkout';
 import { RangerButton, ManageAislesButton } from './category-controls';
+import { ShoppingList, type SGroup } from './shopping-list';
 import {
   addRecurringAction,
   clearCheckedAction,
@@ -139,6 +140,27 @@ export default async function CoursesPage() {
   }));
 
   const rayonGroups = groupByRayon(active, customCats);
+  // Données sérialisables pour la liste interactive (client) : coche animée + DnD.
+  const activeGroups: SGroup[] = rayonGroups.map((g) => ({
+    key: g.key,
+    label: g.view?.label ?? 'Autres',
+    tint: g.view?.tint ?? 'var(--color-line)',
+    ink: g.view?.ink ?? 'var(--color-ink-soft)',
+    iconSlug: g.view?.isCustom ? (g.view.iconSlug ?? null) : null,
+    items: g.items.map((l) => ({
+      key: l.key,
+      name: l.name,
+      qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
+      source: l.source,
+      manualId: l.manualId ?? null,
+      foodId: l.foodId ?? null,
+      category: l.category ?? null,
+      iconSlug: l.iconSlug ?? null,
+      checked: l.checked,
+      alreadyStocked: !!l.alreadyStocked,
+      stockedLabel: l.stockedLabel ?? null,
+    })),
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -208,36 +230,18 @@ export default async function CoursesPage() {
               )}
             </div>
 
+            <div className="mb-2">
+              <ManageAislesButton customCategories={customCats} />
+            </div>
+
             {active.length === 0 ? (
               <p className="py-6 text-center text-sm text-ink-soft">
                 Rien à acheter pour l’instant. Ta liste se remplit toute seule dès que tu planifies des repas ou
                 qu’un essentiel vient à manquer.
               </p>
             ) : (
-              rayonGroups.map(({ key, view, items }) => (
-                <details key={key} open className="border-t border-line first:border-t-0">
-                  <summary className="flex cursor-pointer list-none items-center gap-2 py-2 font-display text-sm font-semibold">
-                    <span
-                      className="flex h-5 w-5 items-center justify-center rounded-md text-[10px]"
-                      style={{ background: view?.tint ?? 'var(--color-line)', color: view?.ink ?? 'var(--color-ink-soft)' }}
-                    >
-                      {view?.isCustom && view.iconSlug ? <ProductIcon slug={view.iconSlug} size={12} /> : '●'}
-                    </span>
-                    <span className="flex-1">{view?.label ?? 'Autres'}</span>
-                    <span className="text-xs font-normal text-ink-soft">{items.length}</span>
-                  </summary>
-                  <ul className="divide-y divide-line pl-1">
-                    {items.map((l) => (
-                      <LineRow key={l.key + l.source} line={l} customCats={customCats} />
-                    ))}
-                  </ul>
-                </details>
-              ))
+              <ShoppingList groups={activeGroups} customCategories={customCats} />
             )}
-
-            <div className="mt-3 border-t border-line pt-3">
-              <ManageAislesButton customCategories={customCats} />
-            </div>
           </section>
 
           {done.length > 0 && (
