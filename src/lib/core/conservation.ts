@@ -4,6 +4,7 @@ import { isoDate } from '@/lib/dates';
 
 export interface StockExpiry {
   id: string;
+  foodId: string | null; // aliment de catalogue lié (→ fiche produit), si présent
   name: string;
   opened: boolean;
   category: string | null;
@@ -53,7 +54,7 @@ export async function getStockWithExpiry(
     await db
       .from('stock')
       .select(
-        'id, label, date_ouverture, created_at, food:food_id(name), conservation_rule:conservation_rule_id(food_category, unopened_days, opened_days)',
+        'id, label, date_ouverture, created_at, food_id, food:food_id(name), conservation_rule:conservation_rule_id(food_category, unopened_days, opened_days)',
       )
       .eq('household_id', householdId),
   ) ?? []) as Array<{
@@ -61,6 +62,7 @@ export async function getStockWithExpiry(
     label: string | null;
     date_ouverture: string | null;
     created_at: string;
+    food_id: string | null;
     food: { name: string } | { name: string }[] | null;
     conservation_rule: Rule | Rule[] | null;
   }>;
@@ -83,6 +85,7 @@ export async function getStockWithExpiry(
 
     return {
       id: r.id,
+      foodId: r.food_id,
       name: food?.name ?? r.label ?? '(article)',
       opened,
       category: rule?.food_category ?? null,

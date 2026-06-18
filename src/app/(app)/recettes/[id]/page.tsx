@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
 import { computeRecipeNutrition } from '@/lib/core';
+import { FoodLink } from '@/components/food-link';
 import { AddMissingToShopping } from './add-missing-to-shopping';
 
 export default async function RecetteDetailPage({
@@ -22,7 +23,7 @@ export default async function RecetteDetailPage({
 
   const { data: ingredients } = await supabase
     .from('recipe_ingredient')
-    .select('id, free_text, quantity, unit, food:food_id(name)')
+    .select('id, free_text, quantity, unit, food_id, food:food_id(name)')
     .eq('recipe_id', id)
     .order('position', { ascending: true });
 
@@ -55,7 +56,9 @@ export default async function RecetteDetailPage({
                 const food = Array.isArray(ing.food) ? ing.food[0] : ing.food;
                 return (
                   <li key={ing.id} className="flex items-center justify-between gap-4 border-b border-line py-3 last:border-b-0">
-                    <span className="text-sm font-medium">{food?.name ?? ing.free_text}</span>
+                    <FoodLink foodId={ing.food_id} from={`/recettes/${id}`} className="text-sm font-medium">
+                      {food?.name ?? ing.free_text}
+                    </FoodLink>
                     <span className="whitespace-nowrap text-sm font-bold">
                       {ing.quantity ?? ''} {ing.unit ?? ''}
                     </span>

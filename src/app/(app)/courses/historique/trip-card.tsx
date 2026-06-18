@@ -11,6 +11,7 @@ import {
   type ProvenanceKey,
 } from '@/lib/product-assets';
 import { UNIT_OPTIONS } from '@/lib/units';
+import { FoodLink } from '@/components/food-link';
 import {
   toggleTripFavoriteAction,
   renameTripAction,
@@ -27,6 +28,7 @@ export interface HItem {
   unit: string | null;
   price: number | null;
   categoryKey: string | null;
+  foodId: string | null;
   iconSlug: string | null;
   source: string | null;
 }
@@ -145,7 +147,7 @@ function ItemRow({ item, editing }: { item: HItem; editing: boolean }) {
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sage-tint text-sage-deep">
         <ProductIcon slug={item.iconSlug} size={18} />
       </span>
-      <span className="text-sm">{item.label}</span>
+      <FoodLink foodId={item.foodId} from="/courses/historique" className="text-sm">{item.label}</FoodLink>
       <span className="ml-auto flex items-center gap-2.5">
         {prov && <ProvenanceBadge kind={prov} />}
         {editing && editingQty ? (

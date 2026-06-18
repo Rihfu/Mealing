@@ -79,12 +79,26 @@ export default async function ProduitPage({
   const def = categoryDef(product.category);
   const prov = product.provenance;
 
-  // Retour vers la page d'origine (où on a cliqué), avec un repère pour la mettre
-  // en valeur (?viewed=<foodId>). Repli sur les Statistiques si l'origine est inconnue.
+  // Retour vers la page d'origine (où on a cliqué). On n'accepte qu'un chemin interne
+  // (sécurité : pas d'open-redirect via «//host»). Le repère ?viewed=<foodId>
+  // (surbrillance au retour) n'est utilisé que par la liste de courses. Repli sur les
+  // Statistiques si l'origine est inconnue.
   const sp = await searchParams;
-  const from = typeof sp.from === 'string' && sp.from.startsWith('/courses') ? sp.from : null;
-  const backHref = from ? `${from}?viewed=${id}` : '/courses/historique/stats';
-  const backLabel = from === '/courses' ? 'Liste de courses' : 'Statistiques';
+  const rawFrom = typeof sp.from === 'string' ? sp.from : '';
+  const from = /^\/(?!\/)/.test(rawFrom) ? rawFrom : null;
+  // Libellé du bouton retour selon l'origine (du plus spécifique au plus général).
+  const BACK_LABELS: ReadonlyArray<readonly [string, string]> = [
+    ['/courses/historique/stats', 'Statistiques'],
+    ['/courses/historique', 'Historique'],
+    ['/courses/magasin', 'En magasin'],
+    ['/courses', 'Liste de courses'],
+    ['/stock', 'Stock'],
+    ['/recettes', 'Recette'],
+    ['/planning', 'Planning'],
+    ['/nutrition', 'Nutrition'],
+  ];
+  const backLabel = from ? (BACK_LABELS.find(([p]) => from.startsWith(p))?.[1] ?? 'Retour') : 'Statistiques';
+  const backHref = from ? (from === '/courses' ? `${from}?viewed=${id}` : from) : '/courses/historique/stats';
 
   return (
     <FicheTransition backHref={backHref}>

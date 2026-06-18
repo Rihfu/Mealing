@@ -1,5 +1,6 @@
 import { getAuthContext } from '@/lib/auth';
 import { getStockWithExpiry, type StockExpiry } from '@/lib/core';
+import { FoodLink } from '@/components/food-link';
 import {
   addStockAction,
   decrementStockAction,
@@ -16,6 +17,7 @@ interface StockRow {
   unit: string | null;
   present: boolean;
   conservation_rule_id: string | null;
+  food_id: string | null;
   food: { name: string } | { name: string }[] | null;
 }
 
@@ -39,7 +41,7 @@ export default async function StockPage() {
   const [{ data: stock }, { data: foods }, { data: rules }, expiries] = await Promise.all([
     supabase
       .from('stock')
-      .select('id, label, tracking_mode, quantity, unit, present, conservation_rule_id, food:food_id(name)')
+      .select('id, label, tracking_mode, quantity, unit, present, conservation_rule_id, food_id, food:food_id(name)')
       .order('created_at', { ascending: false }),
     supabase.from('food').select('id, name').order('name', { ascending: true }).limit(500),
     supabase.from('conservation_rule').select('id, food_category').order('food_category'),
@@ -64,7 +66,7 @@ export default async function StockPage() {
                 {i > 0 && <div className="hidden h-px bg-clay/40" />}
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-sm font-medium">{e.name}</div>
+                    <FoodLink foodId={e.foodId} from="/stock" className="text-sm font-medium">{e.name}</FoodLink>
                     {e.category && <div className="text-xs text-ink-soft">{e.category}</div>}
                   </div>
                   {(e.daysRemaining as number) < 0 ? (
@@ -118,7 +120,9 @@ export default async function StockPage() {
                 {i > 0 && <div className="h-px bg-line" />}
                 <div className={`flex flex-wrap items-center gap-2.5 px-3.5 py-3 ${expired ? 'bg-red/5' : ''}`}>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{foodName(s.food) ?? s.label}</div>
+                    <FoodLink foodId={s.food_id} from="/stock" className="block truncate text-sm font-medium">
+                      {foodName(s.food) ?? s.label}
+                    </FoodLink>
                     <div className="text-xs text-sage-deep">{e?.category ?? (s.tracking_mode === 'presence' ? 'Suivi : présence' : 'Suivi : quantité')}</div>
                   </div>
 

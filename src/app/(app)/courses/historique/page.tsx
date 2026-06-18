@@ -46,6 +46,7 @@ export default async function HistoriquePage({
       unit: i.unit,
       price: i.price,
       categoryKey: i.categoryKey,
+      foodId: i.foodId,
       iconSlug: i.iconSlug,
       source: i.source,
     })),
