@@ -180,9 +180,13 @@ Vision transverse de l'utilisateur (juin 2026) : ajouter, **section par section*
 
 Principe : ces vues sont **dérivées** (lecture seule) des données déjà historisées ; garder les tables d'historique **extensibles** (principe n°8) pour les alimenter.
 
-### Historique des courses (en cours — juin 2026)
+### Historique des courses (FAIT — juin 2026)
 
-Demande utilisateur : à chaque « J'ai fait mes courses » validé, **enregistrer un relevé daté** des articles achetés (libellé + quantité), consultable dans une **interface d'historique** (liste par date, dépliable pour le détail). **Pas de lien au stock** (le stock reste géré dans sa section) — pur suivi des achats passés. Base extensible pour les futures stats Courses (ci-dessus). Voir `docs/courses-ux-refonte.md` pour le détail de conception une fois implémenté.
+À chaque « J'ai fait mes courses » validé, un **relevé daté** des articles achetés est archivé, consultable dans **`/courses/historique`** (liste par date, favoris en tête, 5/page, dépliable). **Pas de lien au stock** — pur suivi. Base extensible pour les futures stats Courses (ci-dessus).
+- **Migration `0014_shopping_history`** : `shopping_trip` + `shopping_trip_item` (snapshot immuable), RLS foyer. **Dernière migration en base = 0014.**
+- **Backend** : `src/lib/core/shopping-history.ts` (`recordShoppingTrip` branché dans `checkoutPurchasedToStock` ; `listShoppingTrips`, `purgeOldShoppingTrips`, `setTripFavorite`, `renameTrip`, `deleteTrip`, `updateTripItem`, `deleteTripItem`, `reconductTripItems`). Couverture stock factorisée dans `loadStockCoverage` (shopping.ts).
+- **UI** : `src/app/(app)/courses/historique/` (`page.tsx`, `trip-card.tsx`, `actions.ts`) + lien « Historique » dans l'en-tête Courses. Reconduction = modale de sélection cochable → liste actuelle.
+- Détail complet : `docs/courses-ux-refonte.md` (§ « Historique des courses »).
 
 ---
 

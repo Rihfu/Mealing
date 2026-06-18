@@ -2,6 +2,7 @@ import type { DB } from './types';
 import { unwrap } from './types';
 import { loadCatalogIndex, matchCatalog } from './foods';
 import { loadFoodPrefs, setFoodPref } from './categories';
+import { recordShoppingTrip } from './shopping-history';
 import { type Quantity, type Dim, toBase, fromBase, normalizeUnit } from '@/lib/units';
 import { normalizeLabel } from '@/lib/text';
 import { addDays, isoDate } from '@/lib/dates';
@@ -433,6 +434,10 @@ export async function checkoutPurchasedToStock(
 ): Promise<{ added: number }> {
   const lines = (await generateShoppingList(db, params)).filter((l) => l.checked);
   if (lines.length === 0) return { added: 0 };
+
+  // Historique des courses : on archive un relevé daté de ce qui part de la liste
+  // (suivi des achats passés, sans lien avec le stock — cf. shopping-history).
+  await recordShoppingTrip(db, params.householdId, lines);
 
   const stock = (unwrap(
     await db
