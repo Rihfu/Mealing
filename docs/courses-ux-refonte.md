@@ -351,3 +351,13 @@ Précédé d'une **analyse marché** (Listonic budget/prix, AnyList favoris/rece
 - **Gestion** : composant réutilisable `essentials-manager.tsx` (puces + désépinglage ×, `removeEssentialAction`) affiché **sur la page stats** (carte « Mes essentiels ») **et** en **aside de la liste de courses** (« Gérer » → stats). Core : `listRecurringItems` (shopping.ts).
 - **Les 3 provenances** (repas / essentiel / ajouté) restent, mais « essentiel » est enfin **concret et sans saisie à froid**.
 - **Vérifié en direct** : ★ Toujours (Lait) → exclu de « À racheter bientôt » + apparaît en essentiel dans la liste (★ plein, badge) + chip « Mes essentiels » ; épingle ☆ (Beurre) → idem ; × → retrait. Données de test nettoyées. Pas de migration.
+
+### Fiche produit — 2026-06-18
+Page `/courses/produit/[foodId]` : « choisir un aliment et obtenir des infos dessus ». Précédée d'une vérif des données (important — garde-fou n°3 : on n'invente rien).
+- **Évolution du prix** (graphe SVG) + dernier/moyen/min/max — depuis l'historique des prix payés. `computeProductStats` (`core/shopping-product.ts`).
+- **Habitudes** : nb d'achats, fréquence (intervalle médian), dernier achat, quantité type, provenance (repas/essentiel/ajouté) pour CE produit.
+- **Nutrition** : **à la demande** — le catalogue n'a aucune nutrition stockée (0/340), donc bouton « Récupérer la nutrition (USDA/OFF) » → `fetchAndStoreNutrition` (cherche par nom chez le fournisseur, persiste `nutrient_value`, affiche). **Jamais l'IA** (garde-fou n°3). `getFoodNutrition` lit le stocké.
+- **Conservation par lieu de stockage, normes FR** : pont `src/lib/food-conservation.ts` (`mapToConservationCategory` : nom/slug → catégorie) + table **`conservation_guideline`** (migration `0016` ; catégorie × stockage placard/frigo/congélateur × fermé/ouvert + note, curée FR). `getConservationForFood` renvoie les options par stockage. Ex. **Œufs** : Placard ~28 j (« hors frigo en France »), Réfrigérateur ~35 j. Durées **indicatives**, curées (jamais l'IA). `conservation_rule` (0007) conservée pour `getStockWithExpiry`.
+- **Conseils** : **à la demande**, IA (`src/lib/ai/product-tips.ts`), **indicatifs** (qualité/saison/sourcing/anti-gaspi), étiquetés ; jamais de chiffres nutritionnels ni de durées.
+- **Entrées** : produits cliquables dans les stats (Tes incontournables, À racheter bientôt) + **picker** de recherche (`product-picker.tsx` → `resolveCatalogFoodAction`, import paresseux d'un externe). Actions : `produit/[id]/actions.ts`. **Pas de migration.**
+- **Vérifié en direct** (Lait, 4 prix) : graphe d'évolution, habitudes, nutrition récupérée d'USDA/OFF + persistée, conservation 7 j/4 j, conseils IA indicatifs. Données de test nettoyées.

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { ProductIcon } from '@/lib/product-assets';
 import { addProductToListAction } from '../actions';
 import { promoteToEssentialAction } from '../../actions';
@@ -60,7 +61,13 @@ export function DueSoon({ items }: { items: DueItem[] }) {
               <ProductIcon slug={d.iconSlug} size={20} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold">{d.label}</span>
+              {d.foodId ? (
+                <Link href={`/courses/produit/${d.foodId}`} className="block truncate text-sm font-semibold hover:text-green-strong hover:underline">
+                  {d.label}
+                </Link>
+              ) : (
+                <span className="block truncate text-sm font-semibold">{d.label}</span>
+              )}
               <span className="block text-xs text-ink-soft">{dueLabel(d)}</span>
             </span>
             {isPromoted ? (

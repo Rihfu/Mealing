@@ -73,6 +73,20 @@ export async function searchCatalogAction(query: string): Promise<FoodSuggestion
   return searchFoodCatalog(supabase, query, { limit: 8 });
 }
 
+/** Résout un aliment vers un food_id (import paresseux d'un externe) pour ouvrir sa fiche. */
+export async function resolveCatalogFoodAction(input: {
+  foodId: string | null;
+  source: string;
+  externalId: string | null;
+}): Promise<string | null> {
+  const { supabase } = await requireHousehold();
+  if (input.foodId) return input.foodId;
+  if ((input.source === 'usda' || input.source === 'openfoodfacts') && input.externalId) {
+    return importFoodByRef(supabase, input.source as NutritionSource, input.externalId);
+  }
+  return null;
+}
+
 export async function addManualAction(formData: FormData): Promise<void> {
   const { supabase, householdId } = await requireHousehold();
   const label = String(formData.get('label') ?? '').trim();

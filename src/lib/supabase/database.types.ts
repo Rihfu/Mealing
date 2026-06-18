@@ -43,6 +43,36 @@ export type Database = {
         }
         Relationships: []
       }
+      conservation_guideline: {
+        Row: {
+          food_category: string
+          id: string
+          note: string | null
+          opened_days: number | null
+          position: number
+          storage: string
+          unopened_days: number | null
+        }
+        Insert: {
+          food_category: string
+          id?: string
+          note?: string | null
+          opened_days?: number | null
+          position?: number
+          storage: string
+          unopened_days?: number | null
+        }
+        Update: {
+          food_category?: string
+          id?: string
+          note?: string | null
+          opened_days?: number | null
+          position?: number
+          storage?: string
+          unopened_days?: number | null
+        }
+        Relationships: []
+      }
       conversation_ia: {
         Row: {
           content: string

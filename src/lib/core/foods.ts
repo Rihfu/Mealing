@@ -279,3 +279,62 @@ export async function importFoodByRef(
   if (!detail) return null;
   return importFood(db, detail);
 }
+
+/** Une valeur nutritionnelle lue pour un aliment (toujours d'un fournisseur, n°3). */
+export interface FoodNutritionValue {
+  code: string;
+  name: string;
+  unit: string;
+  amount: number;
+  isBase: boolean;
+}
+
+/** Valeurs nutritionnelles STOCKÉES d'un aliment (null si aucune). Lecture seule. */
+export async function getFoodNutrition(db: DB, foodId: string): Promise<FoodNutritionValue[] | null> {
+  const rows = (unwrap(
+    await db
+      .from('nutrient_value')
+      .select('amount, nutrient_type:nutrient_type_id(code, name, unit, is_base, category)')
+      .eq('food_id', foodId),
+  ) ?? []) as Array<{
+    amount: number;
+    nutrient_type: { code: string; name: string; unit: string; is_base: boolean } | { code: string; name: string; unit: string; is_base: boolean }[] | null;
+  }>;
+  if (rows.length === 0) return null;
+  const values = rows
+    .map((r) => {
+      const t = Array.isArray(r.nutrient_type) ? r.nutrient_type[0] : r.nutrient_type;
+      return t ? { code: t.code, name: t.name, unit: t.unit, amount: r.amount, isBase: t.is_base } : null;
+    })
+    .filter((v): v is FoodNutritionValue => v != null)
+    .sort((a, b) => (a.isBase === b.isBase ? 0 : a.isBase ? -1 : 1));
+  return values.length > 0 ? values : null;
+}
+
+/**
+ * Récupère la nutrition d'un aliment auprès du fournisseur (USDA/OFF) par son nom,
+ * et la PERSISTE sur cet aliment (`nutrient_value`) pour réutilisation. Garde-fou
+ * n°3 : valeurs du fournisseur, jamais de l'IA. @returns le nb de nutriments stockés.
+ */
+export async function fetchAndStoreNutrition(db: DB, foodId: string): Promise<number> {
+  const { data: food } = await db.from('food').select('id, name').eq('id', foodId).maybeSingle();
+  if (!food) return 0;
+  const summaries = await searchAllSources(food.name, { limit: 1 });
+  if (summaries.length === 0) return 0;
+  const s = summaries[0];
+  const detail = await getNutritionProvider(s.source).getByExternalId(s.externalId);
+  if (!detail || detail.nutrients.length === 0) return 0;
+
+  const codes = detail.nutrients.map((n) => n.code);
+  const types = (unwrap(
+    await db.from('nutrient_type').select('id, code').in('code', codes),
+  ) ?? []) as Array<{ id: string; code: string }>;
+  const codeToId = new Map(types.map((t) => [t.code, t.id]));
+  const rows = detail.nutrients
+    .filter((n) => codeToId.has(n.code))
+    .map((n) => ({ food_id: foodId, nutrient_type_id: codeToId.get(n.code) as string, amount: n.amount }));
+  if (rows.length === 0) return 0;
+  const { error } = await db.from('nutrient_value').upsert(rows, { onConflict: 'food_id,nutrient_type_id' });
+  if (error) throw new Error(error.message);
+  return rows.length;
+}

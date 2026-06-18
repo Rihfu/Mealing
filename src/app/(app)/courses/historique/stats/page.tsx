@@ -6,6 +6,7 @@ import { categoryDef, categoryLabel, ProductIcon } from '@/lib/product-assets';
 import { HistoriqueTabs } from '../tabs';
 import { DueSoon, type DueItem } from './due-soon';
 import { EssentialsManager } from '../../essentials-manager';
+import { ProductPicker } from './product-picker';
 
 const eur = (n: number) => `${n.toFixed(2).replace('.', ',')} €`;
 const PROV = {
@@ -93,6 +94,7 @@ export default async function StatsPage() {
       <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight">Historique des courses</h1>
       <p className="font-hand mt-0.5 text-lg text-green-strong">tes habitudes d’achat, en un coup d’œil</p>
       <div className="mt-3"><HistoriqueTabs active="stats" /></div>
+      <div className="mt-3 max-w-sm"><ProductPicker /></div>
     </div>
   );
 
@@ -177,7 +179,13 @@ export default async function StatsPage() {
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sage-tint text-sage-deep">
               <ProductIcon slug={p.iconSlug} size={18} />
             </span>
-            <span className="flex-1 truncate text-sm">{p.label}</span>
+            {p.foodId ? (
+              <Link href={`/courses/produit/${p.foodId}`} className="flex-1 truncate text-sm font-medium text-ink hover:text-green-strong hover:underline">
+                {p.label}
+              </Link>
+            ) : (
+              <span className="flex-1 truncate text-sm">{p.label}</span>
+            )}
             {p.avgQuantity != null && <span className="text-xs text-ink-soft">~{p.avgQuantity} {p.unit ?? ''}</span>}
             <span className="w-20 text-right text-xs font-semibold text-ink-soft">{p.count}× acheté</span>
           </div>
