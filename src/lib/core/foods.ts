@@ -7,6 +7,7 @@ import {
 import type { DB } from './types';
 import { unwrap } from './types';
 import { normalizeLabel } from '@/lib/text';
+import { SYNONYM_TO_SLUG } from '@/lib/food-synonyms';
 
 /**
  * Importe (ou met à jour) un aliment issu d'un fournisseur nutritionnel dans la
@@ -188,21 +189,66 @@ export async function searchFoodCatalog(
   return suggestions;
 }
 
+/** Un aliment du catalogue curé, indexé pour le rapprochement par libellé. */
+export interface CatalogEntry {
+  id: string;
+  slug: string; // external_id sans le préfixe 'cat:'
+  name: string;
+  category: string | null; // clé de rayon stable
+}
+
+/** Index du catalogue curé pour rapprocher des libellés (chargé une fois). */
+export interface CatalogIndex {
+  byNorm: Map<string, CatalogEntry>; // normalizeLabel(name) → entrée
+  bySlug: Map<string, CatalogEntry>; // slug → entrée
+}
+
 /**
- * Rapproche un libellé libre d'un aliment du CATALOGUE curé (source 'manual',
- * external_id 'cat:%') par libellé normalisé (accents/casse/pluriel/œ neutralisés).
- * Donne une identité produit stable — donc un rayon et une icône — aux ajouts en
- * texte libre, sans que l'utilisateur ait à cliquer une suggestion. Conservateur :
- * uniquement sur correspondance exacte normalisée (pas de fuzzy → pas de mauvais lien).
+ * Charge le catalogue curé (source 'manual', external_id 'cat:%') et l'indexe par
+ * libellé normalisé et par slug. À appeler une fois puis réutiliser avec `matchCatalog`.
+ */
+export async function loadCatalogIndex(db: DB): Promise<CatalogIndex> {
+  const rows = (unwrap(
+    await db
+      .from('food')
+      .select('id, name, category, external_id')
+      .eq('source', 'manual')
+      .like('external_id', 'cat:%'),
+  ) ?? []) as Array<{ id: string; name: string; category: string | null; external_id: string | null }>;
+  const byNorm = new Map<string, CatalogEntry>();
+  const bySlug = new Map<string, CatalogEntry>();
+  for (const r of rows) {
+    const slug = (r.external_id ?? '').replace(/^cat:/, '');
+    const entry: CatalogEntry = { id: r.id, slug, name: r.name, category: r.category };
+    byNorm.set(normalizeLabel(r.name), entry);
+    if (slug) bySlug.set(slug, entry);
+  }
+  return { byNorm, bySlug };
+}
+
+/**
+ * Rapproche un libellé libre d'un aliment du catalogue : d'abord correspondance
+ * exacte normalisée (accents/casse/pluriel/œ neutralisés), puis table de synonymes
+ * (formulations courantes des recettes IA → slug canonique). Conservateur, pas de
+ * fuzzy → pas de mauvais lien. Donne rayon + icône aux libellés libres.
+ */
+export function matchCatalog(index: CatalogIndex, label: string): CatalogEntry | null {
+  const n = normalizeLabel(label);
+  if (!n) return null;
+  const direct = index.byNorm.get(n);
+  if (direct) return direct;
+  const slug = SYNONYM_TO_SLUG.get(n);
+  return (slug && index.bySlug.get(slug)) || null;
+}
+
+/**
+ * Rapproche un libellé libre du catalogue et renvoie l'id de l'aliment (identité
+ * produit stable pour les ajouts manuels). Voir `matchCatalog` pour la stratégie.
  * @returns l'id de l'aliment de catalogue correspondant, sinon null.
  */
 export async function findCatalogFoodIdByLabel(db: DB, label: string): Promise<string | null> {
-  const target = normalizeLabel(label);
-  if (!target) return null;
-  const rows = (unwrap(
-    await db.from('food').select('id, name').eq('source', 'manual').like('external_id', 'cat:%'),
-  ) ?? []) as Array<{ id: string; name: string }>;
-  return rows.find((r) => normalizeLabel(r.name) === target)?.id ?? null;
+  const index = await loadCatalogIndex(db);
+  return matchCatalog(index, label)?.id ?? null;
 }
 
 /**
