@@ -312,6 +312,31 @@ export async function getFoodNutrition(db: DB, foodId: string): Promise<FoodNutr
 }
 
 /**
+ * Garde-fou de plausibilité d'un candidat nutritionnel (pour écarter les mauvais
+ * matchs). Filet algorithmique (l'aberrant : rien en grammes ne dépasse la base
+ * ~100 g, ni la somme des macros) PUIS juge IA pour les incohérences subtiles
+ * (ex. des glucides dans du sel). L'IA juge seulement (oui/non), ne fournit aucune
+ * valeur (n°3) ; si indisponible (null) on accepte (le filet a écarté l'aberrant).
+ */
+async function isPlausibleNutrition(name: string, detail: FoodDetail): Promise<boolean> {
+  const base = detail.baseAmount || 100;
+  const grams = detail.nutrients.filter((n) => n.unit === 'g');
+  if (grams.some((n) => n.amount > base * 1.05)) return false;
+  const macros = detail.nutrients
+    .filter((n) => ['protein', 'fat', 'carbs'].includes(n.code) && n.unit === 'g')
+    .reduce((s, n) => s + n.amount, 0);
+  if (macros > base * 1.1) return false;
+
+  try {
+    const { isNutritionPlausible } = await import('@/lib/ai/validate-nutrition');
+    const verdict = await isNutritionPlausible(name, detail.nutrients);
+    return verdict !== false;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Récupère la nutrition d'un aliment auprès du fournisseur (USDA/OFF) par son nom,
  * et la PERSISTE sur cet aliment (`nutrient_value`) pour réutilisation. Garde-fou
  * n°3 : valeurs du fournisseur, jamais de l'IA. @returns le nb de nutriments stockés.
@@ -341,7 +366,8 @@ export async function fetchAndStoreNutrition(db: DB, foodId: string): Promise<nu
       if (seen.has(k)) continue;
       seen.add(k);
       const d = await getNutritionProvider(s.source).getByExternalId(s.externalId);
-      if (d && d.nutrients.length > 0) {
+      if (!d || d.nutrients.length === 0) continue;
+      if (await isPlausibleNutrition(food.name, d)) {
         detail = d;
         break;
       }
