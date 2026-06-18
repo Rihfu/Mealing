@@ -33,16 +33,30 @@ export async function importFood(db: DB, detail: FoodDetail): Promise<string> {
     const {
       data: { user },
     } = await db.auth.getUser();
+
+    // Aliment externe (USDA/OFF) : on simplifie l'appellation (nom générique FR,
+    // sans marque) et on lui attribue un rayon, par IA (best-effort). La NUTRITION
+    // reste celle du fournisseur — garde-fou n°3. Import dynamique pour ne pas
+    // coupler tout `core` à la couche IA ; tout échec retombe sur le nom brut.
+    let classified: { name: string; category: string | null } | null = null;
+    try {
+      const { classifyImportedFood } = await import('@/lib/ai/categorize-food');
+      classified = await classifyImportedFood(detail.name);
+    } catch {
+      classified = null;
+    }
+
     const inserted = unwrap(
       await db
         .from('food')
         .insert({
-          name: detail.name,
+          name: classified?.name ?? detail.name,
           source: detail.source,
           external_id: detail.externalId,
           barcode: detail.barcode ?? null,
           default_unit: detail.baseUnit,
           base_amount: detail.baseAmount,
+          category: classified?.category ?? null,
           created_by: user?.id ?? null,
         })
         .select('id')

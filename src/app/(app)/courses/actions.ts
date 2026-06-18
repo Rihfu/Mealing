@@ -100,9 +100,17 @@ export async function addManualAction(formData: FormData): Promise<void> {
     foodId = await findCatalogFoodIdByLabel(supabase, label);
   }
 
+  // Si l'article est lié à un aliment, on affiche son nom (générique FR / curé)
+  // plutôt que la saisie brute (ex. nom USDA verbeux) — l'app reste générale.
+  let displayLabel = label;
+  if (foodId) {
+    const { data: f } = await supabase.from('food').select('name').eq('id', foodId).maybeSingle();
+    if (f?.name) displayLabel = f.name;
+  }
+
   await supabase.from('shopping_manual_item').insert({
     household_id: householdId,
-    label,
+    label: displayLabel,
     food_id: foodId,
     quantity: num(formData.get('quantity')) ?? null,
     unit: String(formData.get('unit') ?? '') || null,
