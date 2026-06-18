@@ -356,15 +356,23 @@ export async function fetchAndStoreNutrition(db: DB, foodId: string): Promise<nu
     englishTerm = '';
   }
 
+  // Frugalité quota : on n'examine en détail (getByExternalId + juge) qu'un nombre
+  // limité de candidats — les fournisseurs classent par pertinence, le bon match est
+  // quasi toujours en tête. Le résultat plausible est ensuite mis en cache (ci-dessous).
+  const MAX_CANDIDATES = 4;
   const queries = [englishTerm, food.name].filter((q): q is string => !!q.trim());
   const seen = new Set<string>();
+  let examined = 0;
   let detail: FoodDetail | null = null;
   for (const q of queries) {
-    const summaries = await searchAllSources(q, { limit: 5 });
+    if (examined >= MAX_CANDIDATES) break;
+    const summaries = await searchAllSources(q, { limit: MAX_CANDIDATES });
     for (const s of summaries) {
+      if (examined >= MAX_CANDIDATES) break;
       const k = `${s.source}:${s.externalId}`;
       if (seen.has(k)) continue;
       seen.add(k);
+      examined++;
       const d = await getNutritionProvider(s.source).getByExternalId(s.externalId);
       if (!d || d.nutrients.length === 0) continue;
       if (await isPlausibleNutrition(food.name, d)) {
