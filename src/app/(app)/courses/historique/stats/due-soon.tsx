@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { ProductIcon } from '@/lib/product-assets';
 import { addProductToListAction } from '../actions';
+import { promoteToEssentialAction } from '../../actions';
 
 export interface DueItem {
   key: string;
@@ -23,17 +24,26 @@ function dueLabel(d: DueItem): string {
   return `${every} · d’ici ${d.dueInDays} j`;
 }
 
-/** Liste « À racheter bientôt » : chaque produit s'ajoute à la liste en un clic. */
+/**
+ * « À racheter bientôt » : chaque produit récurrent détecté peut être ajouté une
+ * fois (+ Ajouter) OU promu en essentiel permanent (★ Toujours → revient tout seul).
+ */
 export function DueSoon({ items }: { items: DueItem[] }) {
   const [added, setAdded] = useState<Set<string>>(new Set());
+  const [promoted, setPromoted] = useState<Set<string>>(new Set());
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [, start] = useTransition();
 
-  function add(d: DueItem) {
+  function run(d: DueItem, kind: 'add' | 'promote') {
     setPendingKey(d.key);
     start(async () => {
-      await addProductToListAction({ label: d.label, foodId: d.foodId, quantity: d.avgQuantity, unit: d.unit });
-      setAdded((s) => new Set(s).add(d.key));
+      if (kind === 'add') {
+        await addProductToListAction({ label: d.label, foodId: d.foodId, quantity: d.avgQuantity, unit: d.unit });
+        setAdded((s) => new Set(s).add(d.key));
+      } else {
+        await promoteToEssentialAction({ label: d.label, foodId: d.foodId, quantity: d.avgQuantity, unit: d.unit });
+        setPromoted((s) => new Set(s).add(d.key));
+      }
       setPendingKey(null);
     });
   }
@@ -41,7 +51,9 @@ export function DueSoon({ items }: { items: DueItem[] }) {
   return (
     <ul className="divide-y divide-line">
       {items.map((d) => {
-        const done = added.has(d.key);
+        const isAdded = added.has(d.key);
+        const isPromoted = promoted.has(d.key);
+        const busy = pendingKey === d.key;
         return (
           <li key={d.key} className="flex items-center gap-3 py-2.5">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sage-tint text-sage-deep">
@@ -51,16 +63,29 @@ export function DueSoon({ items }: { items: DueItem[] }) {
               <span className="block truncate text-sm font-semibold">{d.label}</span>
               <span className="block text-xs text-ink-soft">{dueLabel(d)}</span>
             </span>
-            <button
-              type="button"
-              onClick={() => add(d)}
-              disabled={done || pendingKey === d.key}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
-                done ? 'text-green-strong' : 'btn-secondary'
-              } disabled:opacity-60`}
-            >
-              {done ? '✓ Ajouté' : pendingKey === d.key ? '…' : '+ Ajouter'}
-            </button>
+            {isPromoted ? (
+              <span className="shrink-0 text-xs font-semibold text-green-strong">★ Essentiel</span>
+            ) : (
+              <span className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => run(d, 'promote')}
+                  disabled={busy}
+                  title="En faire un essentiel (reviendra tout seul)"
+                  className="rounded-full border border-line px-2.5 py-1.5 text-xs font-semibold text-ink-soft hover:border-amber-500 hover:text-amber-500 disabled:opacity-60"
+                >
+                  ★ Toujours
+                </button>
+                <button
+                  type="button"
+                  onClick={() => run(d, 'add')}
+                  disabled={busy || isAdded}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold ${isAdded ? 'text-green-strong' : 'btn-secondary'} disabled:opacity-60`}
+                >
+                  {isAdded ? '✓ Ajouté' : '+ Ajouter'}
+                </button>
+              </span>
+            )}
           </li>
         );
       })}

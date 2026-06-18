@@ -5,6 +5,7 @@ import { computeShoppingStats, purgeOldShoppingTrips, listHouseholdCategories } 
 import { categoryDef, categoryLabel, ProductIcon } from '@/lib/product-assets';
 import { HistoriqueTabs } from '../tabs';
 import { DueSoon, type DueItem } from './due-soon';
+import { EssentialsManager } from '../../essentials-manager';
 
 const eur = (n: number) => `${n.toFixed(2).replace('.', ',')} €`;
 const PROV = {
@@ -141,10 +142,15 @@ export default async function StatsPage() {
 
       {/* À racheter bientôt (actionnable) */}
       {dueItems.length > 0 && (
-        <Card title="À racheter bientôt" hint="ajoute en un clic">
+        <Card title="À racheter bientôt" hint="ajoute, ou « ★ Toujours » pour en faire un essentiel">
           <DueSoon items={dueItems} />
         </Card>
       )}
+
+      {/* Mes essentiels (produits récurrents) */}
+      <Card title="Mes essentiels" hint="reviennent tout seuls dans ta liste">
+        <EssentialsManager items={stats.essentials.map((e) => ({ id: e.id, label: e.label }))} />
+      </Card>
 
       {/* Dépenses (si prix saisis) */}
       {stats.hasPrices && (

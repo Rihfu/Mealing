@@ -519,6 +519,47 @@ export async function getShoppingWindow(
   return { from: isoDate(today), to: isoDate(addDays(today, days - 1)), days };
 }
 
+/** Un essentiel (produit récurrent) du foyer — affiché/géré dans « Mes essentiels ». */
+export interface EssentialItem {
+  id: string;
+  label: string; // nom affiché (aliment lié sinon libellé)
+  foodId: string | null;
+  quantity: number | null;
+  unit: string | null;
+}
+
+/** Liste les essentiels (produits récurrents) d'un foyer, nom résolu via le catalogue. */
+export async function listRecurringItems(db: DB, householdId: string): Promise<EssentialItem[]> {
+  const rows = (unwrap(
+    await db
+      .from('shopping_recurring_item')
+      .select('id, food_id, label, default_quantity, unit, food:food_id(name)')
+      .eq('household_id', householdId),
+  ) ?? []) as Array<{
+    id: string;
+    food_id: string | null;
+    label: string | null;
+    default_quantity: number | null;
+    unit: string | null;
+    food: { name: string } | { name: string }[] | null;
+  }>;
+  return rows.map((r) => {
+    const food = Array.isArray(r.food) ? r.food[0] : r.food;
+    return {
+      id: r.id,
+      label: food?.name ?? r.label ?? '(aliment)',
+      foodId: r.food_id,
+      quantity: r.default_quantity,
+      unit: r.unit,
+    };
+  });
+}
+
+/** Clé d'identité d'un essentiel (alignée sur les clés de stats/produits). */
+export function essentialKey(e: { foodId: string | null; label: string }): string {
+  return e.foodId ?? `l:${normalizeLabel(e.label)}`;
+}
+
 // Réconciliation des unités (besoins vs stock) : voir `src/lib/units.ts`,
 // source de vérité unique partagée avec l'UI de saisie.
 

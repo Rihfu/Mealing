@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { generateShoppingListAutoSorted, getShoppingWindow, listHouseholdCategories, type ShoppingLine } from '@/lib/core';
+import { generateShoppingListAutoSorted, getShoppingWindow, listHouseholdCategories, listRecurringItems, type ShoppingLine } from '@/lib/core';
 import { categoryLabel } from '@/lib/product-assets';
 import { groupByRayon } from './rayons';
 import { AddArticle } from './add-article';
 import { PurchaseCheckout } from './purchase-checkout';
 import { ManageAislesButton } from './category-controls';
+import { EssentialsManager } from './essentials-manager';
 import { ShoppingList, DoneList, type SGroup, type SLine } from './shopping-list';
 import { clearCheckedAction, setShoppingHorizonAction } from './actions';
 import { UndoToastHost } from './undo-toast';
@@ -47,9 +48,10 @@ export default async function CoursesPage() {
 
   const { from, to, days } = await getShoppingWindow(supabase, householdId);
 
-  const [lines, customCats, { data: stock }] = await Promise.all([
+  const [lines, customCats, essentials, { data: stock }] = await Promise.all([
     generateShoppingListAutoSorted(supabase, { householdId, from, to }),
     listHouseholdCategories(supabase, householdId),
+    listRecurringItems(supabase, householdId),
     supabase.from('stock').select('food_id, label, quantity, unit, present').eq('household_id', householdId),
   ]);
 
@@ -199,6 +201,17 @@ export default async function CoursesPage() {
           <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
             <h2 className="mb-3 font-display text-lg font-semibold">Ajouter un article</h2>
             <AddArticle onList={onListRefs} inStock={inStockRefs} />
+          </section>
+
+          <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <h2 className="font-display text-lg font-semibold">Mes essentiels</h2>
+              <Link href="/courses/historique/stats" className="text-xs font-semibold text-green-strong hover:underline">
+                Gérer
+              </Link>
+            </div>
+            <p className="mb-2 text-xs text-ink-soft">Tes basiques — ils reviennent tout seuls dans la liste.</p>
+            <EssentialsManager items={essentials.map((e) => ({ id: e.id, label: e.label }))} />
           </section>
         </aside>
       </div>

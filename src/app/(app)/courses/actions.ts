@@ -15,6 +15,7 @@ import {
   type FoodSuggestion,
 } from '@/lib/core';
 import type { NutritionSource } from '@/lib/providers/nutrition';
+import { normalizeLabel } from '@/lib/text';
 
 async function requireHousehold() {
   const { supabase, userId, profile } = await getAuthContext();
@@ -249,4 +250,49 @@ export async function recreateRecurringItem(item: RecurringSnapshot): Promise<vo
   const { supabase, householdId } = await requireHousehold();
   await supabase.from('shopping_recurring_item').insert({ household_id: householdId, ...item });
   revalidatePath('/courses');
+}
+
+/**
+ * Promeut un produit en ESSENTIEL (modèle hybride) : il reviendra tout seul dans la
+ * liste chaque cycle (badge « essentiel »). Anti-doublon par aliment / libellé normalisé.
+ * Appelé depuis « À racheter bientôt » et l'épingle d'une ligne de courses.
+ */
+export async function promoteToEssentialAction(input: {
+  label: string;
+  foodId: string | null;
+  quantity: number | null;
+  unit: string | null;
+}): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  const label = input.label.trim();
+  if (!label && !input.foodId) return;
+
+  const { data: existing } = await supabase
+    .from('shopping_recurring_item')
+    .select('id, food_id, label')
+    .eq('household_id', householdId);
+  const dup = (existing ?? []).some((r) =>
+    input.foodId
+      ? r.food_id === input.foodId
+      : !r.food_id && !!r.label && normalizeLabel(r.label) === normalizeLabel(label),
+  );
+  if (!dup) {
+    await supabase.from('shopping_recurring_item').insert({
+      household_id: householdId,
+      food_id: input.foodId,
+      label: label || null,
+      default_quantity: input.quantity,
+      unit: input.unit || null,
+    });
+  }
+  revalidatePath('/courses');
+  revalidatePath('/courses/historique');
+}
+
+/** Retire un essentiel (désépinglage depuis « Mes essentiels »). */
+export async function removeEssentialAction(id: string): Promise<void> {
+  const { supabase } = await requireHousehold();
+  if (id) await supabase.from('shopping_recurring_item').delete().eq('id', id);
+  revalidatePath('/courses');
+  revalidatePath('/courses/historique');
 }

@@ -341,3 +341,13 @@ Précédé d'une **analyse marché** (Listonic budget/prix, AnyList favoris/rece
 - **UI** : bascule **Historique / Statistiques** (`tabs.tsx`), page `/courses/historique/stats` (cartes + barres/sparkline SVG-CSS maison). **« À racheter bientôt »** actionnable (`due-soon.tsx` → `addProductToListAction`, ajout 1 clic à la liste, lié catalogue). Cold-start si < 2 relevés.
 - **Vérifié en direct** (4 relevés de test + prix) : cadence 1.8/sem, dépenses 39,20 € / panier 9,80 € / par rayon, « À racheter bientôt » (Lait en retard, Œufs aujourd'hui → +Ajouter OK), top produits, provenance 13/35/52%, évolution hebdo, one-shots. Données de test nettoyées.
 - **Suite** (CLAUDE.md) : équivalents Stock (nécessite un journal de mouvements) et Recettes.
+
+### Refonte « essentiel » — modèle hybride (auto-propose + 1 clic) — 2026-06-18
+**Problème** : le concept « essentiel » (produit récurrent) était **orphelin** — la table `shopping_recurring_item`, le badge `🔁 essentiel` et la part « essentiels » des stats existaient, mais **aucune UI ne créait d'essentiel** (le panneau « Mes essentiels » avait été retiré). L'utilisateur ne rencontrait jamais le moment de déclarer un essentiel ⇒ concept incompréhensible. De plus, « À racheter bientôt » (stats) **détecte déjà** les rachats fréquents → la déclaration manuelle faisait doublon.
+
+**Solution (hybride, validée avec l'utilisateur)** : l'app **détecte**, l'utilisateur **confirme en 1 clic**.
+- **Promotion** : `promoteToEssentialAction` (anti-doublon par aliment/libellé). Deux points d'entrée : (a) bouton **« ★ Toujours »** dans « À racheter bientôt » ; (b) **épingle ☆** sur chaque ligne de courses (`shopping-list.tsx`, promeut ; ★ plein = déjà essentiel, géré ailleurs). Qté = moyenne observée.
+- **Effet** : le produit devient récurrent → **revient tout seul** dans la liste (badge essentiel) chaque cycle ; il **disparaît de « À racheter bientôt »** (exclusion via `essentialKey` dans `computeShoppingStats`).
+- **Gestion** : composant réutilisable `essentials-manager.tsx` (puces + désépinglage ×, `removeEssentialAction`) affiché **sur la page stats** (carte « Mes essentiels ») **et** en **aside de la liste de courses** (« Gérer » → stats). Core : `listRecurringItems` (shopping.ts).
+- **Les 3 provenances** (repas / essentiel / ajouté) restent, mais « essentiel » est enfin **concret et sans saisie à froid**.
+- **Vérifié en direct** : ★ Toujours (Lait) → exclu de « À racheter bientôt » + apparaît en essentiel dans la liste (★ plein, badge) + chip « Mes essentiels » ; épingle ☆ (Beurre) → idem ; × → retrait. Données de test nettoyées. Pas de migration.

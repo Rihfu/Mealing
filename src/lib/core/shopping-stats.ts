@@ -1,6 +1,7 @@
 import type { DB } from './types';
 import { unwrap } from './types';
 import { normalizeLabel } from '@/lib/text';
+import { listRecurringItems, essentialKey, type EssentialItem } from './shopping';
 
 /**
  * Statistiques de l'historique des courses (lecture seule, dérivées des relevés
@@ -50,6 +51,7 @@ export interface ShoppingStats {
   rayons: RayonStat[];
   provenance: { repas: number; essentiel: number; manual: number; total: number };
   dueSoon: ProductStat[];
+  essentials: EssentialItem[]; // produits récurrents (« Mes essentiels »)
   weeks: WeekBucket[];
   oneShots: ProductStat[];
   // Dépenses (uniquement si des prix sont saisis) :
@@ -105,10 +107,12 @@ export async function computeShoppingStats(db: DB, householdId: string): Promise
     totalTrips: 0, totalItems: 0, firstPurchasedAt: null, lastPurchasedAt: null, daysSinceLast: null,
     avgDaysBetween: null, tripsPerWeek: null, avgItemsPerTrip: null, basketSeries: [],
     topProducts: [], rayons: [], provenance: { repas: 0, essentiel: 0, manual: 0, total: 0 },
-    dueSoon: [], weeks: [], oneShots: [], hasPrices: false, totalSpend: null,
+    dueSoon: [], essentials: [], weeks: [], oneShots: [], hasPrices: false, totalSpend: null,
     avgBasketSpend: null, spendByRayon: [],
   };
-  if (trips.length === 0) return empty;
+  const essentials = await listRecurringItems(db, householdId);
+  if (trips.length === 0) return { ...empty, essentials };
+  const essentialKeys = new Set(essentials.map((e) => essentialKey(e)));
 
   const dates = trips.map((t) => new Date(t.purchased_at).getTime());
   const firstAt = trips[0].purchased_at;
@@ -205,9 +209,10 @@ export async function computeShoppingStats(db: DB, householdId: string): Promise
 
   const topProducts = [...productStats].sort((a, b) => b.count - a.count || b.lastPurchasedAt.localeCompare(a.lastPurchasedAt)).slice(0, 8);
   const oneShots = productStats.filter((p) => p.count === 1).sort((a, b) => b.lastPurchasedAt.localeCompare(a.lastPurchasedAt)).slice(0, 12);
-  // « À racheter bientôt » : rachat récurrent (≥ 2 achats) dont l'échéance estimée approche / est dépassée.
+  // « À racheter bientôt » : rachat récurrent (≥ 2 achats) dont l'échéance estimée approche / est
+  // dépassée. On EXCLUT les produits déjà promus en essentiel (ils reviennent tout seuls).
   const dueSoon = productStats
-    .filter((p) => p.medianIntervalDays != null && p.count >= 2 && p.dueInDays != null && p.dueInDays <= 3)
+    .filter((p) => p.medianIntervalDays != null && p.count >= 2 && p.dueInDays != null && p.dueInDays <= 3 && !essentialKeys.has(p.key))
     .sort((a, b) => (a.dueInDays ?? 0) - (b.dueInDays ?? 0))
     .slice(0, 8);
 
@@ -243,6 +248,7 @@ export async function computeShoppingStats(db: DB, householdId: string): Promise
     rayons,
     provenance,
     dueSoon,
+    essentials,
     weeks,
     oneShots,
     hasPrices,

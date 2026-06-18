@@ -6,7 +6,7 @@ import { UNIT_OPTIONS } from '@/lib/units';
 import { RangerButton, type CustomCategory } from './category-controls';
 import { DeleteWithUndo } from './undo-toast';
 import { catView } from './rayons';
-import { toggleCheckAction, setFoodCategoryAction, updateManualItemAction } from './actions';
+import { toggleCheckAction, setFoodCategoryAction, updateManualItemAction, promoteToEssentialAction } from './actions';
 
 type Source = 'recipe' | 'recurring' | 'manual';
 
@@ -108,6 +108,17 @@ function Row({
   const [u, setU] = useState('');
   const [savingQty, startSave] = useTransition();
 
+  // Épingle « essentiel » : la ligne devient un produit récurrent (revient tout seul).
+  const [justPinned, setJustPinned] = useState(false);
+  const [pinning, startPin] = useTransition();
+  const isEssential = line.sources.includes('recurring') || justPinned;
+  function pin() {
+    startPin(async () => {
+      await promoteToEssentialAction({ label: line.name, foodId: line.foodId, quantity: line.quantity, unit: line.unit });
+      setJustPinned(true);
+    });
+  }
+
   function openEdit() {
     setQ(line.quantity != null ? String(line.quantity) : '');
     setU(line.unit ?? '');
@@ -153,6 +164,18 @@ function Row({
             déjà en stock{line.stockedLabel ? ` (${line.stockedLabel})` : ''}
           </span>
         )}
+        <button
+          type="button"
+          onClick={pin}
+          disabled={isEssential || pinning}
+          aria-label={isEssential ? 'Déjà un essentiel' : 'Épingler comme essentiel'}
+          title={isEssential ? 'Essentiel — gère-le dans « Mes essentiels »' : 'En faire un essentiel (reviendra tout seul)'}
+          className={`${isEssential ? 'text-amber-500' : 'text-ink-soft/60 hover:text-amber-500'} disabled:cursor-default`}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill={isEssential ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 17.3 6.2 20.6l1.1-6.5L2.5 9.5l6.5-.9L12 2.7l3 5.9 6.5.9-4.8 4.6 1.1 6.5z" />
+          </svg>
+        </button>
         <RangerButton
           label={line.name}
           foodId={line.foodId}
