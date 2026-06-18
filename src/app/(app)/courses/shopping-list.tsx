@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-assets';
 import { UNIT_OPTIONS } from '@/lib/units';
 import { RangerButton, type CustomCategory } from './category-controls';
@@ -152,7 +153,17 @@ function Row({
         <ProductIcon slug={line.iconSlug} size={20} />
       </span>
 
-      <span className={`text-sm ${done ? 'text-ink-soft line-through' : ''}`}>{line.name}</span>
+      {line.foodId ? (
+        <Link
+          href={`/courses/produit/${line.foodId}`}
+          title="Voir la fiche produit"
+          className={`text-sm hover:text-green-strong hover:underline ${done ? 'text-ink-soft line-through' : ''}`}
+        >
+          {line.name}
+        </Link>
+      ) : (
+        <span className={`text-sm ${done ? 'text-ink-soft line-through' : ''}`}>{line.name}</span>
+      )}
 
       <span className="ml-auto flex items-center gap-2.5">
         {!done && line.alreadyStocked && (
