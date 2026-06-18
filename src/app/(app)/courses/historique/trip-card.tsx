@@ -141,7 +141,7 @@ function ItemRow({ item, editing }: { item: HItem; editing: boolean }) {
   }
 
   return (
-    <li className={`flex items-center gap-3 py-2 ${pending ? 'opacity-40' : ''}`}>
+    <li className={`flex items-center gap-3 rounded-lg px-1 py-2 transition-colors duration-200 hover:bg-sage-tint/40 ${pending ? 'opacity-40' : ''}`}>
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sage-tint text-sage-deep">
         <ProductIcon slug={item.iconSlug} size={18} />
       </span>
