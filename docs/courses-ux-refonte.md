@@ -283,3 +283,6 @@ Trois retours utilisateur traités ensemble.
 - **« Mes essentiels » retiré** (aside) — jugé peu intuitif/utile au départ ; à retravailler plus tard. Les essentiels existants continuent d'alimenter la liste (provenance « essentiel ») ; seules la gestion (aside) et ses requêtes (`recurring`, `foods`) sont retirées. `addRecurringAction` conservée pour la future refonte.
 - **Régression corrigée** : le « supprimer » des articles manuels actifs, perdu lors du passage à la liste cliente, est rétabli (`DeleteWithUndo` dans `Row`).
 - Vérifié en direct : décoche « Lait » (pastille vidée + atténuation → retour « À acheter ») ; aside sans « Mes essentiels » ; « supprimer » présent ; aucune erreur console.
+
+### Finition autocomplétion : « Utiliser mon texte » ne soumet plus directement — 2026-06-18
+L'option de tête « Ajouter « \<texte\> » » **soumettait le formulaire immédiatement**, sans laisser régler la quantité. Renommée **« Utiliser « \<texte\> » · texte libre »** et son clic **confirme** désormais le libellé (sélection synthétique free-text : ferme la liste, garde le nom dans le champ) **sans soumettre** — l'utilisateur règle ensuite Qté/unité puis « Ajouter à la liste ». Vérifié : « oeufs » → Utiliser → Qté 6 → Ajouter → « Œufs · 6 » en Crémerie & œufs.

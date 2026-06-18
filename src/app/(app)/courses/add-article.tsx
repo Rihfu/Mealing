@@ -84,6 +84,16 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
     }
   }
 
+  // « Utiliser mon texte » : confirme le libellé libre (ferme la liste, garde le nom)
+  // SANS soumettre — l'utilisateur règle ensuite la quantité puis « Ajouter à la liste ».
+  function chooseFreeText() {
+    const v = query.trim();
+    if (v.length < 2) return;
+    setSelected({ foodId: null, name: v, defaultUnit: null, category: null, source: '', externalId: null, packages: [] });
+    setOpen(false);
+    setSuggestions([]);
+  }
+
   function reset() {
     setQuery('');
     setSelected(null);
@@ -138,10 +148,7 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
             <li>
               <button
                 type="button"
-                onClick={() => {
-                  setOpen(false);
-                  formRef.current?.requestSubmit();
-                }}
+                onClick={chooseFreeText}
                 className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-sage-tint/40"
               >
                 <span
@@ -153,9 +160,9 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
                   </svg>
                 </span>
                 <span className="flex-1 text-sm">
-                  Ajouter <span className="font-semibold">«&nbsp;{query.trim()}&nbsp;»</span>
+                  Utiliser <span className="font-semibold">«&nbsp;{query.trim()}&nbsp;»</span>
                 </span>
-                <span className="text-xs text-ink-soft">mon texte</span>
+                <span className="text-xs text-ink-soft">texte libre</span>
               </button>
             </li>
 
