@@ -1,8 +1,15 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { ProductIcon, ProvenanceBadge, categoryDef, categoryLabel, type ProvenanceKey } from '@/lib/product-assets';
+import {
+  ProductIcon,
+  ProvenanceBadge,
+  categoryDef,
+  CATEGORY_ORDER,
+  rayonInk,
+  type ProvenanceKey,
+} from '@/lib/product-assets';
 import { UNIT_OPTIONS } from '@/lib/units';
 import {
   toggleTripFavoriteAction,
@@ -23,6 +30,12 @@ export interface HItem {
   source: string | null;
 }
 
+export interface HCustomCat {
+  id: string;
+  label: string;
+  tint: string | null;
+}
+
 export interface HTrip {
   id: string;
   dateLabel: string; // date formatée côté serveur (évite les écarts d'hydratation)
@@ -36,39 +49,76 @@ const SOURCE_TO_PROV: Record<string, ProvenanceKey> = {
   recurring: 'essentiel',
   manual: 'ajoute',
 };
+const OTHER = '__other__';
 
 function fmtQty(it: { quantity: number | null; unit: string | null }): string {
   return it.quantity != null ? `${it.quantity} ${it.unit ?? ''}`.trim() : '';
 }
 
-/** Étoile favori. */
-function Star({ filled }: { filled: boolean }) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 17.3 6.2 20.6l1.1-6.5L2.5 9.5l6.5-.9L12 2.7l3 5.9 6.5.9-4.8 4.6 1.1 6.5z" />
-    </svg>
-  );
+function norm(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 }
 
-/** Une ligne d'article d'un relevé : icône + libellé + rayon + qté éditable + retrait. */
-function ItemRow({ item }: { item: HItem }) {
-  const def = categoryDef(item.categoryKey);
-  const [editing, setEditing] = useState(false);
+interface RGroup {
+  key: string;
+  label: string;
+  tint: string;
+  ink: string;
+  iconSlug: string | null;
+  items: HItem[];
+}
+
+/** Regroupe les articles d'un relevé par rayon (intégré → custom → Autres). */
+function groupByRayon(items: HItem[], customCats: HCustomCat[]): RGroup[] {
+  const custom = new Map(customCats.map((c) => [c.id, c]));
+  const order = (k: string) => {
+    const i = CATEGORY_ORDER.indexOf(k as (typeof CATEGORY_ORDER)[number]);
+    if (i >= 0) return i; // rayons intégrés en premier (ordre magasin)
+    if (k === OTHER) return 999;
+    return 500; // rayons custom au milieu
+  };
+  const groups = new Map<string, RGroup>();
+  for (const it of items) {
+    const raw = it.categoryKey;
+    const key = raw && (categoryDef(raw) || custom.has(raw)) ? raw : OTHER;
+    let g = groups.get(key);
+    if (!g) {
+      const def = categoryDef(key);
+      const c = custom.get(key);
+      g = {
+        key,
+        label: def?.label ?? c?.label ?? 'Autres',
+        tint: def?.tint ?? c?.tint ?? 'var(--color-line)',
+        ink: def?.ink ?? rayonInk(c?.tint),
+        iconSlug: c?.id ? null : null,
+        items: [],
+      };
+      groups.set(key, g);
+    }
+    g.items.push(it);
+  }
+  return [...groups.values()].sort((a, b) => order(a.key) - order(b.key));
+}
+
+/** Une ligne d'article (lecture seule, ou éditable si `editing`). */
+function ItemRow({ item, editing }: { item: HItem; editing: boolean }) {
+  const [editingQty, setEditingQty] = useState(false);
   const [q, setQ] = useState('');
   const [u, setU] = useState('');
+  const [confirmDel, setConfirmDel] = useState(false);
   const [pending, start] = useTransition();
   const prov = item.source ? SOURCE_TO_PROV[item.source] : undefined;
 
-  function open() {
+  function openQty() {
     setQ(item.quantity != null ? String(item.quantity) : '');
     setU(item.unit ?? '');
-    setEditing(true);
+    setEditingQty(true);
   }
-  function save() {
+  function saveQty() {
     const n = q.trim() === '' ? null : Number(q);
     start(async () => {
       await updateTripItemAction({ itemId: item.id, quantity: n != null && !Number.isNaN(n) ? n : null, unit: u || null });
-      setEditing(false);
+      setEditingQty(false);
     });
   }
   function remove() {
@@ -79,21 +129,13 @@ function ItemRow({ item }: { item: HItem }) {
 
   return (
     <li className={`flex items-center gap-3 py-2 ${pending ? 'opacity-40' : ''}`}>
-      <span
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-        style={{ background: def?.tint ?? 'var(--color-sage-tint)', color: def?.ink ?? 'var(--color-sage-deep)' }}
-      >
-        <ProductIcon slug={item.iconSlug} size={20} />
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sage-tint text-sage-deep">
+        <ProductIcon slug={item.iconSlug} size={18} />
       </span>
       <span className="text-sm">{item.label}</span>
       <span className="ml-auto flex items-center gap-2.5">
-        {categoryLabel(item.categoryKey) && (
-          <span className="hidden rounded-full px-2 py-0.5 text-xs font-semibold sm:inline" style={{ background: def?.tint ?? 'var(--color-line)', color: def?.ink ?? 'var(--color-ink-soft)' }}>
-            {categoryLabel(item.categoryKey)}
-          </span>
-        )}
         {prov && <ProvenanceBadge kind={prov} />}
-        {editing ? (
+        {editing && editingQty ? (
           <span className="flex items-center gap-1">
             <input type="number" step="any" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Qté" aria-label="Quantité" className="field-input w-16 px-2 py-1 text-sm" />
             <select value={u} onChange={(e) => setU(e.target.value)} aria-label="Unité" className="field-input w-[5.5rem] px-1 py-1 text-sm">
@@ -101,28 +143,40 @@ function ItemRow({ item }: { item: HItem }) {
                 <option key={o.code} value={o.code}>{o.label}</option>
               ))}
             </select>
-            <button type="button" onClick={save} disabled={pending} aria-label="Enregistrer" title="Enregistrer" className="text-green-strong disabled:opacity-60">
+            <button type="button" onClick={saveQty} disabled={pending} aria-label="Enregistrer" title="Enregistrer" className="text-green-strong disabled:opacity-60">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
             </button>
           </span>
-        ) : (
-          <button type="button" onClick={open} title="Modifier la quantité" className="text-sm text-ink-soft hover:text-ink hover:underline">
+        ) : editing ? (
+          <button type="button" onClick={openQty} title="Modifier la quantité" className="text-sm text-ink-soft hover:text-ink hover:underline">
             {fmtQty(item) || '+ qté'}
           </button>
+        ) : (
+          fmtQty(item) && <span className="text-sm text-ink-soft">{fmtQty(item)}</span>
         )}
-        <button type="button" onClick={remove} disabled={pending} aria-label="Retirer" title="Retirer du relevé" className="text-ink-soft hover:text-clay-deep disabled:opacity-60">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m-1 0v14H9V6" /></svg>
-        </button>
+        {editing &&
+          (confirmDel ? (
+            <span className="flex items-center gap-1.5 text-xs">
+              <span className="text-ink-soft">Retirer&nbsp;?</span>
+              <button type="button" onClick={remove} disabled={pending} className="font-bold text-clay-deep disabled:opacity-60">Oui</button>
+              <button type="button" onClick={() => setConfirmDel(false)} className="text-ink-soft">Non</button>
+            </span>
+          ) : (
+            <button type="button" onClick={() => setConfirmDel(true)} aria-label="Retirer" title="Retirer du relevé" className="text-ink-soft hover:text-clay-deep">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m-1 0v14H9V6" /></svg>
+            </button>
+          ))}
       </span>
     </li>
   );
 }
 
-/** Modale de reconduction : cocher/décocher avant de ré-ajouter à la liste. */
+/** Modale de reconduction : cocher/décocher (avec tout cocher/décocher) avant de ré-ajouter. */
 function ReconductModal({ trip, onClose }: { trip: HTrip; onClose: () => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set(trip.items.map((i) => i.id)));
   const [pending, start] = useTransition();
   const [added, setAdded] = useState<number | null>(null);
+  const allSelected = selected.size === trip.items.length;
 
   function toggle(id: string) {
     setSelected((s) => {
@@ -131,6 +185,9 @@ function ReconductModal({ trip, onClose }: { trip: HTrip; onClose: () => void })
       else n.add(id);
       return n;
     });
+  }
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(trip.items.map((i) => i.id)));
   }
   function confirm() {
     start(async () => setAdded(await reconductTripAction([...selected])));
@@ -143,7 +200,12 @@ function ReconductModal({ trip, onClose }: { trip: HTrip; onClose: () => void })
           <h3 className="font-display text-lg font-semibold">Reconduire cette liste</h3>
           {added == null ? (
             <>
-              <p className="mt-0.5 text-sm text-ink-soft">Décoche ce que tu ne veux pas reprendre, puis ajoute le reste à ta liste de courses.</p>
+              <div className="mt-0.5 flex items-center justify-between gap-2">
+                <p className="text-sm text-ink-soft">Coche les articles à remettre dans ta liste.</p>
+                <button type="button" onClick={toggleAll} className="shrink-0 text-xs font-semibold text-green-strong">
+                  {allSelected ? 'Tout décocher' : 'Tout cocher'}
+                </button>
+              </div>
               <ul className="mt-3 divide-y divide-line">
                 {trip.items.map((it) => (
                   <li key={it.id} className="flex items-center gap-3 py-2">
@@ -178,14 +240,20 @@ function ReconductModal({ trip, onClose }: { trip: HTrip; onClose: () => void })
   );
 }
 
-/** Carte d'un relevé de courses : dépliable, avec favori / renommer / supprimer / reconduire. */
-export function TripCard({ trip }: { trip: HTrip }) {
+/** Carte d'un relevé : dépliable, groupé par rayon, lecture seule + mode Éditer. */
+export function TripCard({ trip, customCats }: { trip: HTrip; customCats: HCustomCat[] }) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [query, setQuery] = useState('');
   const [pending, start] = useTransition();
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState(trip.name ?? '');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [reconducting, setReconducting] = useState(false);
+
+  const q = norm(query.trim());
+  const filtered = q ? trip.items.filter((it) => norm(it.label).includes(q)) : trip.items;
+  const groups = useMemo(() => groupByRayon(filtered, customCats), [filtered, customCats]);
 
   function toggleFavorite() {
     start(async () => toggleTripFavoriteAction({ tripId: trip.id, isFavorite: !trip.isFavorite }));
@@ -216,20 +284,55 @@ export function TripCard({ trip }: { trip: HTrip }) {
           {trip.items.length} article{trip.items.length > 1 ? 's' : ''}
         </span>
         <button type="button" onClick={toggleFavorite} disabled={pending} aria-label={trip.isFavorite ? 'Retirer des favoris' : 'Marquer favori'} title={trip.isFavorite ? 'Favori' : 'Marquer favori'} className={`${trip.isFavorite ? 'text-amber-500' : 'text-ink-soft hover:text-amber-500'} disabled:opacity-60`}>
-          <Star filled={trip.isFavorite} />
+          <svg width="20" height="20" viewBox="0 0 24 24" fill={trip.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 17.3 6.2 20.6l1.1-6.5L2.5 9.5l6.5-.9L12 2.7l3 5.9 6.5.9-4.8 4.6 1.1 6.5z" />
+          </svg>
         </button>
       </div>
 
       {open && (
-        <div className="border-t border-line px-4 pb-4 pt-2">
+        <div className="border-t border-line px-4 pb-4 pt-3">
+          {/* Barre d'outils : recherche (relevés longs) + bascule Éditer. */}
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            {trip.items.length > 6 && (
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Rechercher un article…"
+                aria-label="Rechercher dans ce relevé"
+                className="field-input min-w-0 flex-1 px-3 py-1.5 text-sm"
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => setEditing((e) => !e)}
+              className={`ml-auto rounded-full border px-3 py-1 text-xs font-semibold ${editing ? 'border-green-strong bg-sage-tint text-green-strong' : 'border-line text-ink-soft'}`}
+            >
+              {editing ? '✓ Terminé' : '✎ Éditer'}
+            </button>
+          </div>
+
           {trip.items.length === 0 ? (
             <p className="py-3 text-sm text-ink-soft">Aucun article dans ce relevé.</p>
+          ) : groups.length === 0 ? (
+            <p className="py-3 text-sm text-ink-soft">Aucun article ne correspond à « {query} ».</p>
           ) : (
-            <ul className="divide-y divide-line">
-              {trip.items.map((it) => (
-                <ItemRow key={it.id} item={it} />
+            <div className="flex flex-col">
+              {groups.map((g) => (
+                <details key={g.key} open className="border-t border-line first:border-t-0">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 py-2 font-display text-sm font-semibold">
+                    <span className="h-3 w-3 rounded-full" style={{ background: g.tint }} />
+                    <span className="flex-1">{g.label}</span>
+                    <span className="text-xs font-normal text-ink-soft">{g.items.length}</span>
+                  </summary>
+                  <ul className="divide-y divide-line pl-1">
+                    {g.items.map((it) => (
+                      <ItemRow key={it.id} item={it} editing={editing} />
+                    ))}
+                  </ul>
+                </details>
               ))}
-            </ul>
+            </div>
           )}
 
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
@@ -250,7 +353,7 @@ export function TripCard({ trip }: { trip: HTrip }) {
             )}
             {confirmingDelete ? (
               <span className="ml-auto flex items-center gap-2 text-xs">
-                <span className="text-ink-soft">Supprimer&nbsp;?</span>
+                <span className="text-ink-soft">Supprimer le relevé&nbsp;?</span>
                 <button type="button" onClick={remove} disabled={pending} className="font-bold text-clay-deep disabled:opacity-60">Oui</button>
                 <button type="button" onClick={() => setConfirmingDelete(false)} className="text-ink-soft">Non</button>
               </span>

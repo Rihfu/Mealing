@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { listShoppingTrips, purgeOldShoppingTrips } from '@/lib/core';
-import { TripCard, type HTrip } from './trip-card';
+import { listShoppingTrips, purgeOldShoppingTrips, listHouseholdCategories } from '@/lib/core';
+import { TripCard, type HTrip, type HCustomCat } from './trip-card';
 
 const DATE_FMT = new Intl.DateTimeFormat('fr-FR', {
   weekday: 'long',
@@ -26,7 +26,11 @@ export default async function HistoriquePage({
 
   const sp = await searchParams;
   const requestedPage = Math.max(0, (Number(sp.page) || 1) - 1); // URL 1-indexée → interne 0-indexée
-  const { trips, page, pageCount, total } = await listShoppingTrips(supabase, householdId, requestedPage);
+  const [{ trips, page, pageCount, total }, customCats] = await Promise.all([
+    listShoppingTrips(supabase, householdId, requestedPage),
+    listHouseholdCategories(supabase, householdId),
+  ]);
+  const customCatsView: HCustomCat[] = customCats.map((c) => ({ id: c.id, label: c.label, tint: c.tint }));
 
   // Date formatée côté serveur (évite tout écart d'hydratation client).
   const cards: HTrip[] = trips.map((t) => ({
@@ -76,7 +80,7 @@ export default async function HistoriquePage({
       ) : (
         <div className="flex flex-col gap-3">
           {cards.map((t) => (
-            <TripCard key={t.id} trip={t} />
+            <TripCard key={t.id} trip={t} customCats={customCatsView} />
           ))}
 
           {pageCount > 1 && (

@@ -326,3 +326,9 @@ L'option de tête « Ajouter « \<texte\> » » **soumettait le formulaire immé
 - **UI** : page **`/courses/historique`** (lien « Historique » dans l'en-tête Courses). Relevés dépliables : date OU nom + **nb d'articles** + ⭐ favori ; déplié → articles (icône, rayon, provenance, qté **éditable**, retrait). Actions : **Reconduire** (modale de sélection cochable → liste actuelle), **Renommer**, **Supprimer**. Pagination Précédent/Suivant. Note de purge auto. Purge appelée à l'ouverture.
 - **Vérifié en direct** : 6 relevés de test → favori (le plus ancien) **en tête**, compteurs corrects, dépliage OK, **reconduction** de 3/4 articles (1 décoché ignoré) → ajoutés aux bons rayons, **Page 1/2**. Données de test nettoyées.
 - **Plus tard** (noté dans CLAUDE.md) : onglet « Statistiques » sur l'historique (fréquence de rachat, taille de panier…), puis équivalents Stock (nécessite un journal de mouvements) et Recettes.
+
+#### Affinages historique + recherche (suite — 2026-06-18)
+- **Sécurité suppression** : le détail d'un relevé est **lecture seule par défaut** (plus de 🗑 visible) ; bouton **« Éditer »** révèle l'édition qté + retrait, et **chaque retrait demande confirmation** (« Retirer ? Oui/Non ») — fini les suppressions par mégarde.
+- **Articles groupés par rayon** dans les relevés (sections `<details>` **repliables** + compteur) → relisible même à 100+ articles, on ne déplie que les rayons voulus. Rayons custom résolus (la page charge `listHouseholdCategories`).
+- **Recherche** : champ de filtre dans un relevé (> 6 articles) **et** dans la liste de courses principale (`ShoppingList`, > 6 articles) — filtre par libellé, rayons vidés masqués.
+- **Reconduction** : bouton **« Tout cocher / Tout décocher »** dans la modale → permet de ne reconduire qu'un seul article (tout décocher puis cocher celui voulu). Vérifié en direct.

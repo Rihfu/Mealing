@@ -44,6 +44,11 @@ const SOURCE_TO_PROV: Record<Source, ProvenanceKey> = {
 
 const OTHER_KEY = 'autres';
 
+/** Normalisation pour la recherche (casse + accents neutralisés). */
+function norm(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+}
+
 /** Construit/maj l'ensemble des lignes « en cours d'animation » de bascule. */
 function useToggle(customCategories: CustomCategory[]) {
   const [pending, startTransition] = useTransition();
@@ -218,6 +223,14 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [overKey, setOverKey] = useState<string | null>(null);
   const overRef = useRef<string | null>(null);
+  const [query, setQuery] = useState('');
+
+  // Recherche : filtre les lignes par libellé (rayons vidés masqués). Le tri/DnD reste intact.
+  const totalItems = groups.reduce((n, g) => n + g.items.length, 0);
+  const q = norm(query.trim());
+  const shownGroups = q
+    ? groups.map((g) => ({ ...g, items: g.items.filter((l) => norm(l.name).includes(q)) })).filter((g) => g.items.length > 0)
+    : groups;
 
   useEffect(() => {
     if (!drag) return;
@@ -260,7 +273,19 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
 
   return (
     <>
-      {groups.map((g) => {
+      {totalItems > 6 && (
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Rechercher un article…"
+          aria-label="Rechercher dans la liste"
+          className="field-input mb-2 w-full px-3 py-1.5 text-sm"
+        />
+      )}
+      {q && shownGroups.length === 0 && (
+        <p className="py-4 text-center text-sm text-ink-soft">Aucun article ne correspond à « {query} ».</p>
+      )}
+      {shownGroups.map((g) => {
         const over = overKey === g.key && drag != null && drag.from !== g.key;
         return (
           <details
