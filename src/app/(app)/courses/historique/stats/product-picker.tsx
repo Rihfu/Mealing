@@ -38,7 +38,7 @@ export function ProductPicker() {
   function pick(s: FoodSuggestion) {
     start(async () => {
       const id = await resolveCatalogFoodAction({ foodId: s.foodId, source: s.source, externalId: s.externalId });
-      if (id) router.push(`/courses/produit/${id}`);
+      if (id) router.push(`/courses/produit/${id}?from=/courses/historique/stats`);
     });
   }
 

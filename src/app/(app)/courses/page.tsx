@@ -9,14 +9,8 @@ import { PurchaseCheckout } from './purchase-checkout';
 import { ManageAislesButton } from './category-controls';
 import { EssentialsManager } from './essentials-manager';
 import { ShoppingList, DoneList, type SGroup, type SLine } from './shopping-list';
-import { clearCheckedAction, setShoppingHorizonAction } from './actions';
+import { clearCheckedAction } from './actions';
 import { UndoToastHost } from './undo-toast';
-
-const CADENCE_OPTIONS = [
-  { days: 3, label: 'Quelques jours' },
-  { days: 7, label: '1 semaine' },
-  { days: 14, label: '2 semaines' },
-];
 
 /** ShoppingLine (serveur) → SLine (sérialisable pour les listes client). */
 function toSLine(l: ShoppingLine): SLine {
@@ -46,7 +40,7 @@ export default async function CoursesPage() {
   if (!profile?.household_id) redirect('/onboarding');
   const householdId = profile.household_id;
 
-  const { from, to, days } = await getShoppingWindow(supabase, householdId);
+  const { from, to } = await getShoppingWindow(supabase, householdId);
 
   const [lines, customCats, essentials, lastPrices, { data: stock }] = await Promise.all([
     generateShoppingListAutoSorted(supabase, { householdId, from, to }),
@@ -127,24 +121,6 @@ export default async function CoursesPage() {
           Ta liste se met à jour toute seule : on part de tes repas, on retire ce que tu as déjà en stock, et tu
           ajoutes ce que tu veux. Coche au fur et à mesure de tes courses.
         </p>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="text-sm text-ink-soft">Courses sur&nbsp;:</span>
-          {CADENCE_OPTIONS.map((o) => (
-            <form key={o.days} action={setShoppingHorizonAction}>
-              <input type="hidden" name="days" value={o.days} />
-              <button
-                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                  days === o.days
-                    ? 'border-green-strong bg-sage-tint text-green-strong'
-                    : 'border-line text-ink-soft'
-                }`}
-              >
-                {o.label}
-              </button>
-            </form>
-          ))}
-        </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">

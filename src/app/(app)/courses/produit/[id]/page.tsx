@@ -1,9 +1,9 @@
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
 import { computeProductStats, getFoodNutrition } from '@/lib/core';
 import { categoryDef, categoryLabel, ProductIcon } from '@/lib/product-assets';
 import { NutritionSection, TipsSection, ConservationSection } from './sections';
+import { FicheTransition, FicheBackButton } from './fiche-transition';
 
 const eur = (n: number) => `${n.toFixed(2).replace('.', ',')} €`;
 const DATE_FMT = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' });
@@ -59,7 +59,13 @@ const PROV = {
   manual: { label: 'Ajoutés', color: '#c2774f' },
 };
 
-export default async function ProduitPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProduitPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
+}) {
   const { supabase, profile, userId } = await getAuthContext();
   if (!userId) redirect('/login');
   if (!profile?.household_id) redirect('/onboarding');
@@ -73,13 +79,17 @@ export default async function ProduitPage({ params }: { params: Promise<{ id: st
   const def = categoryDef(product.category);
   const prov = product.provenance;
 
+  // Retour vers la page d'origine (où on a cliqué), avec un repère pour la mettre
+  // en valeur (?viewed=<foodId>). Repli sur les Statistiques si l'origine est inconnue.
+  const sp = await searchParams;
+  const from = typeof sp.from === 'string' && sp.from.startsWith('/courses') ? sp.from : null;
+  const backHref = from ? `${from}?viewed=${id}` : '/courses/historique/stats';
+  const backLabel = from === '/courses' ? 'Liste de courses' : 'Statistiques';
+
   return (
-    <div className="flex flex-col gap-5">
+    <FicheTransition backHref={backHref}>
       <div>
-        <Link href="/courses/historique/stats" className="flex w-fit items-center gap-1.5 text-sm font-bold text-sage-deep hover:underline">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-          Statistiques
-        </Link>
+        <FicheBackButton label={backLabel} />
         <div className="mt-2 flex items-center gap-3">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl" style={{ background: def?.tint ?? 'var(--color-sage-tint)', color: def?.ink ?? 'var(--color-sage-deep)' }}>
             <ProductIcon slug={product.iconSlug} size={28} />
@@ -156,6 +166,6 @@ export default async function ProduitPage({ params }: { params: Promise<{ id: st
       <Card title="Conseils" hint="indicatifs">
         <TipsSection foodId={id} />
       </Card>
-    </div>
+    </FicheTransition>
   );
 }

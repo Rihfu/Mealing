@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-assets';
 import { UNIT_OPTIONS } from '@/lib/units';
 import { RangerButton, type CustomCategory } from './category-controls';
@@ -85,6 +86,7 @@ function Row({
   pending,
   onToggle,
   dragHandle,
+  flash,
 }: {
   line: SLine;
   customCategories: CustomCategory[];
@@ -93,6 +95,7 @@ function Row({
   pending: boolean;
   onToggle: () => void;
   dragHandle?: React.ReactNode;
+  flash?: boolean;
 }) {
   const v = catView(line.category, customCategories);
   const tint = v?.tint ?? 'var(--color-sage-tint)';
@@ -138,7 +141,10 @@ function Row({
   }
 
   return (
-    <li className={`flex items-center gap-3 py-2 transition-opacity duration-300 ${animating ? 'opacity-40' : ''}`}>
+    <li
+      data-food={line.foodId ?? undefined}
+      className={`flex items-center gap-3 rounded-lg px-1 py-2 transition-all duration-200 hover:bg-sage-tint/40 ${animating ? 'opacity-40' : ''} ${flash ? 'bg-sage-tint ring-1 ring-green-strong' : ''}`}
+    >
       <button type="button" aria-label={done ? 'Décocher' : 'Cocher'} onClick={onToggle} disabled={pending} className="block">
         <span
           className={`flex h-5 w-5 items-center justify-center rounded-md border text-xs font-bold transition-colors ${
@@ -155,7 +161,7 @@ function Row({
 
       {line.foodId ? (
         <Link
-          href={`/courses/produit/${line.foodId}`}
+          href={`/courses/produit/${line.foodId}?from=/courses`}
           title="Voir la fiche produit"
           className={`text-sm hover:text-green-strong hover:underline ${done ? 'text-ink-soft line-through' : 'text-ink'}`}
         >
@@ -259,6 +265,18 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
   const overRef = useRef<string | null>(null);
   const [query, setQuery] = useState('');
 
+  // Retour de la fiche produit : l'article consulté (?viewed=<foodId>) est mis en
+  // valeur tant que le param est là, scrollé à vue, puis le param est retiré au bout
+  // d'un moment (router.replace) → la surbrillance s'efface en fondu (transition).
+  const viewed = useSearchParams().get('viewed');
+  const router = useRouter();
+  useEffect(() => {
+    if (!viewed) return;
+    document.querySelector(`[data-food="${viewed}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const t = setTimeout(() => router.replace('/courses', { scroll: false }), 1800);
+    return () => clearTimeout(t);
+  }, [viewed, router]);
+
   // Recherche : filtre les lignes par libellé (rayons vidés masqués). Le tri/DnD reste intact.
   const totalItems = groups.reduce((n, g) => n + g.items.length, 0);
   const q = norm(query.trim());
@@ -344,6 +362,7 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
                   mode="active"
                   animating={animating.has(line.key)}
                   pending={pending}
+                  flash={!!viewed && line.foodId === viewed}
                   onToggle={() => toggle(line, true)}
                   dragHandle={
                     <button

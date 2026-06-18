@@ -180,7 +180,7 @@ export default async function StatsPage() {
               <ProductIcon slug={p.iconSlug} size={18} />
             </span>
             {p.foodId ? (
-              <Link href={`/courses/produit/${p.foodId}`} className="flex-1 truncate text-sm font-medium text-ink hover:text-green-strong hover:underline">
+              <Link href={`/courses/produit/${p.foodId}?from=/courses/historique/stats`} className="flex-1 truncate text-sm font-medium text-ink hover:text-green-strong hover:underline">
                 {p.label}
               </Link>
             ) : (
