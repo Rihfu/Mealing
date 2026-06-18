@@ -157,7 +157,7 @@ function Row({
         <Link
           href={`/courses/produit/${line.foodId}`}
           title="Voir la fiche produit"
-          className={`text-sm hover:text-green-strong hover:underline ${done ? 'text-ink-soft line-through' : ''}`}
+          className={`text-sm hover:text-green-strong hover:underline ${done ? 'text-ink-soft line-through' : 'text-ink'}`}
         >
           {line.name}
         </Link>
