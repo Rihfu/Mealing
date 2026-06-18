@@ -62,7 +62,7 @@ export function DueSoon({ items }: { items: DueItem[] }) {
             </span>
             <span className="min-w-0 flex-1">
               {d.foodId ? (
-                <Link href={`/courses/produit/${d.foodId}`} className="block truncate text-sm font-semibold hover:text-green-strong hover:underline">
+                <Link href={`/courses/produit/${d.foodId}`} className="block truncate text-sm font-semibold text-ink hover:text-green-strong hover:underline">
                   {d.label}
                 </Link>
               ) : (
