@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { CATEGORY_ORDER, CATEGORIES, PRODUCTS, ProductIcon } from '@/lib/product-assets';
+import { CATEGORY_ORDER, CATEGORIES, PRODUCTS, CATEGORY_ICONS, ProductIcon } from '@/lib/product-assets';
 import {
   setFoodCategoryAction,
   clearFoodCategoryAction,
@@ -51,7 +51,15 @@ function RayonChip({
 }
 
 /** Grille d'icônes (banque d'assets) pour choisir le picto d'un article ou d'un rayon. */
-function IconGrid({ value, onPick }: { value: string | null; onPick: (slug: string | null) => void }) {
+function IconGrid({
+  value,
+  onPick,
+  icons = PRODUCTS,
+}: {
+  value: string | null;
+  onPick: (slug: string | null) => void;
+  icons?: ReadonlyArray<{ key: string; label: string }>;
+}) {
   return (
     <div className="grid max-h-40 grid-cols-7 gap-1 overflow-auto rounded-xl border border-line p-2">
       <button
@@ -64,7 +72,7 @@ function IconGrid({ value, onPick }: { value: string | null; onPick: (slug: stri
       >
         —
       </button>
-      {PRODUCTS.map((p) => (
+      {icons.map((p) => (
         <button
           key={p.key}
           type="button"
@@ -108,12 +116,14 @@ export function RangerButton({
   const [creating, setCreating] = useState(false);
   const [newLabel, setNewLabel] = useState('');
   const [newTint, setNewTint] = useState(TINTS[2].val);
+  const [newIcon, setNewIcon] = useState<string | null>(null);
 
   function openModal() {
     setCat(currentCategory);
     setIcon(currentIcon);
     setCreating(false);
     setNewLabel('');
+    setNewIcon(null);
     setOpen(true);
   }
 
@@ -135,7 +145,7 @@ export function RangerButton({
     const lbl = newLabel.trim();
     if (!lbl) return;
     startTransition(async () => {
-      const id = await createCategoryAction({ label: lbl, iconSlug: icon, tint: newTint });
+      const id = await createCategoryAction({ label: lbl, iconSlug: newIcon, tint: newTint });
       if (id) await setFoodCategoryAction({ label, foodId, categoryKey: id, iconSlug: icon });
       setOpen(false);
     });
@@ -213,6 +223,8 @@ export function RangerButton({
                     />
                   ))}
                 </div>
+                <p className="mt-2 mb-1 text-xs text-ink-soft">Icône du rayon</p>
+                <IconGrid value={newIcon} onPick={setNewIcon} icons={CATEGORY_ICONS} />
                 <button
                   type="button"
                   onClick={createAndAssign}
@@ -338,7 +350,7 @@ export function MyAisles({ customCategories }: { customCategories: CustomCategor
             Ajouter
           </button>
         </div>
-        {picking && <IconGrid value={icon} onPick={(s) => setIcon(s)} />}
+        {picking && <IconGrid value={icon} onPick={(s) => setIcon(s)} icons={CATEGORY_ICONS} />}
       </div>
     </div>
   );
