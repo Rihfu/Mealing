@@ -2,6 +2,7 @@ import type { DB } from './types';
 import { unwrap } from './types';
 import { findCatalogFoodIdByLabel } from './foods';
 import type { ShoppingLine } from './shopping';
+import { normalizeLabel } from '@/lib/text';
 
 /**
  * Historique des courses (chantier juin 2026) : à chaque « J'ai fait mes courses »
@@ -230,4 +231,36 @@ export async function reconductTripItems(
     if (error) throw new Error(error.message);
   }
   return rows.length;
+}
+
+/**
+ * Dernier prix payé connu par produit (clé = food_id, sinon `l:<libellé normalisé>`),
+ * pour **pré-remplir** le champ prix au checkout suivant (modifiable). Lecture seule.
+ */
+export async function getLastKnownPrices(db: DB, householdId: string): Promise<Record<string, number>> {
+  const rows = (unwrap(
+    await db
+      .from('shopping_trip_item')
+      .select('label, food_id, price, shopping_trip!inner(household_id, purchased_at)')
+      .eq('shopping_trip.household_id', householdId)
+      .not('price', 'is', null),
+  ) ?? []) as Array<{
+    label: string;
+    food_id: string | null;
+    price: number;
+    shopping_trip: { purchased_at: string } | { purchased_at: string }[] | null;
+  }>;
+
+  // Pour chaque produit, on garde le prix du relevé le plus récent.
+  const latest = new Map<string, { price: number; at: string }>();
+  for (const r of rows) {
+    const trip = Array.isArray(r.shopping_trip) ? r.shopping_trip[0] : r.shopping_trip;
+    const at = trip?.purchased_at ?? '';
+    const key = r.food_id ?? `l:${normalizeLabel(r.label)}`;
+    const cur = latest.get(key);
+    if (!cur || at > cur.at) latest.set(key, { price: r.price, at });
+  }
+  const out: Record<string, number> = {};
+  for (const [k, v] of latest) out[k] = v.price;
+  return out;
 }

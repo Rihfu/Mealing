@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { generateShoppingListAutoSorted, getShoppingWindow, listHouseholdCategories, listRecurringItems, type ShoppingLine } from '@/lib/core';
+import { generateShoppingListAutoSorted, getShoppingWindow, listHouseholdCategories, listRecurringItems, getLastKnownPrices, essentialKey, type ShoppingLine } from '@/lib/core';
 import { categoryLabel } from '@/lib/product-assets';
 import { groupByRayon } from './rayons';
 import { AddArticle } from './add-article';
@@ -48,10 +48,11 @@ export default async function CoursesPage() {
 
   const { from, to, days } = await getShoppingWindow(supabase, householdId);
 
-  const [lines, customCats, essentials, { data: stock }] = await Promise.all([
+  const [lines, customCats, essentials, lastPrices, { data: stock }] = await Promise.all([
     generateShoppingListAutoSorted(supabase, { householdId, from, to }),
     listHouseholdCategories(supabase, householdId),
     listRecurringItems(supabase, householdId),
+    getLastKnownPrices(supabase, householdId),
     supabase.from('stock').select('food_id, label, quantity, unit, present').eq('household_id', householdId),
   ]);
 
@@ -190,6 +191,7 @@ export default async function CoursesPage() {
                     name: l.name,
                     qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
                     category: categoryLabel(l.category),
+                    suggestedPrice: lastPrices[essentialKey({ foodId: l.foodId ?? null, label: l.name })] ?? null,
                   }))}
                 />
               </div>

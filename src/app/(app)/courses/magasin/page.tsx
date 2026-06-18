@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { generateShoppingListAutoSorted, getShoppingWindow, listHouseholdCategories, type ShoppingLine } from '@/lib/core';
+import { generateShoppingListAutoSorted, getShoppingWindow, listHouseholdCategories, getLastKnownPrices, essentialKey, type ShoppingLine } from '@/lib/core';
 import { groupByRayon } from '../rayons';
 import { PurchaseCheckout } from '../purchase-checkout';
 import { toggleCheckAction } from '../actions';
@@ -57,9 +57,10 @@ export default async function MagasinPage() {
   const householdId = profile.household_id;
 
   const { from, to } = await getShoppingWindow(supabase, householdId);
-  const [lines, customCats] = await Promise.all([
+  const [lines, customCats, lastPrices] = await Promise.all([
     generateShoppingListAutoSorted(supabase, { householdId, from, to }),
     listHouseholdCategories(supabase, householdId),
+    getLastKnownPrices(supabase, householdId),
   ]);
 
   // En magasin : tout reste visible dans son rayon (coché = barré sur place).
@@ -126,6 +127,7 @@ export default async function MagasinPage() {
                 name: l.name,
                 qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
                 category: null,
+                suggestedPrice: lastPrices[essentialKey({ foodId: l.foodId ?? null, label: l.name })] ?? null,
               }))}
             />
           </div>

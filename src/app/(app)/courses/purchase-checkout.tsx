@@ -8,6 +8,7 @@ export interface CheckoutItem {
   name: string;
   qty: string;
   category: string | null;
+  suggestedPrice?: number | null; // dernier prix payé connu → pré-rempli (modifiable)
 }
 
 /**
@@ -18,7 +19,13 @@ export interface CheckoutItem {
 export function PurchaseCheckout({ items, fullWidth = false }: { items: CheckoutItem[]; fullWidth?: boolean }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [prices, setPrices] = useState<Record<string, string>>({});
+  // Pré-remplissage du dernier prix payé connu (modifiable).
+  const [prices, setPrices] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      items.filter((it) => it.suggestedPrice != null).map((it) => [it.key, String(it.suggestedPrice)]),
+    ),
+  );
+  const hasSuggested = items.some((it) => it.suggestedPrice != null);
   const n = items.length;
   const s = n > 1 ? 's' : '';
 
@@ -67,8 +74,10 @@ export function PurchaseCheckout({ items, fullWidth = false }: { items: Checkout
           >
             <h3 className="font-display text-xl font-semibold">Bien joué — on range ?</h3>
             <p className="mt-1 text-sm text-ink-soft">
-              {n} article{s} coché{s} entre{n > 1 ? 'nt' : ''} dans ton stock, daté{s} d’aujourd’hui. Ajoute le prix
-              si tu veux suivre tes dépenses (optionnel).
+              {n} article{s} coché{s} entre{n > 1 ? 'nt' : ''} dans ton stock, daté{s} d’aujourd’hui.{' '}
+              {hasSuggested
+                ? 'Les prix de la dernière fois sont pré-remplis — ajuste si besoin (optionnel).'
+                : 'Ajoute le prix si tu veux suivre tes dépenses (optionnel).'}
             </p>
 
             <ul className="my-4 flex-1 divide-y divide-line overflow-auto rounded-xl border border-line px-3">
