@@ -8,6 +8,10 @@ import {
   findCatalogFoodIdByLabel,
   checkoutPurchasedToStock,
   getShoppingWindow,
+  setFoodPref,
+  clearFoodPref,
+  createHouseholdCategory,
+  deleteHouseholdCategory,
   type FoodSuggestion,
 } from '@/lib/core';
 import type { NutritionSource } from '@/lib/providers/nutrition';
@@ -103,6 +107,50 @@ export async function addManualAction(formData: FormData): Promise<void> {
     quantity: num(formData.get('quantity')) ?? null,
     unit: String(formData.get('unit') ?? '') || null,
   });
+  revalidatePath('/courses');
+}
+
+/**
+ * Range un article (par libellé) dans un rayon + icône : crée/maj la préférence
+ * foyer. Sert à déplacer un article ET à mémoriser le classement d'un ajout libre
+ * (re-proposé/reclassé ensuite). `categoryKey` = clé intégrée ou id de rayon custom.
+ */
+export async function setFoodCategoryAction(input: {
+  label: string;
+  foodId: string | null;
+  categoryKey: string | null;
+  iconSlug: string | null;
+}): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  if (!input.label.trim()) return;
+  await setFoodPref(supabase, householdId, input);
+  revalidatePath('/courses');
+}
+
+/** Réinitialise le classement personnalisé d'un libellé (retour au défaut). */
+export async function clearFoodCategoryAction(label: string): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  if (label.trim()) await clearFoodPref(supabase, householdId, label);
+  revalidatePath('/courses');
+}
+
+/** Crée un rayon personnalisé. @returns son id (pour l'assigner dans la foulée). */
+export async function createCategoryAction(input: {
+  label: string;
+  iconSlug: string | null;
+  tint: string | null;
+}): Promise<string | null> {
+  const { supabase, householdId } = await requireHousehold();
+  if (!input.label.trim()) return null;
+  const id = await createHouseholdCategory(supabase, householdId, input);
+  revalidatePath('/courses');
+  return id;
+}
+
+/** Supprime un rayon personnalisé (ses articles retombent en « Autres »). */
+export async function deleteCategoryAction(id: string): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  if (id) await deleteHouseholdCategory(supabase, householdId, id);
   revalidatePath('/courses');
 }
 

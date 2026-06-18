@@ -1,6 +1,7 @@
 import type { DB } from './types';
 import { unwrap } from './types';
 import { loadCatalogIndex, matchCatalog } from './foods';
+import { loadFoodPrefs } from './categories';
 import { type Quantity, toBase, fromBase, normalizeUnit } from '@/lib/units';
 import { normalizeLabel } from '@/lib/text';
 import { addDays, isoDate } from '@/lib/dates';
@@ -227,22 +228,46 @@ export async function generateShoppingList(
       .map((c) => c.item_key),
   );
 
-  // Classement par le catalogue (rayon + icône) des lignes en texte libre : besoins
-  // de recette free_text, récurrents/manuels non liés. Match exact puis synonymes.
+  // Résolution rayon + icône + identité d'une ligne. Ordre :
+  //   1) préférence FOYER (déplacement/mémoire perso) — prioritaire (perso > global) ;
+  //   2) base : food.category de l'aliment lié, sinon catalogue par libellé (exact + synonymes).
+  // La clé de rayon peut être intégrée ('legumes'…) ou un id de shopping_category (rayon custom).
   const catalogIndex = await loadCatalogIndex(db);
-  const classify = (label: string) => {
-    const m = matchCatalog(catalogIndex, label);
-    return {
-      foodId: m?.id ?? null,
-      category: m?.category ?? null,
-      iconSlug: m ? `cat:${m.slug}` : null,
-    };
+  const prefs = await loadFoodPrefs(db, params.householdId);
+  const resolve = (
+    inputFoodId: string | null | undefined,
+    label: string,
+  ): { foodId: string | null; category: string | null; iconSlug: string | null } => {
+    let foodId: string | null = inputFoodId ?? null;
+    let category: string | null = null;
+    let iconSlug: string | null = null;
+
+    if (inputFoodId && foodCategory.has(inputFoodId)) {
+      category = foodCategory.get(inputFoodId) ?? null;
+      iconSlug = foodSlug.get(inputFoodId) ?? null;
+    } else {
+      const m = matchCatalog(catalogIndex, label);
+      if (m) {
+        foodId = foodId ?? m.id;
+        category = m.category;
+        iconSlug = `cat:${m.slug}`;
+      }
+    }
+
+    const pref = (foodId && prefs.byFood.get(foodId)) || prefs.byLabel.get(normalizeLabel(label));
+    if (pref) {
+      if (!foodId && pref.foodId) foodId = pref.foodId;
+      if (pref.categoryKey) category = pref.categoryKey;
+      if (pref.iconSlug) iconSlug = pref.iconSlug;
+    }
+    return { foodId, category, iconSlug };
   };
 
   const lines: ShoppingLine[] = [];
 
   for (const [foodId, need] of netNeed) {
     const key = `food:${foodId}`;
+    const c = resolve(foodId, foodNames.get(foodId) ?? '');
     lines.push({
       key,
       name: foodNames.get(foodId) ?? '(aliment)',
@@ -250,15 +275,15 @@ export async function generateShoppingList(
       unit: need.unit,
       checked: checkedKeys.has(key),
       source: 'recipe',
-      foodId,
-      category: foodCategory.get(foodId) ?? null,
-      iconSlug: foodSlug.get(foodId) ?? null,
+      foodId: c.foodId,
+      category: c.category,
+      iconSlug: c.iconSlug,
     });
   }
 
   for (const [labelKey, need] of netLabelNeed) {
     const key = `recipe-label:${labelKey}`;
-    const c = classify(need.label);
+    const c = resolve(null, need.label);
     lines.push({
       key,
       name: need.label,
@@ -279,17 +304,16 @@ export async function generateShoppingList(
     const key = r.food_id
       ? `recurring-food:${r.food_id}`
       : `recurring-label:${normalizeLabel(r.label ?? '')}`;
-    const c = r.food_id
-      ? { category: foodCategory.get(r.food_id) ?? null, iconSlug: foodSlug.get(r.food_id) ?? null }
-      : classify(r.label ?? '');
+    const name = r.food_id ? (foodNames.get(r.food_id) ?? '(aliment)') : (r.label ?? '');
+    const c = resolve(r.food_id, name);
     lines.push({
       key,
-      name: r.food_id ? (foodNames.get(r.food_id) ?? '(aliment)') : (r.label ?? ''),
+      name,
       quantity: r.default_quantity ?? undefined,
       unit: r.unit ?? undefined,
       checked: checkedKeys.has(key),
       source: 'recurring',
-      foodId: r.food_id ?? null,
+      foodId: c.foodId,
       category: c.category,
       iconSlug: c.iconSlug,
     });
@@ -306,11 +330,9 @@ export async function generateShoppingList(
           (!!s.label && normalizeLabel(s.label) === normalizeLabel(m.label))),
     );
 
-    // Liés à la saisie : food_id direct ; sinon repli sur le catalogue (libellé/synonyme)
-    // pour donner rayon + icône aux anciens manuels non liés.
-    const c = m.food_id
-      ? { foodId: m.food_id, category: foodCategory.get(m.food_id) ?? null, iconSlug: foodSlug.get(m.food_id) ?? null }
-      : classify(m.label);
+    // Liés à la saisie : food_id direct ; sinon repli catalogue (libellé/synonyme) ;
+    // la préférence foyer (déplacement/mémoire) prime dans resolve().
+    const c = resolve(m.food_id, m.label);
 
     lines.push({
       key: `manual:${m.id}`,

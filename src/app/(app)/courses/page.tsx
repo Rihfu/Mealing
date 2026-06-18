@@ -1,5 +1,12 @@
+import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { generateShoppingList, getShoppingWindow, type ShoppingLine } from '@/lib/core';
+import {
+  generateShoppingList,
+  getShoppingWindow,
+  listHouseholdCategories,
+  type ShoppingLine,
+  type HouseholdCategory,
+} from '@/lib/core';
 import {
   categoryDef,
   categoryLabel,
@@ -10,6 +17,7 @@ import {
 } from '@/lib/product-assets';
 import { AddArticle } from './add-article';
 import { PurchaseCheckout } from './purchase-checkout';
+import { RangerButton, MyAisles } from './category-controls';
 import {
   addRecurringAction,
   clearCheckedAction,
@@ -31,12 +39,22 @@ const SOURCE_TO_PROV: Record<ShoppingLine['source'], ProvenanceKey> = {
   manual: 'ajoute',
 };
 
-// Tri par rayon : `food.category` porte une clé stable (cf. product-assets + migration 0011).
+// Tri par rayon : `line.category` porte une clé stable — intégrée (product-assets)
+// OU un id de rayon personnalisé du foyer (shopping_category).
 const OTHER_KEY = 'autres';
 
-function tileStyle(categoryKey?: string | null) {
-  const def = categoryDef(categoryKey);
-  return { background: def?.tint ?? 'var(--color-sage-tint)', color: def?.ink ?? 'var(--color-sage-deep)' };
+/** Vue d'affichage d'un rayon (intégré ou custom) ; null = non classé (« Autres »). */
+function catView(key: string | null | undefined, customCats: HouseholdCategory[]) {
+  const def = categoryDef(key);
+  if (def) return { label: def.label, tint: def.tint, ink: def.ink, iconSlug: null as string | null, isCustom: false };
+  const c = key ? customCats.find((x) => x.id === key) : undefined;
+  if (c) return { label: c.label, tint: c.tint ?? 'var(--color-clay-tint)', ink: '#a96a4a', iconSlug: c.iconSlug, isCustom: true };
+  return null;
+}
+
+function tileStyle(categoryKey: string | null | undefined, customCats: HouseholdCategory[]) {
+  const v = catView(categoryKey, customCats);
+  return { background: v?.tint ?? 'var(--color-sage-tint)', color: v?.ink ?? 'var(--color-sage-deep)' };
 }
 
 function CheckMark({ checked }: { checked: boolean }) {
@@ -51,7 +69,7 @@ function CheckMark({ checked }: { checked: boolean }) {
   );
 }
 
-function LineRow({ line }: { line: ShoppingLine }) {
+function LineRow({ line, customCats }: { line: ShoppingLine; customCats: HouseholdCategory[] }) {
   const qty = line.quantity != null ? `${line.quantity} ${line.unit ?? ''}`.trim() : '';
   const isManual = line.source === 'manual';
   const toggle = isManual ? toggleManualCheckAction : toggleCheckAction;
@@ -60,7 +78,7 @@ function LineRow({ line }: { line: ShoppingLine }) {
     : { name: 'item_key', value: line.key };
 
   return (
-    <li className="flex items-center gap-3 py-2">
+    <li className="group flex items-center gap-3 py-2">
       <form action={toggle}>
         <input type="hidden" name={toggleField.name} value={toggleField.value} />
         <input type="hidden" name="checked" value={(!line.checked).toString()} />
@@ -71,7 +89,7 @@ function LineRow({ line }: { line: ShoppingLine }) {
 
       <span
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-        style={tileStyle(line.category)}
+        style={tileStyle(line.category, customCats)}
       >
         <ProductIcon slug={line.iconSlug} size={20} />
       </span>
@@ -88,6 +106,13 @@ function LineRow({ line }: { line: ShoppingLine }) {
             déjà en stock{line.stockedLabel ? ` (${line.stockedLabel})` : ''}
           </span>
         )}
+        <RangerButton
+          label={line.name}
+          foodId={line.foodId ?? null}
+          currentCategory={line.category ?? null}
+          currentIcon={line.iconSlug ?? null}
+          customCategories={customCats}
+        />
         <ProvenanceBadge kind={SOURCE_TO_PROV[line.source]} />
         {qty && <span className="text-sm text-ink-soft">{qty}</span>}
         {isManual && line.manualId && <DeleteWithUndo kind="manual" id={line.manualId} label={line.name} />}
@@ -97,13 +122,18 @@ function LineRow({ line }: { line: ShoppingLine }) {
 }
 
 export default async function CoursesPage() {
-  const { supabase, profile } = await getAuthContext();
-  const householdId = profile?.household_id as string;
+  const { supabase, profile, userId } = await getAuthContext();
+  // Garde-fou (la session peut expirer en cours de route) : on évite que la page
+  // s'exécute sans foyer, ce qui ferait planter getShoppingWindow.
+  if (!userId) redirect('/login');
+  if (!profile?.household_id) redirect('/onboarding');
+  const householdId = profile.household_id;
 
   const { from, to, days } = await getShoppingWindow(supabase, householdId);
 
-  const [lines, { data: recurring }, { data: foods }, { data: stock }] = await Promise.all([
+  const [lines, customCats, { data: recurring }, { data: foods }, { data: stock }] = await Promise.all([
     generateShoppingList(supabase, { householdId, from, to }),
+    listHouseholdCategories(supabase, householdId),
     supabase.from('shopping_recurring_item').select('id, label, food:food_id(name)').eq('household_id', householdId),
     supabase.from('food').select('id, name').order('name', { ascending: true }).limit(500),
     supabase.from('stock').select('food_id, label, quantity, unit, present').eq('household_id', householdId),
@@ -128,10 +158,10 @@ export default async function CoursesPage() {
 
   const byRayon = new Map<string, ShoppingLine[]>();
   for (const l of active) {
-    const r = categoryDef(l.category) ? (l.category as string) : OTHER_KEY;
+    const r = catView(l.category, customCats) ? (l.category as string) : OTHER_KEY;
     (byRayon.get(r) ?? byRayon.set(r, []).get(r)!).push(l);
   }
-  const rayonsToShow = [...CATEGORY_ORDER, OTHER_KEY].filter((r) => byRayon.has(r));
+  const rayonsToShow = [...CATEGORY_ORDER, ...customCats.map((c) => c.id), OTHER_KEY].filter((r) => byRayon.has(r));
 
   return (
     <div className="flex flex-col gap-6">
@@ -191,22 +221,22 @@ export default async function CoursesPage() {
             ) : (
               rayonsToShow.map((rayon) => {
                 const items = byRayon.get(rayon)!;
-                const def = categoryDef(rayon);
+                const view = catView(rayon, customCats);
                 return (
                   <details key={rayon} open className="border-t border-line first:border-t-0">
                     <summary className="flex cursor-pointer list-none items-center gap-2 py-2 font-display text-sm font-semibold">
                       <span
                         className="flex h-5 w-5 items-center justify-center rounded-md text-[10px]"
-                        style={{ background: def?.tint ?? 'var(--color-line)', color: def?.ink ?? 'var(--color-ink-soft)' }}
+                        style={{ background: view?.tint ?? 'var(--color-line)', color: view?.ink ?? 'var(--color-ink-soft)' }}
                       >
-                        ●
+                        {view?.isCustom && view.iconSlug ? <ProductIcon slug={view.iconSlug} size={12} /> : '●'}
                       </span>
-                      <span className="flex-1">{def?.label ?? 'Autres'}</span>
+                      <span className="flex-1">{view?.label ?? 'Autres'}</span>
                       <span className="text-xs font-normal text-ink-soft">{items.length}</span>
                     </summary>
                     <ul className="divide-y divide-line pl-1">
                       {items.map((l) => (
-                        <LineRow key={l.key + l.source} line={l} />
+                        <LineRow key={l.key + l.source} line={l} customCats={customCats} />
                       ))}
                     </ul>
                   </details>
@@ -227,7 +257,7 @@ export default async function CoursesPage() {
                 </form>
                 <ul className="divide-y divide-line">
                   {done.map((l) => (
-                    <LineRow key={l.key + l.source} line={l} />
+                    <LineRow key={l.key + l.source} line={l} customCats={customCats} />
                   ))}
                 </ul>
               </div>
@@ -269,6 +299,14 @@ export default async function CoursesPage() {
               <input name="label" placeholder="ou un libellé libre" className="field-input" />
               <button className="btn-secondary py-2.5">Ajouter aux essentiels</button>
             </form>
+          </section>
+
+          <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
+            <h2 className="mb-1 font-display text-lg font-semibold">Mes rayons</h2>
+            <p className="mb-3 text-sm text-ink-soft">
+              Crée tes propres rayons (plats préparés, végétal…) et range tes articles dedans avec « Ranger ».
+            </p>
+            <MyAisles customCategories={customCats} />
           </section>
         </aside>
       </div>

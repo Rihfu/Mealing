@@ -4,6 +4,7 @@
  */
 export * from './types';
 export * from './foods';
+export * from './categories';
 export * from './recipes';
 export * from './nutrition';
 export * from './shopping';

@@ -227,3 +227,15 @@ Constat : l'auto-lien ne couvrait que les **ajouts manuels** ; les **ingrédient
 - **Classement des lignes libres au rendu** : `core/foods.ts` expose `loadCatalogIndex` + `matchCatalog` (exact puis synonymes) ; `generateShoppingList` classe désormais les besoins de recette free_text, et les récurrents/manuels non liés → rayon + icône. C'est le vrai levier anti-« Autres » pour les recettes IA.
 - **Vérifié en direct** : household de test → **plus aucune section « Autres »** ; « jus de citron » → Fruits & légumes (icône citron), « anchois » → Viandes & poissons, « moutarde de Dijon » → Épicerie salée. Backfill : 14/18 manuels liés en base (exact) ; les 4 restants (synonymes) classés au rendu. `tsc`/`eslint` OK, aucune erreur console.
 - **Note** : un aliment importé d'USDA/OFF arrive toujours sans rayon (`category=null`) → « Autres ». Reste à traiter (mapping catégorie à l'import) + UX-14 mode magasin mobile.
+
+### Personnalisation des rayons : catégories foyer + déplacement + mémoire — 2026-06-18
+Permet à chaque foyer de gérer les cas limites lui-même plutôt que viser l'exhaustivité du catalogue (validé : catalogue élargi **+** synonymes ; cette brique = catégories perso + mémoire).
+
+- **Schéma** (migration `0013_household_categories`, scopé foyer + RLS `is_household_member`) :
+  - `shopping_category` : rayons personnalisés (label, icône, teinte, position).
+  - `household_food_pref` : préférence « libellé → rayon (+ icône) », unique par (foyer, libellé normalisé). Sert **déplacement** ET **mémoire** d'un ajout libre. `category_key` = clé intégrée OU id de rayon custom (couplage souple, pas de FK ; rayon supprimé → retombe en « Autres »).
+- **Core** : `src/lib/core/categories.ts` (`listHouseholdCategories`, `createHouseholdCategory`, `deleteHouseholdCategory` qui nettoie les prefs orphelines, `setFoodPref` upsert, `clearFoodPref`, `loadFoodPrefs`). `generateShoppingList` applique l'ordre **préférence foyer → food.category → catalogue/synonymes** dans `resolve()`.
+- **UI** : `category-controls.tsx` — `RangerButton` (modale par ligne : choisir un rayon intégré/custom, créer un rayon inline avec teinte, **choisir une icône** dans la banque d'assets, réinitialiser) + `MyAisles` (aside « Mes rayons » : liste/supprime/crée). Server actions `setFoodCategoryAction`/`clearFoodCategoryAction`/`createCategoryAction`/`deleteCategoryAction`. La page groupe built-ins + rayons custom (id, après les intégrés) + « Autres ».
+- **Robustesse** : garde-fou auth ajouté en tête de `page.tsx` (`!userId`→/login, `!household_id`→/onboarding) — la page ne plante plus si la session expire en cours de route.
+- **Vérifié en direct** : création d'un rayon « Plats préparés » + déplacement d'un article dedans (icône custom au header) ; suppression du rayon ; préférence persistée en base (mémoire par libellé). Aucune erreur console. Données de test nettoyées.
+- **Reste (chantier D)** : import USDA/OFF **assisté IA** — un seul appel renvoyant `{ nom générique FR, rayon ∈ liste }` (nutrition inchangée, vient du fournisseur). + UX-14 mode magasin mobile.

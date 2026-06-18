@@ -222,6 +222,57 @@ export type Database = {
         }
         Relationships: []
       }
+      household_food_pref: {
+        Row: {
+          category_key: string | null
+          created_at: string
+          display_label: string
+          food_id: string | null
+          household_id: string
+          icon_slug: string | null
+          id: string
+          label_norm: string
+          updated_at: string
+        }
+        Insert: {
+          category_key?: string | null
+          created_at?: string
+          display_label: string
+          food_id?: string | null
+          household_id: string
+          icon_slug?: string | null
+          id?: string
+          label_norm: string
+          updated_at?: string
+        }
+        Update: {
+          category_key?: string | null
+          created_at?: string
+          display_label?: string
+          food_id?: string | null
+          household_id?: string
+          icon_slug?: string | null
+          id?: string
+          label_norm?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "household_food_pref_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: false
+            referencedRelation: "food"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "household_food_pref_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       household_invitation: {
         Row: {
           accepted_at: string | null
@@ -726,6 +777,44 @@ export type Database = {
           },
         ]
       }
+      shopping_category: {
+        Row: {
+          created_at: string
+          household_id: string
+          icon_slug: string | null
+          id: string
+          label: string
+          position: number
+          tint: string | null
+        }
+        Insert: {
+          created_at?: string
+          household_id: string
+          icon_slug?: string | null
+          id?: string
+          label: string
+          position?: number
+          tint?: string | null
+        }
+        Update: {
+          created_at?: string
+          household_id?: string
+          icon_slug?: string | null
+          id?: string
+          label?: string
+          position?: number
+          tint?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopping_category_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shopping_item_state: {
         Row: {
           checked: boolean
@@ -923,6 +1012,7 @@ export type Database = {
       can_view_profile_nutrition: { Args: { target: string }; Returns: boolean }
       current_household_id: { Args: Record<PropertyKey, never>; Returns: string }
       is_household_member: { Args: { hid: string }; Returns: boolean }
+      unaccent: { Args: { "": string }; Returns: string }
     }
     Enums: {
       [_ in never]: never
