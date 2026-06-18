@@ -151,10 +151,11 @@ Une nouvelle session n'a **aucune mémoire** de la précédente. Pour reprendre 
 
 ### Prochaine session — actions à effectuer
 
-1. **Poursuivre l'optimisation de la section Liste de courses** (chantier principal — beaucoup de détails restent à ajuster ; voir `docs/courses-ux-refonte.md`). Détails observés en prod à traiter en priorité :
-   - En usage réel, **tous les articles tombent dans le rayon « Autres » avec la puce « ajouté »** : les ajouts en texte libre ne sont pas liés au catalogue (`food_id`), donc pas de rayon ni d'icône. → rendre le rapprochement catalogue plus systématique (ex. relier automatiquement un ajout libre à un aliment du catalogue par libellé normalisé).
-   - Des articles **déjà présents en stock apparaissent quand même** dans « À acheter » (l'anti-doublon/anti-surplus n'agit qu'à l'ajout, pas rétroactivement sur les manuels existants).
-   - Reste aussi : **UX-14 mode magasin mobile**, et finitions diverses.
+1. **Poursuivre l'optimisation de la section Liste de courses** (chantier principal — beaucoup de détails restent à ajuster ; voir `docs/courses-ux-refonte.md`).
+   - ✅ **Fait (2026-06-18)** — *« tout part dans Autres »* : deux causes. (a) **Dérive libellé↔affichage** — `food.category` stockait un libellé qui devait matcher exactement `product-assets.tsx` ; 4 rayons sur 8 avaient dérivé → passé à une **clé stable** (migration `0011_category_keys` ; libellé/teinte/ordre/icône dérivés côté UI via `categoryDef`/`categoryLabel`/`CATEGORY_ORDER` ; rayon `boulangerie` ajouté). (b) **Ajouts libres non liés** — `addManualAction` auto-relie au catalogue par libellé normalisé exact (`findCatalogFoodIdByLabel`) + backfill des manuels existants. Normalisation unifiée dans `src/lib/text.ts`.
+   - ✅ **Fait (2026-06-18)** — *manuel déjà en stock* : marqueur **« déjà en stock (qté) »** (non masqué — décision validée), via `ShoppingLine.alreadyStocked`/`stockedLabel`.
+   - ⚠️ **À déployer** : migration `0011` **live** sur la base partagée (dev = prod) mais le code Netlify est encore l'ancien (par libellés) → **prod en « Autres » jusqu'au redeploy**. Pousser sur `main`.
+   - ⏳ **Reste** : **couverture catalogue long-tail** (bœuf, poireaux, vin rouge, herbes… hors catalogue curé → étendre le seed ou exploiter l'import USDA/OFF) ; **UX-14 mode magasin mobile** ; finitions diverses. Rendu **non vérifié en navigateur** ce jour (extension Claude in Chrome non connectée).
 2. **Tests & vérification** : extension **Claude in Chrome** connectée (piloter un onglet, lire console/réseau) + skills `verify` / `playwright-cli`. Local : `npm run dev` sur `http://localhost:3000` ; prod : `https://mealings.netlify.app`.
 3. **Passe composants + icônes** : composants React partagés (Button, Field, Card, Badge, Nav, Bubble) + icônes **Lucide** (lib à installer) ; convertir les écrans aux primitives plutôt qu'aux classes utilitaires.
 4. **SMTP custom Supabase** : configurer un fournisseur d'emails (Auth → Settings → SMTP) pour fiabiliser confirmation/reset (l'envoi intégré est rate-limité — voir « Déploiement production »).

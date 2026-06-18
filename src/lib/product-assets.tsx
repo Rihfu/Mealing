@@ -15,12 +15,13 @@
 
 export type CategoryKey =
   | 'legumes'
-  | 'cremerie'
   | 'proteines'
+  | 'cremerie'
+  | 'boulangerie'
   | 'epicerie'
   | 'sucre'
-  | 'boissons'
   | 'surgeles'
+  | 'boissons'
   | 'maison';
 
 export interface CategoryDef {
@@ -29,17 +30,56 @@ export interface CategoryDef {
   ink: string; // couleur d'encre du jeton
 }
 
-/** Rayons : libellé + teinte de jeton. L'ordre fait foi pour l'affichage trié. */
+/**
+ * Rayons : clé stable (= `food.category`) → libellé + teinte de jeton.
+ * L'ordre des entrées fait foi pour l'affichage trié (parcours type magasin).
+ * Les libellés collent à ceux du seed catalogue (migrations 0009/0011).
+ */
 export const CATEGORIES: Record<CategoryKey, CategoryDef> = {
   legumes: { label: 'Fruits & légumes', tint: 'var(--color-sage-tint)', ink: 'var(--color-sage-deep)' },
-  cremerie: { label: 'Frais & crémerie', tint: 'var(--color-butter-tint)', ink: '#8a6d1f' },
-  proteines: { label: 'Viandes, poissons & œufs', tint: 'var(--color-clay-tint)', ink: '#a96a4a' },
+  proteines: { label: 'Viandes & poissons', tint: 'var(--color-clay-tint)', ink: '#a96a4a' },
+  cremerie: { label: 'Crémerie & œufs', tint: 'var(--color-butter-tint)', ink: '#8a6d1f' },
+  boulangerie: { label: 'Pains & céréales', tint: 'var(--color-butter-tint)', ink: '#8a6d1f' },
   epicerie: { label: 'Épicerie salée', tint: 'var(--color-sage-tint)', ink: 'var(--color-sage-deep)' },
-  sucre: { label: 'Petit-déj & sucré', tint: 'var(--color-butter-tint)', ink: '#8a6d1f' },
-  boissons: { label: 'Boissons', tint: 'var(--color-clay-tint)', ink: '#a96a4a' },
+  sucre: { label: 'Épicerie sucrée', tint: 'var(--color-butter-tint)', ink: '#8a6d1f' },
   surgeles: { label: 'Surgelés', tint: 'var(--color-sage-tint)', ink: 'var(--color-sage-deep)' },
+  boissons: { label: 'Boissons', tint: 'var(--color-clay-tint)', ink: '#a96a4a' },
   maison: { label: 'Maison & entretien', tint: 'var(--color-clay-tint)', ink: '#a96a4a' },
 };
+
+/** Clés de rayon dans l'ordre d'affichage (l'ordre de `CATEGORIES` fait foi). */
+export const CATEGORY_ORDER = Object.keys(CATEGORIES) as CategoryKey[];
+
+/**
+ * Tolérance : anciens libellés d'affichage (avant migration 0011) → clé stable.
+ * Couvre aussi les libellés du seed 0009 historiques. Permet au lecteur de rester
+ * robuste si une donnée porte encore un libellé (rétro-compat / état partiel).
+ */
+const LEGACY_LABEL_TO_KEY: Record<string, CategoryKey> = {
+  'Fruits & légumes': 'legumes',
+  'Viandes & poissons': 'proteines',
+  'Viandes, poissons & œufs': 'proteines',
+  'Crémerie & œufs': 'cremerie',
+  'Frais & crémerie': 'cremerie',
+  'Pains & céréales': 'boulangerie',
+  'Épicerie salée': 'epicerie',
+  'Épicerie sucrée': 'sucre',
+  'Petit-déj & sucré': 'sucre',
+  Surgelés: 'surgeles',
+  Boissons: 'boissons',
+  'Maison & entretien': 'maison',
+};
+
+/** Définition d'un rayon depuis sa clé stable (`food.category`) ; undefined si inconnue. */
+export function categoryDef(key?: string | null): CategoryDef | undefined {
+  if (!key) return undefined;
+  return CATEGORIES[key as CategoryKey] ?? CATEGORIES[LEGACY_LABEL_TO_KEY[key]];
+}
+
+/** Libellé d'affichage d'un rayon depuis sa clé stable ; null si inconnue. */
+export function categoryLabel(key?: string | null): string | null {
+  return categoryDef(key)?.label ?? null;
+}
 
 export type ProvenanceKey = 'repas' | 'essentiel' | 'ajoute';
 

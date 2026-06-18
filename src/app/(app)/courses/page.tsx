@@ -1,6 +1,13 @@
 import { getAuthContext } from '@/lib/auth';
 import { generateShoppingList, getShoppingWindow, type ShoppingLine } from '@/lib/core';
-import { CATEGORIES, ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-assets';
+import {
+  categoryDef,
+  categoryLabel,
+  CATEGORY_ORDER,
+  ProductIcon,
+  ProvenanceBadge,
+  type ProvenanceKey,
+} from '@/lib/product-assets';
 import { AddArticle } from './add-article';
 import { PurchaseCheckout } from './purchase-checkout';
 import {
@@ -24,13 +31,11 @@ const SOURCE_TO_PROV: Record<ShoppingLine['source'], ProvenanceKey> = {
   manual: 'ajoute',
 };
 
-// Ordre d'affichage des rayons + lookup teinte/encre par libellé.
-const RAYON_ORDER = Object.values(CATEGORIES).map((c) => c.label);
-const RAYON_BY_LABEL = new Map(Object.values(CATEGORIES).map((c) => [c.label, c]));
-const OTHER_RAYON = 'Autres';
+// Tri par rayon : `food.category` porte une clé stable (cf. product-assets + migration 0011).
+const OTHER_KEY = 'autres';
 
-function tileStyle(category?: string | null) {
-  const def = category ? RAYON_BY_LABEL.get(category) : undefined;
+function tileStyle(categoryKey?: string | null) {
+  const def = categoryDef(categoryKey);
   return { background: def?.tint ?? 'var(--color-sage-tint)', color: def?.ink ?? 'var(--color-sage-deep)' };
 }
 
@@ -74,6 +79,15 @@ function LineRow({ line }: { line: ShoppingLine }) {
       <span className={`text-sm ${line.checked ? 'text-ink-soft line-through' : ''}`}>{line.name}</span>
 
       <span className="ml-auto flex items-center gap-3">
+        {isManual && line.alreadyStocked && (
+          <span
+            className="rounded-full px-2 py-0.5 text-xs font-semibold"
+            style={{ background: 'var(--color-butter-tint)', color: '#8a6d1f' }}
+            title="Tu as déjà cet article en stock"
+          >
+            déjà en stock{line.stockedLabel ? ` (${line.stockedLabel})` : ''}
+          </span>
+        )}
         <ProvenanceBadge kind={SOURCE_TO_PROV[line.source]} />
         {qty && <span className="text-sm text-ink-soft">{qty}</span>}
         {isManual && line.manualId && <DeleteWithUndo kind="manual" id={line.manualId} label={line.name} />}
@@ -114,10 +128,10 @@ export default async function CoursesPage() {
 
   const byRayon = new Map<string, ShoppingLine[]>();
   for (const l of active) {
-    const r = l.category && RAYON_BY_LABEL.has(l.category) ? l.category : OTHER_RAYON;
+    const r = categoryDef(l.category) ? (l.category as string) : OTHER_KEY;
     (byRayon.get(r) ?? byRayon.set(r, []).get(r)!).push(l);
   }
-  const rayonsToShow = [...RAYON_ORDER, OTHER_RAYON].filter((r) => byRayon.has(r));
+  const rayonsToShow = [...CATEGORY_ORDER, OTHER_KEY].filter((r) => byRayon.has(r));
 
   return (
     <div className="flex flex-col gap-6">
@@ -162,7 +176,7 @@ export default async function CoursesPage() {
                     items={done.map((l) => ({
                       name: l.name,
                       qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
-                      category: l.category ?? null,
+                      category: categoryLabel(l.category),
                     }))}
                   />
                 </div>
@@ -177,7 +191,7 @@ export default async function CoursesPage() {
             ) : (
               rayonsToShow.map((rayon) => {
                 const items = byRayon.get(rayon)!;
-                const def = RAYON_BY_LABEL.get(rayon);
+                const def = categoryDef(rayon);
                 return (
                   <details key={rayon} open className="border-t border-line first:border-t-0">
                     <summary className="flex cursor-pointer list-none items-center gap-2 py-2 font-display text-sm font-semibold">
@@ -187,7 +201,7 @@ export default async function CoursesPage() {
                       >
                         ●
                       </span>
-                      <span className="flex-1">{rayon}</span>
+                      <span className="flex-1">{def?.label ?? 'Autres'}</span>
                       <span className="text-xs font-normal text-ink-soft">{items.length}</span>
                     </summary>
                     <ul className="divide-y divide-line pl-1">

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { addManualAction, searchCatalogAction } from './actions';
 import { UNIT_OPTIONS } from '@/lib/units';
-import { ProductIcon } from '@/lib/product-assets';
+import { normalizeLabel } from '@/lib/text';
+import { ProductIcon, categoryLabel } from '@/lib/product-assets';
 import type { FoodSuggestion } from '@/lib/core';
 
 /** Contexte (anti-doublon / anti-surplus) : ce qui est déjà sur la liste / en stock. */
@@ -17,17 +18,6 @@ export interface StockRef {
   label: string | null;
   qty: string;
   present: boolean;
-}
-
-/** Normalisation légère pour rapprocher des libellés (accents/casse/pluriel). */
-function norm(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[^a-z0-9 ]/g, ' ') // retire accents (marques combinantes) + ponctuation
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/s$/, '');
 }
 
 /**
@@ -49,11 +39,11 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
     const name = (selected?.name ?? query).trim();
     if (name.length < 2) return null;
     const fid = selected?.foodId ?? null;
-    const n = norm(name);
-    const listed = onList.find((x) => (fid && x.foodId === fid) || norm(x.name) === n);
+    const n = normalizeLabel(name);
+    const listed = onList.find((x) => (fid && x.foodId === fid) || normalizeLabel(x.name) === n);
     if (listed) return { kind: 'list' as const, qty: listed.qty };
     const stocked = inStock.find(
-      (x) => x.present && ((fid && x.foodId === fid) || (x.label != null && norm(x.label) === n)),
+      (x) => x.present && ((fid && x.foodId === fid) || (x.label != null && normalizeLabel(x.label) === n)),
     );
     if (stocked) return { kind: 'stock' as const, qty: stocked.qty };
     return null;
@@ -150,7 +140,9 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
                     <ProductIcon slug={s.foodId ? s.externalId : null} size={18} />
                   </span>
                   <span className="flex-1 text-sm">{s.name}</span>
-                  {s.category && <span className="text-xs text-ink-soft">{s.category}</span>}
+                  {categoryLabel(s.category) && (
+                    <span className="text-xs text-ink-soft">{categoryLabel(s.category)}</span>
+                  )}
                   {!s.foodId && <span className="text-xs text-ink-soft">importer</span>}
                 </button>
               </li>

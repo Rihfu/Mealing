@@ -1,6 +1,7 @@
 import type { DB } from './types';
 import { unwrap } from './types';
 import { type Quantity, toBase, fromBase, normalizeUnit } from '@/lib/units';
+import { normalizeLabel } from '@/lib/text';
 import { addDays, isoDate } from '@/lib/dates';
 
 export type ShoppingSource = 'recipe' | 'recurring' | 'manual';
@@ -14,8 +15,10 @@ export interface ShoppingLine {
   source: ShoppingSource;
   manualId?: string;
   foodId?: string | null; // aliment lié (identité produit) si connu
-  category?: string | null; // rayon (food.category) pour le tri par rayon ; null = non classé
+  category?: string | null; // rayon (food.category, clé stable) pour le tri ; null = non classé
   iconSlug?: string | null; // food.external_id ('cat:<slug>') pour le picto produit
+  alreadyStocked?: boolean; // (manuels) déjà couvert par le stock — anti-surplus rétroactif
+  stockedLabel?: string | null; // quantité en stock à afficher (« 2 L »), '' si présence sans qté
 }
 
 /**
@@ -273,6 +276,16 @@ export async function generateShoppingList(
   }
 
   for (const m of manual) {
+    // Anti-surplus rétroactif (G) : un manuel n'est jamais masqué (intention explicite,
+    // cf. Q2), mais on signale s'il est déjà couvert par le stock — par aliment lié ou
+    // par libellé normalisé. On affiche la quantité en stock quand elle est connue.
+    const stocked = stock.find(
+      (s) =>
+        (s.present || (s.quantity ?? 0) > 0) &&
+        ((m.food_id != null && s.food_id === m.food_id) ||
+          (!!s.label && normalizeLabel(s.label) === normalizeLabel(m.label))),
+    );
+
     lines.push({
       key: `manual:${m.id}`,
       name: m.label,
@@ -284,6 +297,12 @@ export async function generateShoppingList(
       foodId: m.food_id ?? null,
       category: m.food_id ? (foodCategory.get(m.food_id) ?? null) : null,
       iconSlug: m.food_id ? (foodSlug.get(m.food_id) ?? null) : null,
+      alreadyStocked: !!stocked,
+      stockedLabel: stocked
+        ? stocked.quantity != null
+          ? `${roundQty(stocked.quantity)} ${stocked.unit ?? ''}`.trim()
+          : ''
+        : null,
     });
   }
 
@@ -365,18 +384,6 @@ export async function checkoutPurchasedToStock(
     .eq('checked', true);
 
   return { added };
-}
-
-function normalizeLabel(value: string): string {
-  return value
-    .toLowerCase()
-    .replaceAll('œ', 'oe')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9 ]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/s$/, '');
 }
 
 function roundQty(value: number): number {

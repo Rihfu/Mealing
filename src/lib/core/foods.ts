@@ -6,6 +6,7 @@ import {
 } from '@/lib/providers/nutrition';
 import type { DB } from './types';
 import { unwrap } from './types';
+import { normalizeLabel } from '@/lib/text';
 
 /**
  * Importe (ou met à jour) un aliment issu d'un fournisseur nutritionnel dans la
@@ -185,6 +186,23 @@ export async function searchFoodCatalog(
   }
 
   return suggestions;
+}
+
+/**
+ * Rapproche un libellé libre d'un aliment du CATALOGUE curé (source 'manual',
+ * external_id 'cat:%') par libellé normalisé (accents/casse/pluriel/œ neutralisés).
+ * Donne une identité produit stable — donc un rayon et une icône — aux ajouts en
+ * texte libre, sans que l'utilisateur ait à cliquer une suggestion. Conservateur :
+ * uniquement sur correspondance exacte normalisée (pas de fuzzy → pas de mauvais lien).
+ * @returns l'id de l'aliment de catalogue correspondant, sinon null.
+ */
+export async function findCatalogFoodIdByLabel(db: DB, label: string): Promise<string | null> {
+  const target = normalizeLabel(label);
+  if (!target) return null;
+  const rows = (unwrap(
+    await db.from('food').select('id, name').eq('source', 'manual').like('external_id', 'cat:%'),
+  ) ?? []) as Array<{ id: string; name: string }>;
+  return rows.find((r) => normalizeLabel(r.name) === target)?.id ?? null;
 }
 
 /**

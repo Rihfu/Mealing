@@ -5,6 +5,7 @@ import { getAuthContext } from '@/lib/auth';
 import {
   searchFoodCatalog,
   importFoodByRef,
+  findCatalogFoodIdByLabel,
   checkoutPurchasedToStock,
   getShoppingWindow,
   type FoodSuggestion,
@@ -88,6 +89,11 @@ export async function addManualAction(formData: FormData): Promise<void> {
   const externalId = String(formData.get('external_id') ?? '');
   if (!foodId && (source === 'usda' || source === 'openfoodfacts') && externalId) {
     foodId = await importFoodByRef(supabase, source, externalId);
+  }
+  // Texte libre non lié : rapprochement automatique du catalogue par libellé normalisé
+  // → identité produit (rayon + icône) sans clic de suggestion (cf. findCatalogFoodIdByLabel).
+  if (!foodId) {
+    foodId = await findCatalogFoodIdByLabel(supabase, label);
   }
 
   await supabase.from('shopping_manual_item').insert({
