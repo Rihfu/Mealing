@@ -68,23 +68,23 @@ export async function ensureFoodConservation(
   return days;
 }
 
-/** Estime (best-effort) la conservation des aliments du stock qui n'en ont pas encore. */
+/** Estime (best-effort) la conservation des aliments du stock qui n'en ont pas encore.
+ *  Deux requêtes simples (stock → food_ids, puis food) : robuste et lisible. */
 export async function ensureStockConservation(db: DB, householdId: string): Promise<number> {
-  const rows = (unwrap(
-    await db
-      .from('stock')
-      .select('food_id, food:food_id(name, category)')
-      .eq('household_id', householdId)
-      .not('food_id', 'is', null),
-  ) ?? []) as Array<{ food_id: string; food: { name: string; category: string | null } | { name: string; category: string | null }[] | null }>;
+  const stockRows = (unwrap(await db.from('stock').select('food_id').eq('household_id', householdId)) ?? []) as Array<{
+    food_id: string | null;
+  }>;
+  const foodIds = Array.from(new Set(stockRows.map((r) => r.food_id).filter((x): x is string => !!x)));
+  if (foodIds.length === 0) return 0;
 
-  const seen = new Map<string, { name: string; category: string | null }>();
-  for (const r of rows) {
-    const f = first(r.food);
-    if (r.food_id && f && !seen.has(r.food_id)) seen.set(r.food_id, { name: f.name, category: f.category });
-  }
-  const entries = [...seen.entries()];
-  const results = await Promise.all(entries.map(([id, f]) => ensureFoodConservation(db, id, f.name, f.category).catch(() => null)));
+  const foods = (unwrap(await db.from('food').select('id, name, category').in('id', foodIds)) ?? []) as Array<{
+    id: string;
+    name: string;
+    category: string | null;
+  }>;
+  const results = await Promise.all(
+    foods.map((f) => ensureFoodConservation(db, f.id, f.name, f.category).catch(() => null)),
+  );
   return results.filter((r) => r != null).length;
 }
 
