@@ -156,6 +156,32 @@ export type Database = {
         }
         Relationships: []
       }
+      food_conservation: {
+        Row: {
+          days: Json
+          food_id: string
+          updated_at: string
+        }
+        Insert: {
+          days?: Json
+          food_id: string
+          updated_at?: string
+        }
+        Update: {
+          days?: Json
+          food_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_conservation_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: true
+            referencedRelation: "food"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       food_package: {
         Row: {
           created_at: string

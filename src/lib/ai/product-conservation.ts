@@ -54,3 +54,48 @@ export async function getProductConservation(name: string, category?: string | n
     return [];
   }
 }
+
+/* -------------------- Conservation en JOURS (pour le Stock) ------------------ */
+/*
+ * Variante NUMÉRIQUE de l'estimation, pour CALCULER une date de péremption dans le
+ * Stock (la version `getProductConservation` ci-dessus renvoie du texte, pour l'affichage
+ * de la fiche). Par lieu (placard/frigo/congelateur), durée en JOURS, non-entamé ET
+ * entamé. Indicatif (principe n°2), usages FR. Mis en cache par aliment (table
+ * `food_conservation`) → jamais appelé en synchrone au rendu de la liste de stock.
+ */
+const basisDays = z
+  .object({ unopened: z.number().nullable(), opened: z.number().nullable() })
+  .nullable();
+const daysSchema = z.object({
+  placard: basisDays.optional(),
+  frigo: basisDays.optional(),
+  congelateur: basisDays.optional(),
+});
+export type ConservationDays = z.infer<typeof daysSchema>;
+
+const DAYS_SYSTEM_PROMPT = `Tu estimes la conservation d'un aliment EN NOMBRE DE JOURS, pour une appli FRANÇAISE.
+Renvoie un objet JSON { "placard"?, "frigo"?, "congelateur"? } où chaque lieu PERTINENT vaut { "unopened": number|null, "opened": number|null } :
+- "unopened" : jours de conservation NON ENTAMÉ dans ce lieu (entier, usages FR).
+- "opened" : jours APRÈS ouverture/entame dans ce lieu (souvent plus court) ; null si sans objet.
+- Omets un lieu (ou mets-le à null) s'il n'est pas pertinent (ex. pas de congélateur pour des œufs frais).
+Exemples d'ordre de grandeur : lait UHT placard ~120 (ouvert au frigo ~4) ; saumon frais frigo ~2 ; surgelés congelateur ~180.
+INTERDIT : toute valeur nutritionnelle. Réponds UNIQUEMENT avec le JSON.`;
+
+/** Estimation numérique (jours/lieu) pour le Stock. null si l'IA échoue. */
+export async function estimateConservationDays(name: string, category?: string | null): Promise<ConservationDays | null> {
+  const n = name.trim();
+  if (!n) return null;
+  try {
+    const ai = getAIProvider();
+    const res = await ai.chat(
+      [
+        { role: 'system', content: DAYS_SYSTEM_PROMPT },
+        { role: 'user', content: `Aliment : ${n}${category ? ` (rayon : ${category})` : ''}` },
+      ],
+      { jsonMode: true, temperature: 0.2 },
+    );
+    return daysSchema.parse(JSON.parse(res.content));
+  } catch {
+    return null;
+  }
+}
