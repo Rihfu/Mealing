@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { askAgentAction, clearConversationAction, executeAgentAction } from './actions';
-import type { AgentProposal } from '@/lib/ai/agent';
+import type { ProposedAction } from '@/lib/ai/agent';
 
 interface Msg {
   role: 'user' | 'assistant';
@@ -20,24 +20,20 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
   const [messages, setMessages] = useState<Msg[]>(initial);
   const [input, setInput] = useState('');
   const [pending, setPending] = useState(false);
-  const [proposal, setProposal] = useState<AgentProposal | null>(null);
+  const [plan, setPlan] = useState<ProposedAction[] | null>(null);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
     const text = input.trim();
     if (!text || pending) return;
     setInput('');
-    setProposal(null);
+    setPlan(null);
     setMessages((m) => [...m, { role: 'user', content: text }]);
     setPending(true);
     try {
       const d = await askAgentAction(text);
-      if (d.type === 'reply') {
-        setMessages((m) => [...m, { role: 'assistant', content: d.message }]);
-      } else {
-        setMessages((m) => [...m, { role: 'assistant', content: d.proposal.summary }]);
-        setProposal(d.proposal);
-      }
+      setMessages((m) => [...m, { role: 'assistant', content: d.message }]);
+      if (d.type === 'plan' && d.actions.length > 0) setPlan(d.actions);
     } catch {
       setMessages((m) => [...m, { role: 'assistant', content: 'Une erreur est survenue.' }]);
     } finally {
@@ -46,13 +42,13 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
   }
 
   async function confirm() {
-    if (!proposal || pending) return;
-    const action = proposal.action;
-    setProposal(null);
+    if (!plan || pending) return;
+    const actions = plan;
+    setPlan(null);
     setPending(true);
     try {
-      const r = await executeAgentAction(action);
-      setMessages((m) => [...m, { role: 'assistant', content: `✓ Fait. ${r.message}` }]);
+      const r = await executeAgentAction(actions);
+      setMessages((m) => [...m, { role: 'assistant', content: `✓ Fait. ${r.messages.join(' ')}` }]);
     } catch {
       setMessages((m) => [...m, { role: 'assistant', content: "Échec de l'exécution." }]);
     } finally {
@@ -62,13 +58,13 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
 
   function cancel() {
     setMessages((m) => [...m, { role: 'assistant', content: 'Action annulée.' }]);
-    setProposal(null);
+    setPlan(null);
   }
 
   async function clearAll() {
     await clearConversationAction();
     setMessages([]);
-    setProposal(null);
+    setPlan(null);
   }
 
   function pick(text: string) {
@@ -104,18 +100,25 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
           </div>
         ))}
 
-        {proposal && (
+        {plan && (
           <div className="w-[88%] self-start rounded-2xl border border-orange bg-[#fdf0e3] p-3.5 shadow-soft">
             <div className="mb-2 flex items-center gap-1.5 text-orange">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
                 <path d="M12 9v4M12 17h.01" />
               </svg>
-              <span className="font-display text-sm font-semibold text-ink">Confirmer cette action ?</span>
+              <span className="font-display text-sm font-semibold text-ink">
+                {plan.length > 1 ? `Confirmer ces ${plan.length} actions ?` : 'Confirmer cette action ?'}
+              </span>
             </div>
-            <div className="mb-3 rounded-xl border border-line bg-surface p-2.5 text-xs">
-              <div className="font-semibold text-ink">{proposal.summary}</div>
-            </div>
+            <ul className="mb-3 flex flex-col gap-1.5">
+              {plan.map((a, i) => (
+                <li key={i} className="flex items-start gap-2 rounded-xl border border-line bg-surface p-2.5 text-xs">
+                  <span className="mt-0.5 text-green-strong">•</span>
+                  <span className="font-semibold text-ink">{a.summary}</span>
+                </li>
+              ))}
+            </ul>
             <div className="flex gap-2">
               <button onClick={confirm} disabled={pending} className="btn-primary flex-1 py-2.5 disabled:opacity-50">
                 Confirmer
@@ -127,7 +130,7 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
           </div>
         )}
 
-        {messages.length === 0 && !proposal && (
+        {messages.length === 0 && !plan && (
           <p className="text-sm text-ink-soft">
             Pose une question, ou demande une action — tout est confirmé avant d’être appliqué.
           </p>
@@ -136,7 +139,7 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
 
       <div className="sticky bottom-0 -mx-4 border-t border-line bg-surface px-4 pb-3 pt-2 lg:static lg:mx-0 lg:rounded-2xl lg:border lg:shadow-soft">
         <div className="mb-2 flex gap-2 overflow-x-auto">
-          {['Qu’est-ce qu’on mange ?', 'Planifie une omelette demain midi'].map((s) => (
+          {['Prépare ma liste de la semaine', 'Reconduis mes dernières courses', 'Prix du saumon ?'].map((s) => (
             <button key={s} type="button" onClick={() => pick(s)} className="nav-pill bg-sage-tint text-sage-deep">
               {s}
             </button>
