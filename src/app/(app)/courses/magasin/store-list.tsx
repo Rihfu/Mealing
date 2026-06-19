@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
 import { toggleCheckAction } from '../actions';
 import { PurchaseCheckout } from '../purchase-checkout';
+import { idbGet, idbSet } from '@/lib/offline/idb';
+import { clearQueue, enqueueOp, getQueue } from '@/lib/offline/queue';
 
 /** Article du mode magasin (sérialisable, dérivé d'une ShoppingLine). */
 export interface StoreItem {
@@ -41,7 +43,7 @@ function BigCheck({ checked }: { checked: boolean }) {
  * SUR PLACE (devant le rayon) plutôt que tout d'un coup au rangement. Les prix saisis
  * sont partagés avec la modale « J'ai fait mes courses » (prix contrôlés).
  */
-export function StoreList({ groups, onCheckout }: { groups: StoreGroup[]; onCheckout?: () => void }) {
+export function StoreList({ groups, refresh }: { groups: StoreGroup[]; refresh?: () => void }) {
   const [, startTransition] = useTransition();
   // Prix saisis (client) ; pré-remplis depuis le dernier prix connu pour les articles déjà cochés.
   const [prices, setPrices] = useState<Record<string, string>>(() =>
@@ -53,26 +55,97 @@ export function StoreList({ groups, onCheckout }: { groups: StoreGroup[]; onChec
     ),
   );
   function setPrice(key: string, v: string) {
-    setPrices((p) => ({ ...p, [key]: v }));
+    // Persisté en IndexedDB : les prix saisis en rayon survivent à un rechargement
+    // hors-ligne et restent pré-remplis jusqu'au passage en caisse (au retour réseau).
+    setPrices((p) => {
+      const next = { ...p, [key]: v };
+      void idbSet('magasin:prices', next);
+      return next;
+    });
   }
 
-  // Cochage OPTIMISTE : l'état bascule instantanément en local (la confirmation
-  // serveur + revalidation arrive après) → pas d'attente du round-trip Netlify/Supabase.
+  // Cochage OPTIMISTE + HORS-LIGNE : l'état bascule instantanément en local, est
+  // PERSISTÉ (IndexedDB) pour survivre à un rechargement sans réseau, et synchronisé
+  // au serveur tout de suite si en ligne, sinon mis en file (rejouée au retour réseau).
   const [localChecked, setLocalChecked] = useState<Record<string, boolean>>({});
+  const [pendingSync, setPendingSync] = useState(0);
   const isChecked = (it: StoreItem) => localChecked[it.key] ?? it.checked;
+
+  // Au montage : recharge les coches/prix persistés (reprise d'une session hors-ligne)
+  // et le nombre d'opérations en attente de synchro.
+  useEffect(() => {
+    let cancelled = false;
+    idbGet<Record<string, boolean>>('magasin:checks').then((c) => {
+      if (!cancelled && c && Object.keys(c).length) setLocalChecked(c);
+    });
+    idbGet<Record<string, string>>('magasin:prices').then((p) => {
+      if (!cancelled && p && Object.keys(p).length) setPrices((prev) => ({ ...prev, ...p }));
+    });
+    getQueue().then((q) => {
+      if (!cancelled) setPendingSync(q.length);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function toggle(it: StoreItem) {
     const next = !isChecked(it);
-    setLocalChecked((m) => ({ ...m, [it.key]: next }));
+    setLocalChecked((m) => {
+      const nm = { ...m, [it.key]: next };
+      void idbSet('magasin:checks', nm);
+      return nm;
+    });
     // À la coche : pré-remplir le dernier prix connu (modifiable) pour aller vite.
     if (next && prices[it.key] == null && it.suggestedPrice != null) setPrice(it.key, String(it.suggestedPrice));
+
+    const fd = new FormData();
+    fd.set('item_key', it.key);
+    fd.set('checked', String(next));
+    const online = typeof navigator === 'undefined' || navigator.onLine;
+    if (!online) {
+      void enqueueOp({ kind: 'toggle', key: it.key, checked: next }).then((n) => setPendingSync(n));
+      return;
+    }
     startTransition(async () => {
-      const fd = new FormData();
-      fd.set('item_key', it.key);
-      fd.set('checked', String(next));
-      await toggleCheckAction(fd);
+      try {
+        await toggleCheckAction(fd);
+      } catch {
+        // Réseau coupé en cours de route → on met en file pour synchro ultérieure.
+        const n = await enqueueOp({ kind: 'toggle', key: it.key, checked: next });
+        setPendingSync(n);
+      }
     });
   }
+
+  // Synchro : rejoue la file (FIFO) au retour du réseau. À chaque opération échouée,
+  // on s'arrête (toujours hors-ligne) et on garde la file. Sinon on vide + rafraîchit.
+  const flush = useCallback(() => {
+    startTransition(async () => {
+      const q = await getQueue();
+      if (q.length === 0) return;
+      for (const op of q) {
+        const fd = new FormData();
+        fd.set('item_key', op.key);
+        fd.set('checked', String(op.checked));
+        try {
+          await toggleCheckAction(fd);
+        } catch {
+          return; // encore hors-ligne : on retentera au prochain événement « online »
+        }
+      }
+      await clearQueue();
+      setPendingSync(0);
+      refresh?.();
+    });
+  }, [refresh]);
+
+  useEffect(() => {
+    const onOnline = () => flush();
+    window.addEventListener('online', onOnline);
+    if (typeof navigator !== 'undefined' && navigator.onLine) flush();
+    return () => window.removeEventListener('online', onOnline);
+  }, [flush]);
 
   // Option : faire descendre les articles cochés (et les rayons terminés) pour garder
   // en haut ce qu'il reste à prendre. Désactivable via l'interrupteur → positions fixes.
@@ -92,6 +165,18 @@ export function StoreList({ groups, onCheckout }: { groups: StoreGroup[]; onChec
   const doneCount = checked.length;
   const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
+  // Après un passage en caisse réussi : la session magasin est terminée → on efface
+  // l'état hors-ligne (coches/prix/file) et on rafraîchit la liste.
+  function afterCheckout() {
+    setLocalChecked({});
+    setPrices({});
+    setPendingSync(0);
+    void idbSet('magasin:checks', {});
+    void idbSet('magasin:prices', {});
+    void clearQueue();
+    refresh?.();
+  }
+
   return (
     <>
       {/* Progression (suit les coches optimistes, pas l'état serveur). */}
@@ -103,6 +188,11 @@ export function StoreList({ groups, onCheckout }: { groups: StoreGroup[]; onChec
           {doneCount} / {total}
         </span>
       </div>
+      {pendingSync > 0 && (
+        <p className="mt-2 rounded-xl px-3 py-2 text-center text-xs font-semibold" style={{ background: 'var(--color-butter-tint)', color: '#8a6d1f' }}>
+          {pendingSync} coche{pendingSync > 1 ? 's' : ''} en attente — synchro auto au retour du réseau.
+        </p>
+      )}
       <div className="mb-1 mt-2 flex items-center justify-end">
         <button
           type="button"
@@ -185,7 +275,7 @@ export function StoreList({ groups, onCheckout }: { groups: StoreGroup[]; onChec
               fullWidth
               prices={prices}
               onPriceChange={setPrice}
-              onDone={onCheckout}
+              onDone={afterCheckout}
               items={checked.map((it) => ({
                 key: it.key,
                 name: it.name,

@@ -52,7 +52,7 @@ export function MagasinView() {
           </Link>
         </p>
       ) : (
-        <StoreList groups={groups} onCheckout={refresh} />
+        <StoreList groups={groups} refresh={refresh} />
       )}
     </div>
   );
