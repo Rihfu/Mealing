@@ -1,14 +1,23 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-assets';
 import { UNIT_OPTIONS } from '@/lib/units';
-import { RangerButton, type CustomCategory } from './category-controls';
-import { DeleteWithUndo } from './undo-toast';
+import { RangerModal, BulkRangerModal, type CustomCategory } from './category-controls';
+import { pushUndoToast } from './undo-toast';
 import { catView } from './rayons';
-import { toggleCheckAction, setFoodCategoryAction, updateManualItemAction, promoteToEssentialAction } from './actions';
+import {
+  toggleCheckAction,
+  setFoodCategoryAction,
+  updateManualItemAction,
+  promoteToEssentialAction,
+  removeLinesAction,
+  undoRemoveLinesAction,
+  bulkPromoteEssentialsAction,
+  bulkSetCategoryAction,
+} from './actions';
 
 type Source = 'recipe' | 'recurring' | 'manual';
 
@@ -19,8 +28,9 @@ export interface SLine {
   quantity: number | null; // valeur brute (pour l'édition)
   unit: string | null;
   sources: Source[]; // provenances fusionnées (repas / essentiel / ajouté)
-  manualId: string | null; // article manuel unique (édition/suppression)
-  manualOnly: boolean; // ligne 100 % manuelle → qté éditable + supprimable
+  manualId: string | null; // article manuel unique (édition de la quantité)
+  manualIds: string[]; // tous les articles manuels fusionnés (pour le retrait)
+  manualOnly: boolean; // ligne 100 % manuelle → qté éditable + suppression réelle
   foodId: string | null;
   category: string | null;
   iconSlug: string | null;
@@ -52,7 +62,7 @@ function norm(s: string): string {
 }
 
 /** Construit/maj l'ensemble des lignes « en cours d'animation » de bascule. */
-function useToggle(customCategories: CustomCategory[]) {
+function useToggle() {
   const [pending, startTransition] = useTransition();
   const [animating, setAnimating] = useState<Set<string>>(new Set());
 
@@ -72,9 +82,125 @@ function useToggle(customCategories: CustomCategory[]) {
     });
   }
 
-  // customCategories n'est utilisé que par les lignes (Row) ; passé pour cohérence.
-  void customCategories;
   return { pending, animating, toggle };
+}
+
+/** Petit bouton « retirer de la liste » (corbeille). */
+function RemoveButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Retirer de la liste"
+      title="Retirer de la liste"
+      className="text-ink-soft/70 hover:text-clay-deep"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 6h18M8 6V4h8v2m-1 0v14H9V6" />
+      </svg>
+    </button>
+  );
+}
+
+/**
+ * Menu « ⋯ » d'actions d'une ligne, affiché UNIQUEMENT sur mobile (`lg:hidden`) pour
+ * éviter de surcharger la rangée sur écran étroit : regroupe Essentiel / Ranger /
+ * Retirer. Sur desktop, ces actions restent inline (cf. Row). Le menu se ferme au
+ * clic extérieur ; la modale « Ranger » est rendue au niveau de la ligne (elle
+ * survit donc à la fermeture du menu).
+ */
+function RowActionsMenu({
+  isEssential,
+  pinning,
+  onPin,
+  onRanger,
+  onRemove,
+}: {
+  isEssential: boolean;
+  pinning: boolean;
+  onPin: () => void;
+  onRanger: () => void;
+  onRemove?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDoc);
+    return () => document.removeEventListener('pointerdown', onDoc);
+  }, [open]);
+
+  const item = 'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-sage-tint/50 disabled:opacity-50';
+  return (
+    <div ref={ref} className="relative lg:hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Plus d’actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex h-8 w-8 items-center justify-center rounded-full text-ink-soft hover:bg-sage-tint/50"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="5" cy="12" r="1.8" />
+          <circle cx="12" cy="12" r="1.8" />
+          <circle cx="19" cy="12" r="1.8" />
+        </svg>
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 top-full z-30 mt-1 w-52 rounded-xl border border-line bg-surface p-1 shadow-soft">
+          <button
+            type="button"
+            role="menuitem"
+            disabled={isEssential || pinning}
+            onClick={() => {
+              setOpen(false);
+              onPin();
+            }}
+            className={`${item} text-amber-600`}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill={isEssential ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 17.3 6.2 20.6l1.1-6.5L2.5 9.5l6.5-.9L12 2.7l3 5.9 6.5.9-4.8 4.6 1.1 6.5z" />
+            </svg>
+            {isEssential ? 'Déjà un essentiel' : 'En faire un essentiel'}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onRanger();
+            }}
+            className={`${item} text-ink`}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+            </svg>
+            Ranger dans un rayon
+          </button>
+          {onRemove && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onRemove();
+              }}
+              className={`${item} text-clay-deep`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 6h18M8 6V4h8v2m-1 0v14H9V6" />
+              </svg>
+              Retirer de la liste
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** Ligne d'article (active ou « déjà pris »), avec coche/décoche animée. */
@@ -87,6 +213,10 @@ function Row({
   onToggle,
   dragHandle,
   flash,
+  selectMode = false,
+  selected = false,
+  onSelectToggle,
+  onRemove,
 }: {
   line: SLine;
   customCategories: CustomCategory[];
@@ -96,6 +226,10 @@ function Row({
   onToggle: () => void;
   dragHandle?: React.ReactNode;
   flash?: boolean;
+  selectMode?: boolean;
+  selected?: boolean;
+  onSelectToggle?: () => void;
+  onRemove?: (line: SLine) => void;
 }) {
   const v = catView(line.category, customCategories);
   const tint = v?.tint ?? 'var(--color-sage-tint)';
@@ -111,6 +245,10 @@ function Row({
   const [q, setQ] = useState('');
   const [u, setU] = useState('');
   const [savingQty, startSave] = useTransition();
+
+  // Modale « Ranger » contrôlée au niveau de la ligne (déclenchée par le chip desktop
+  // OU le menu « ⋯ » mobile, et survit à la fermeture de ce menu).
+  const [rangerOpen, setRangerOpen] = useState(false);
 
   // Épingle « essentiel » : la ligne devient un produit récurrent (revient tout seul).
   const [justPinned, setJustPinned] = useState(false);
@@ -143,67 +281,91 @@ function Row({
   return (
     <li
       data-food={line.foodId ?? undefined}
-      className={`flex items-center gap-3 rounded-lg px-1 py-2 transition-all duration-200 hover:bg-sage-tint/40 ${animating ? 'opacity-40' : ''} ${flash ? 'bg-sage-tint ring-1 ring-green-strong' : ''}`}
+      className={`flex items-center gap-3 rounded-lg px-1 py-2 transition-all duration-200 hover:bg-sage-tint/40 ${animating ? 'opacity-40' : ''} ${selected ? 'bg-sage-tint/60' : ''} ${flash ? 'bg-sage-tint ring-1 ring-green-strong' : ''}`}
     >
-      <button type="button" aria-label={done ? 'Décocher' : 'Cocher'} onClick={onToggle} disabled={pending} className="block">
-        <span
-          className={`flex h-5 w-5 items-center justify-center rounded-md border text-xs font-bold transition-colors ${
-            filled ? 'border-green-strong bg-green-strong text-white' : 'border-line-strong bg-surface text-transparent'
-          }`}
-        >
-          ✓
-        </span>
-      </button>
+      {selectMode ? (
+        <button type="button" aria-label={selected ? 'Désélectionner' : 'Sélectionner'} onClick={onSelectToggle} className="block">
+          <span
+            className={`flex h-5 w-5 items-center justify-center rounded-md border text-xs font-bold transition-colors ${
+              selected ? 'border-green-strong bg-green-strong text-white' : 'border-line-strong bg-surface text-transparent'
+            }`}
+          >
+            ✓
+          </span>
+        </button>
+      ) : (
+        <button type="button" aria-label={done ? 'Décocher' : 'Cocher'} onClick={onToggle} disabled={pending} className="block">
+          <span
+            className={`flex h-5 w-5 items-center justify-center rounded-md border text-xs font-bold transition-colors ${
+              filled ? 'border-green-strong bg-green-strong text-white' : 'border-line-strong bg-surface text-transparent'
+            }`}
+          >
+            ✓
+          </span>
+        </button>
+      )}
 
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl" style={{ background: tint, color: ink }}>
         <ProductIcon slug={line.iconSlug} size={20} />
       </span>
 
-      {line.foodId ? (
+      {selectMode ? (
+        <button type="button" onClick={onSelectToggle} className="min-w-0 flex-1 truncate text-left text-sm">
+          {line.name}
+        </button>
+      ) : line.foodId ? (
         <Link
           href={`/courses/produit/${line.foodId}?from=/courses`}
           title="Voir la fiche produit"
-          className={`text-sm hover:text-green-strong hover:underline ${done ? 'text-ink-soft line-through' : 'text-ink'}`}
+          className={`min-w-0 flex-1 truncate text-sm hover:text-green-strong hover:underline ${done ? 'text-ink-soft line-through' : 'text-ink'}`}
         >
           {line.name}
         </Link>
       ) : (
-        <span className={`text-sm ${done ? 'text-ink-soft line-through' : ''}`}>{line.name}</span>
+        <span className={`min-w-0 flex-1 truncate text-sm ${done ? 'text-ink-soft line-through' : ''}`}>{line.name}</span>
       )}
 
-      <span className="ml-auto flex items-center gap-2.5">
-        {!done && line.alreadyStocked && (
+      <span className="flex shrink-0 items-center gap-2.5">
+        {!selectMode && !done && line.alreadyStocked && (
           <span
             className="rounded-full px-2 py-0.5 text-xs font-semibold"
             style={{ background: 'var(--color-butter-tint)', color: '#8a6d1f' }}
             title="Tu as déjà cet article en stock"
           >
-            déjà en stock{line.stockedLabel ? ` (${line.stockedLabel})` : ''}
+            {/* Compact sur mobile (gain de largeur), complet dès sm. */}
+            <span className="sm:hidden">en stock</span>
+            <span className="hidden sm:inline">déjà en stock{line.stockedLabel ? ` (${line.stockedLabel})` : ''}</span>
           </span>
         )}
-        <button
-          type="button"
-          onClick={pin}
-          disabled={isEssential || pinning}
-          aria-label={isEssential ? 'Déjà un essentiel' : 'Épingler comme essentiel'}
-          title={isEssential ? 'Essentiel — gère-le dans « Mes essentiels »' : 'En faire un essentiel (reviendra tout seul)'}
-          className={`${isEssential ? 'text-amber-500' : 'text-ink-soft/60 hover:text-amber-500'} disabled:cursor-default`}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill={isEssential ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M12 17.3 6.2 20.6l1.1-6.5L2.5 9.5l6.5-.9L12 2.7l3 5.9 6.5.9-4.8 4.6 1.1 6.5z" />
-          </svg>
-        </button>
-        <RangerButton
-          label={line.name}
-          foodId={line.foodId}
-          currentCategory={line.category}
-          currentIcon={line.iconSlug}
-          customCategories={customCategories}
-        />
+        {/* Actions de ligne (desktop) : épingle essentiel, Ranger, retirer, glisser. */}
+        {!selectMode && !done && (
+          <span className="hidden items-center gap-2.5 lg:flex">
+            <button
+              type="button"
+              onClick={pin}
+              disabled={isEssential || pinning}
+              aria-label={isEssential ? 'Déjà un essentiel' : 'Épingler comme essentiel'}
+              title={isEssential ? 'Essentiel — gère-le dans « Mes essentiels »' : 'En faire un essentiel (reviendra tout seul)'}
+              className={`${isEssential ? 'text-amber-500' : 'text-ink-soft/60 hover:text-amber-500'} disabled:cursor-default`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill={isEssential ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 17.3 6.2 20.6l1.1-6.5L2.5 9.5l6.5-.9L12 2.7l3 5.9 6.5.9-4.8 4.6 1.1 6.5z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRangerOpen(true)}
+              className="rounded-full border border-line px-2 py-0.5 text-xs text-ink-soft hover:border-green-strong hover:text-green-strong"
+              title="Ranger dans un rayon"
+            >
+              Ranger
+            </button>
+          </span>
+        )}
         {line.sources.map((s) => (
-          <ProvenanceBadge key={s} kind={SOURCE_TO_PROV[s]} />
+          <ProvenanceBadge key={s} kind={SOURCE_TO_PROV[s]} labelHiddenOnMobile />
         ))}
-        {editable ? (
+        {!selectMode && editable ? (
           editing ? (
             <span className="flex items-center gap-1">
               <input
@@ -246,24 +408,59 @@ function Row({
         ) : (
           line.qty && <span className={`text-sm text-ink-soft ${done ? 'line-through' : ''}`}>{line.qty}</span>
         )}
-        {editable && line.manualId && <DeleteWithUndo kind="manual" id={line.manualId} label={line.name} />}
-        {dragHandle}
+        {/* Retirer + glisser : desktop seulement (sur mobile, tout passe par le menu « ⋯ »). */}
+        {!selectMode && !done && onRemove && (
+          <span className="hidden items-center gap-2.5 lg:flex">
+            <RemoveButton onClick={() => onRemove(line)} />
+            {dragHandle}
+          </span>
+        )}
+        {/* Menu « ⋯ » : regroupe les actions sur mobile pour éviter les lignes surchargées. */}
+        {!selectMode && !done && (
+          <RowActionsMenu
+            isEssential={isEssential}
+            pinning={pinning}
+            onPin={pin}
+            onRanger={() => setRangerOpen(true)}
+            onRemove={onRemove ? () => onRemove(line) : undefined}
+          />
+        )}
       </span>
+
+      {!selectMode && !done && rangerOpen && (
+        <RangerModal
+          label={line.name}
+          foodId={line.foodId}
+          currentCategory={line.category}
+          currentIcon={line.iconSlug}
+          customCategories={customCategories}
+          onClose={() => setRangerOpen(false)}
+        />
+      )}
     </li>
   );
 }
 
 /**
- * Liste « À acheter » : coche animée + glisser-déposer d'un rayon à l'autre
- * (poignée ⠿, tuile fantôme qui suit le curseur/doigt, dépôt = déplacement mémorisé).
+ * Liste « À acheter » : coche animée + glisser-déposer d'un rayon à l'autre, retrait
+ * d'une ligne ou d'un rayon entier (avec annulation), et MULTI-SÉLECTION inter-rayons
+ * pour ranger / promouvoir en essentiels / retirer plusieurs articles d'un coup.
  */
 export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; customCategories: CustomCategory[] }) {
-  const { pending, animating, toggle } = useToggle(customCategories);
+  const { pending, animating, toggle } = useToggle();
   const [drag, setDrag] = useState<{ line: SLine; from: string } | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [overKey, setOverKey] = useState<string | null>(null);
   const overRef = useRef<string | null>(null);
   const [query, setQuery] = useState('');
+
+  // Retrait (ligne / rayon / sélection) + multi-sélection.
+  const [, startRemove] = useTransition();
+  const [bulkPending, startBulk] = useTransition();
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkRanger, setBulkRanger] = useState(false);
+  const [confirmRayon, setConfirmRayon] = useState<string | null>(null);
 
   // Retour de la fiche produit : l'article consulté (?viewed=<foodId>) est mis en
   // valeur tant que le param est là, scrollé à vue, puis le param est retiré au bout
@@ -283,6 +480,57 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
   const shownGroups = q
     ? groups.map((g) => ({ ...g, items: g.items.filter((l) => norm(l.name).includes(q)) })).filter((g) => g.items.length > 0)
     : groups;
+
+  const allLines = useMemo(() => groups.flatMap((g) => g.items), [groups]);
+  const shownLines = useMemo(() => shownGroups.flatMap((g) => g.items), [shownGroups]);
+  const selectedLines = useMemo(() => allLines.filter((l) => selected.has(l.key)), [allLines, selected]);
+  const allShownSelected = shownLines.length > 0 && shownLines.every((l) => selected.has(l.key));
+
+  function exitSelect() {
+    setSelectMode(false);
+    setSelected(new Set());
+  }
+  function toggleSelect(key: string) {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
+  }
+  function toggleSelectAll() {
+    setSelected(allShownSelected ? new Set() : new Set(shownLines.map((l) => l.key)));
+  }
+
+  // Retire des lignes de la liste courante (manuel → suppression ; généré → masqué),
+  // avec annulation. Mutualisé : ligne unique, rayon entier, sélection.
+  function removeLines(lines: SLine[]) {
+    if (lines.length === 0) return;
+    const inputs = lines.map((l) => ({ key: l.key, manualIds: l.manualIds, dismiss: !l.manualOnly }));
+    const label = lines.length === 1 ? `« ${lines[0].name} » retiré` : `${lines.length} articles retirés`;
+    startRemove(async () => {
+      const data = await removeLinesAction(inputs);
+      pushUndoToast(label, () => undoRemoveLinesAction(data));
+    });
+  }
+
+  function bulkEssentials() {
+    const items = selectedLines.map((l) => ({ label: l.name, foodId: l.foodId, quantity: l.quantity, unit: l.unit }));
+    startBulk(async () => {
+      await bulkPromoteEssentialsAction(items);
+      exitSelect();
+    });
+  }
+  function bulkDelete() {
+    const lines = selectedLines;
+    exitSelect();
+    removeLines(lines);
+  }
+  async function bulkMove(categoryKey: string) {
+    const items = selectedLines.map((l) => ({ label: l.name, foodId: l.foodId, iconSlug: l.iconSlug }));
+    await bulkSetCategoryAction(items, categoryKey);
+    exitSelect();
+  }
 
   useEffect(() => {
     if (!drag) return;
@@ -325,20 +573,43 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
 
   return (
     <>
-      {totalItems > 6 && (
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Rechercher un article…"
-          aria-label="Rechercher dans la liste"
-          className="field-input mb-2 w-full px-3 py-1.5 text-sm"
-        />
-      )}
+      {/* Barre d'outils : recherche + bascule sélection multiple. */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        {totalItems > 6 && (
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher un article…"
+            aria-label="Rechercher dans la liste"
+            className="field-input min-w-0 flex-1 px-3 py-1.5 text-sm"
+          />
+        )}
+        {selectMode ? (
+          <div className="ml-auto flex items-center gap-2">
+            <button type="button" onClick={toggleSelectAll} className="text-xs font-semibold text-green-strong">
+              {allShownSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
+            </button>
+            <button type="button" onClick={exitSelect} className="rounded-full border border-line px-3 py-1 text-xs font-semibold text-ink-soft">
+              Terminé
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setSelectMode(true)}
+            className="ml-auto rounded-full border border-line px-3 py-1 text-xs font-semibold text-ink-soft hover:border-green-strong hover:text-green-strong"
+          >
+            Sélectionner
+          </button>
+        )}
+      </div>
+
       {q && shownGroups.length === 0 && (
         <p className="py-4 text-center text-sm text-ink-soft">Aucun article ne correspond à « {query} ».</p>
       )}
       {shownGroups.map((g) => {
         const over = overKey === g.key && drag != null && drag.from !== g.key;
+        const clearable = g.key !== OTHER_KEY;
         return (
           <details
             key={g.key}
@@ -352,6 +623,40 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
               </span>
               <span className="flex-1">{g.label}</span>
               <span className="text-xs font-normal text-ink-soft">{g.items.length}</span>
+              {!selectMode &&
+                (confirmRayon === g.key ? (
+                  <span className="flex items-center gap-1.5 text-xs" onClick={(e) => e.preventDefault()}>
+                    <span className="text-ink-soft">Vider&nbsp;?</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        removeLines(g.items);
+                        setConfirmRayon(null);
+                      }}
+                      className="font-bold text-clay-deep"
+                    >
+                      Oui
+                    </button>
+                    <button type="button" onClick={() => setConfirmRayon(null)} className="text-ink-soft">
+                      Non
+                    </button>
+                  </span>
+                ) : (
+                  clearable && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setConfirmRayon(g.key);
+                      }}
+                      aria-label={`Vider le rayon ${g.label}`}
+                      title="Retirer tous les articles de ce rayon"
+                      className="text-xs font-semibold text-ink-soft/70 hover:text-clay-deep"
+                    >
+                      vider
+                    </button>
+                  )
+                ))}
             </summary>
             <ul className="divide-y divide-line pl-1">
               {g.items.map((line) => (
@@ -364,6 +669,10 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
                   pending={pending}
                   flash={!!viewed && line.foodId === viewed}
                   onToggle={() => toggle(line, true)}
+                  selectMode={selectMode}
+                  selected={selected.has(line.key)}
+                  onSelectToggle={() => toggleSelect(line.key)}
+                  onRemove={(l) => removeLines([l])}
                   dragHandle={
                     <button
                       type="button"
@@ -401,13 +710,43 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
           {drag.line.name}
         </div>
       )}
+
+      {/* Barre d'actions de la sélection multiple (collante en bas). */}
+      {selectMode && selected.size > 0 && (
+        <div className="fixed inset-x-0 bottom-5 z-50 flex justify-center px-4">
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface px-3 py-2 text-sm shadow-soft">
+            <span className="px-1 font-semibold">{selected.size} sélectionné{selected.size > 1 ? 's' : ''}</span>
+            <button type="button" onClick={bulkEssentials} disabled={bulkPending} className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 font-semibold text-amber-600 hover:border-amber-400 disabled:opacity-60">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 17.3 6.2 20.6l1.1-6.5L2.5 9.5l6.5-.9L12 2.7l3 5.9 6.5.9-4.8 4.6 1.1 6.5z" />
+              </svg>
+              Essentiels
+            </button>
+            <button type="button" onClick={() => setBulkRanger(true)} disabled={bulkPending} className="rounded-full border border-line px-3 py-1.5 font-semibold text-green-strong hover:border-green-strong disabled:opacity-60">
+              Ranger…
+            </button>
+            <button type="button" onClick={bulkDelete} disabled={bulkPending} className="rounded-full border border-line px-3 py-1.5 font-semibold text-clay-deep hover:border-clay-deep disabled:opacity-60">
+              Retirer
+            </button>
+          </div>
+        </div>
+      )}
+
+      {bulkRanger && (
+        <BulkRangerModal
+          count={selected.size}
+          customCategories={customCategories}
+          onClose={() => setBulkRanger(false)}
+          onPick={bulkMove}
+        />
+      )}
     </>
   );
 }
 
 /** Liste « Déjà pris » : décoche animée (la pastille se vide avant le retour). */
 export function DoneList({ lines, customCategories }: { lines: SLine[]; customCategories: CustomCategory[] }) {
-  const { pending, animating, toggle } = useToggle(customCategories);
+  const { pending, animating, toggle } = useToggle();
   return (
     <ul className="divide-y divide-line">
       {lines.map((line) => (

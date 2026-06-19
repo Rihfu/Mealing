@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { generateShoppingListAutoSorted, getShoppingWindow, listHouseholdCategories, listRecurringItems, getLastKnownPrices, essentialKey, type ShoppingLine } from '@/lib/core';
+import { generateShoppingListAutoSorted, getShoppingWindow, listHouseholdCategories, listRecurringItems, getLastKnownPrices, loadRayonOrder, essentialKey, type ShoppingLine } from '@/lib/core';
 import { categoryLabel } from '@/lib/product-assets';
-import { groupByRayon } from './rayons';
+import { groupByRayon, orderRayonKeys } from './rayons';
 import { AddArticle } from './add-article';
 import { PurchaseCheckout } from './purchase-checkout';
 import { ManageAislesButton } from './category-controls';
@@ -22,6 +22,7 @@ function toSLine(l: ShoppingLine): SLine {
     unit: l.unit ?? null,
     sources: l.sources,
     manualId: l.manualId ?? null,
+    manualIds: l.manualIds ?? [],
     manualOnly: !!l.manualOnly,
     foodId: l.foodId ?? null,
     category: l.category ?? null,
@@ -42,13 +43,18 @@ export default async function CoursesPage() {
 
   const { from, to } = await getShoppingWindow(supabase, householdId);
 
-  const [lines, customCats, essentials, lastPrices, { data: stock }] = await Promise.all([
+  const [lines, customCats, essentials, lastPrices, orderMap, { data: stock }] = await Promise.all([
     generateShoppingListAutoSorted(supabase, { householdId, from, to }),
     listHouseholdCategories(supabase, householdId),
     listRecurringItems(supabase, householdId),
     getLastKnownPrices(supabase, householdId),
+    loadRayonOrder(supabase, householdId),
     supabase.from('stock').select('food_id, label, quantity, unit, present').eq('household_id', householdId),
   ]);
+
+  // Ordre des rayons choisi par le foyer (liste + mode magasin) → univers ordonné
+  // pour le gestionnaire de rayons (réordonnancement).
+  const rayonOrder = orderRayonKeys(customCats, orderMap);
 
   // Actif (à acheter) groupé par rayon ; coché → « Déjà pris ».
   const active = lines.filter((l) => !l.checked);
@@ -68,7 +74,7 @@ export default async function CoursesPage() {
   }));
 
   // Données sérialisables pour les listes interactives (client) : coche/décoche + DnD.
-  const activeGroups: SGroup[] = groupByRayon(active, customCats).map((g) => ({
+  const activeGroups: SGroup[] = groupByRayon(active, customCats, orderMap).map((g) => ({
     key: g.key,
     label: g.view?.label ?? 'Autres',
     tint: g.view?.tint ?? 'var(--color-line)',
@@ -132,7 +138,7 @@ export default async function CoursesPage() {
             </div>
 
             <div className="mb-2">
-              <ManageAislesButton customCategories={customCats} />
+              <ManageAislesButton customCategories={customCats} rayonOrder={rayonOrder} />
             </div>
 
             {active.length === 0 ? (

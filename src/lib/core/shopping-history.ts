@@ -198,6 +198,13 @@ export async function deleteTripItem(db: DB, itemId: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/** Retire plusieurs articles d'un relevé (ex. vider un rayon entier). */
+export async function deleteTripItems(db: DB, itemIds: string[]): Promise<void> {
+  if (itemIds.length === 0) return;
+  const { error } = await db.from('shopping_trip_item').delete().in('id', itemIds);
+  if (error) throw new Error(error.message);
+}
+
 /**
  * Reconduction : ré-ajoute les articles sélectionnés d'un relevé à la liste de
  * courses actuelle (`shopping_manual_item`), liés au catalogue (food_id snapshot,

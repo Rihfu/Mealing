@@ -634,12 +634,20 @@ export function ProductIcon({
 }
 
 /** Petite puce de provenance (icône + libellé), pour les lignes de courses. */
-export function ProvenanceBadge({ kind }: { kind: ProvenanceKey }) {
+export function ProvenanceBadge({
+  kind,
+  labelHiddenOnMobile = false,
+}: {
+  kind: ProvenanceKey;
+  /** Sur mobile (< sm), n'affiche que le picto (gain de largeur sur les lignes denses). */
+  labelHiddenOnMobile?: boolean;
+}) {
   const p = PROVENANCE[kind];
   return (
     <span
       className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
       style={{ background: p.tint, color: p.ink }}
+      title={p.label}
     >
       <svg
         width={12}
@@ -653,7 +661,7 @@ export function ProvenanceBadge({ kind }: { kind: ProvenanceKey }) {
         aria-hidden="true"
         dangerouslySetInnerHTML={{ __html: p.svg }}
       />
-      {p.label}
+      <span className={labelHiddenOnMobile ? 'hidden sm:inline' : undefined}>{p.label}</span>
     </span>
   );
 }

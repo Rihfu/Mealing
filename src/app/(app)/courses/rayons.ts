@@ -33,13 +33,44 @@ export interface RayonGroup {
   items: ShoppingLine[];
 }
 
-/** Groupe des lignes par rayon, dans l'ordre : intégrés → personnalisés → « Autres ». */
-export function groupByRayon(lines: ShoppingLine[], customCats: HouseholdCategory[]): RayonGroup[] {
+/**
+ * Ordre par défaut de TOUS les rayons (hors « Autres ») : intégrés puis customs.
+ * Sert d'ordre de repli et d'univers de réordonnancement (cf. orderRayonKeys).
+ */
+export function defaultRayonKeys(customCats: ReadonlyArray<CustomCat>): string[] {
+  return [...CATEGORY_ORDER, ...customCats.map((c) => c.id)];
+}
+
+/**
+ * Applique l'ordre CHOISI par le foyer (map clé→position) à l'univers des rayons.
+ * Les rayons sans position mémorisée gardent leur ordre par défaut, à la fin.
+ * « Autres » n'en fait jamais partie (toujours rendu en dernier).
+ */
+export function orderRayonKeys(customCats: ReadonlyArray<CustomCat>, orderMap?: Map<string, number> | null): string[] {
+  const all = defaultRayonKeys(customCats);
+  if (!orderMap || orderMap.size === 0) return all;
+  const defaultIndex = new Map(all.map((k, i) => [k, i]));
+  return [...all].sort((a, b) => {
+    const pa = orderMap.has(a) ? (orderMap.get(a) as number) : 1000 + (defaultIndex.get(a) ?? 0);
+    const pb = orderMap.has(b) ? (orderMap.get(b) as number) : 1000 + (defaultIndex.get(b) ?? 0);
+    return pa - pb;
+  });
+}
+
+/**
+ * Groupe des lignes par rayon. Ordre : ordre du foyer (si fourni) sinon intégrés →
+ * personnalisés ; « Autres » toujours en dernier.
+ */
+export function groupByRayon(
+  lines: ShoppingLine[],
+  customCats: HouseholdCategory[],
+  orderMap?: Map<string, number> | null,
+): RayonGroup[] {
   const by = new Map<string, ShoppingLine[]>();
   for (const l of lines) {
     const k = catView(l.category, customCats) ? (l.category as string) : OTHER_KEY;
     (by.get(k) ?? by.set(k, []).get(k)!).push(l);
   }
-  const order = [...CATEGORY_ORDER, ...customCats.map((c) => c.id), OTHER_KEY];
+  const order = [...orderRayonKeys(customCats, orderMap), OTHER_KEY];
   return order.filter((k) => by.has(k)).map((k) => ({ key: k, view: catView(k, customCats), items: by.get(k)! }));
 }

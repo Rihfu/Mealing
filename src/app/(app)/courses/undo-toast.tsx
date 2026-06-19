@@ -1,12 +1,6 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
-import {
-  deleteManualItem,
-  recreateManualItem,
-  deleteRecurringItem,
-  recreateRecurringItem,
-} from './actions';
 
 /**
  * Annulation (UX-13) : un toast « … supprimé · Annuler » après une suppression
@@ -24,6 +18,11 @@ let emit: ((t: Toast) => void) | null = null;
 let seq = 0;
 function pushToast(message: string, onUndo: () => Promise<void>) {
   emit?.({ id: ++seq, message, onUndo });
+}
+
+/** Émet un toast « … · Annuler » depuis n'importe quel composant client (hôte unique monté). */
+export function pushUndoToast(message: string, onUndo: () => Promise<void>) {
+  pushToast(message, onUndo);
 }
 
 export function UndoToastHost() {
@@ -64,40 +63,5 @@ export function UndoToastHost() {
         </button>
       </div>
     </div>
-  );
-}
-
-export function DeleteWithUndo({
-  kind,
-  id,
-  label,
-}: {
-  kind: 'manual' | 'recurring';
-  id: string;
-  label: string;
-}) {
-  const [pending, startTransition] = useTransition();
-
-  function onDelete() {
-    startTransition(async () => {
-      if (kind === 'manual') {
-        const snap = await deleteManualItem(id);
-        if (snap) pushToast(`« ${label} » supprimé`, () => recreateManualItem(snap));
-      } else {
-        const snap = await deleteRecurringItem(id);
-        if (snap) pushToast(`« ${label} » supprimé`, () => recreateRecurringItem(snap));
-      }
-    });
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={onDelete}
-      disabled={pending}
-      className="text-xs font-bold text-red-strong disabled:opacity-50"
-    >
-      supprimer
-    </button>
   );
 }

@@ -50,14 +50,16 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
     return null;
   }, [query, selected, onList, inStock]);
 
-  // Recherche débouncée tant qu'aucune suggestion n'est sélectionnée.
+  // Recherche débouncée tant qu'aucune suggestion n'est sélectionnée. On NE lance
+  // PAS (et on n'applique PAS) de recherche pendant la soumission : sinon des
+  // résultats arrivant en retard rouvraient la liste / décalaient le clic (constat).
   useEffect(() => {
-    if (selected || query.trim().length < 2) return;
+    if (selected || submitting || query.trim().length < 2) return;
     let cancelled = false;
     const t = setTimeout(async () => {
       try {
         const res = await searchCatalogAction(query);
-        if (!cancelled) {
+        if (!cancelled && !submitting) {
           setSuggestions(res);
           setOpen(true);
         }
@@ -69,7 +71,7 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
       cancelled = true;
       clearTimeout(t);
     };
-  }, [query, selected]);
+  }, [query, selected, submitting]);
 
   function pick(s: FoodSuggestion) {
     setSelected(s);
@@ -105,7 +107,11 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
 
   async function handleSubmit(formData: FormData) {
     if (!String(formData.get('label') ?? '').trim()) return;
+    // Verrou : on fige la liste de suggestions avant de soumettre, pour qu'un
+    // résultat tardif ne change pas la sélection / ne décale pas le clic.
     setSubmitting(true);
+    setOpen(false);
+    setSuggestions([]);
     try {
       await addManualAction(formData);
       reset();
@@ -142,7 +148,7 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
         <input type="hidden" name="source" value={selected?.foodId ? '' : (selected?.source ?? '')} />
         <input type="hidden" name="external_id" value={selected?.foodId ? '' : (selected?.externalId ?? '')} />
 
-        {open && query.trim().length >= 2 && !selected && (
+        {open && query.trim().length >= 2 && !selected && !submitting && (
           <ul className="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-line bg-surface py-1 shadow-soft">
             {/* Toujours en tête : garder le texte saisi tel quel (article hors catalogue). */}
             <li>

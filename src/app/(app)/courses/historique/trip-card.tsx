@@ -18,6 +18,7 @@ import {
   deleteTripAction,
   updateTripItemAction,
   deleteTripItemAction,
+  deleteTripItemsAction,
   reconductTripAction,
 } from './actions';
 
@@ -273,6 +274,14 @@ export function TripCard({ trip, customCats }: { trip: HTrip; customCats: HCusto
   const [nameDraft, setNameDraft] = useState(trip.name ?? '');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [reconducting, setReconducting] = useState(false);
+  const [confirmGroup, setConfirmGroup] = useState<string | null>(null);
+
+  function clearGroup(g: RGroup) {
+    start(async () => {
+      await deleteTripItemsAction(g.items.map((i) => i.id));
+      setConfirmGroup(null);
+    });
+  }
 
   const q = norm(query.trim());
   const filtered = q ? trip.items.filter((it) => norm(it.label).includes(q)) : trip.items;
@@ -347,6 +356,31 @@ export function TripCard({ trip, customCats }: { trip: HTrip; customCats: HCusto
                     <span className="h-3 w-3 rounded-full" style={{ background: g.tint }} />
                     <span className="flex-1">{g.label}</span>
                     <span className="text-xs font-normal text-ink-soft">{g.items.length}</span>
+                    {editing &&
+                      (confirmGroup === g.key ? (
+                        <span className="flex items-center gap-1.5 text-xs" onClick={(e) => e.preventDefault()}>
+                          <span className="text-ink-soft">Vider&nbsp;?</span>
+                          <button type="button" onClick={() => clearGroup(g)} disabled={pending} className="font-bold text-clay-deep disabled:opacity-60">
+                            Oui
+                          </button>
+                          <button type="button" onClick={() => setConfirmGroup(null)} className="text-ink-soft">
+                            Non
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setConfirmGroup(g.key);
+                          }}
+                          aria-label={`Vider le rayon ${g.label}`}
+                          title="Retirer tous les articles de ce rayon"
+                          className="text-xs font-semibold text-ink-soft/70 hover:text-clay-deep"
+                        >
+                          vider
+                        </button>
+                      ))}
                   </summary>
                   <ul className="divide-y divide-line pl-1">
                     {g.items.map((it) => (

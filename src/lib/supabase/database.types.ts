@@ -319,6 +319,35 @@ export type Database = {
           },
         ]
       }
+      household_rayon_order: {
+        Row: {
+          household_id: string
+          position: number
+          rayon_key: string
+          updated_at: string
+        }
+        Insert: {
+          household_id: string
+          position?: number
+          rayon_key: string
+          updated_at?: string
+        }
+        Update: {
+          household_id?: string
+          position?: number
+          rayon_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "household_rayon_order_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nutrient_type: {
         Row: {
           category: string
@@ -821,18 +850,24 @@ export type Database = {
         Row: {
           checked: boolean
           checked_at: string | null
+          dismissed: boolean
+          dismissed_at: string | null
           household_id: string
           item_key: string
         }
         Insert: {
           checked?: boolean
           checked_at?: string | null
+          dismissed?: boolean
+          dismissed_at?: string | null
           household_id: string
           item_key: string
         }
         Update: {
           checked?: boolean
           checked_at?: string | null
+          dismissed?: boolean
+          dismissed_at?: string | null
           household_id?: string
           item_key?: string
         }

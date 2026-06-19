@@ -12,10 +12,16 @@ import {
   clearFoodPref,
   createHouseholdCategory,
   deleteHouseholdCategory,
+  listHouseholdCategories,
+  loadRayonOrder,
+  saveRayonOrder,
+  dismissShoppingItems,
+  restoreShoppingItems,
   type FoodSuggestion,
 } from '@/lib/core';
 import type { NutritionSource } from '@/lib/providers/nutrition';
 import { normalizeLabel } from '@/lib/text';
+import { orderRayonKeys } from './rayons';
 
 async function requireHousehold() {
   const { supabase, userId, profile } = await getAuthContext();
@@ -59,11 +65,15 @@ export async function setShoppingHorizonAction(formData: FormData): Promise<void
   revalidatePath('/courses');
 }
 
-/** Décoche toutes les lignes (fin d'une session de courses). Ne supprime rien. */
+/** Décoche toutes les lignes (fin d'une session de courses). Ne supprime rien et
+ *  préserve les lignes retirées de la liste (dismissed) — on ne touche qu'au coché. */
 export async function clearCheckedAction(): Promise<void> {
   const { supabase, householdId } = await requireHousehold();
   // État coché unifié par identité (shopping_item_state) — cf. fusion inter-sources.
-  await supabase.from('shopping_item_state').delete().eq('household_id', householdId);
+  await supabase
+    .from('shopping_item_state')
+    .update({ checked: false, checked_at: null })
+    .eq('household_id', householdId);
   revalidatePath('/courses');
 }
 
@@ -197,32 +207,12 @@ export async function updateManualItemAction(input: {
   revalidatePath('/courses');
 }
 
-/** Données d'un article manuel restaurable (pour l'undo). */
+/** Données d'un article manuel restaurable (pour l'undo des retraits — cf. removeLinesAction). */
 export interface ManualSnapshot {
   label: string;
   quantity: number | null;
   unit: string | null;
   food_id: string | null;
-}
-
-/** Supprime un article manuel et renvoie ses données (pour permettre l'annulation). */
-export async function deleteManualItem(id: string): Promise<ManualSnapshot | null> {
-  const { supabase } = await requireHousehold();
-  const { data } = await supabase
-    .from('shopping_manual_item')
-    .select('label, quantity, unit, food_id')
-    .eq('id', id)
-    .maybeSingle();
-  await supabase.from('shopping_manual_item').delete().eq('id', id);
-  revalidatePath('/courses');
-  return (data as ManualSnapshot | null) ?? null;
-}
-
-/** Recrée un article manuel supprimé (annulation). */
-export async function recreateManualItem(item: ManualSnapshot): Promise<void> {
-  const { supabase, householdId } = await requireHousehold();
-  await supabase.from('shopping_manual_item').insert({ household_id: householdId, ...item });
-  revalidatePath('/courses');
 }
 
 export async function addRecurringAction(formData: FormData): Promise<void> {
@@ -237,32 +227,6 @@ export async function addRecurringAction(formData: FormData): Promise<void> {
     default_quantity: num(formData.get('quantity')) ?? null,
     unit: String(formData.get('unit') ?? '') || null,
   });
-  revalidatePath('/courses');
-}
-
-/** Données d'un essentiel restaurable (pour l'undo). */
-export interface RecurringSnapshot {
-  food_id: string | null;
-  label: string | null;
-  default_quantity: number | null;
-  unit: string | null;
-}
-
-export async function deleteRecurringItem(id: string): Promise<RecurringSnapshot | null> {
-  const { supabase } = await requireHousehold();
-  const { data } = await supabase
-    .from('shopping_recurring_item')
-    .select('food_id, label, default_quantity, unit')
-    .eq('id', id)
-    .maybeSingle();
-  await supabase.from('shopping_recurring_item').delete().eq('id', id);
-  revalidatePath('/courses');
-  return (data as RecurringSnapshot | null) ?? null;
-}
-
-export async function recreateRecurringItem(item: RecurringSnapshot): Promise<void> {
-  const { supabase, householdId } = await requireHousehold();
-  await supabase.from('shopping_recurring_item').insert({ household_id: householdId, ...item });
   revalidatePath('/courses');
 }
 
@@ -309,4 +273,133 @@ export async function removeEssentialAction(id: string): Promise<void> {
   if (id) await supabase.from('shopping_recurring_item').delete().eq('id', id);
   revalidatePath('/courses');
   revalidatePath('/courses/historique');
+}
+
+// ---------------------------------------------------------------------------
+// Retrait de lignes de la liste courante (constat n°3 + suppression de rayon +
+// multi-sélection). Une ligne 100 % manuelle est réellement SUPPRIMÉE
+// (shopping_manual_item) ; une ligne générée (repas/essentiel/catalogue) est
+// RETIRÉE de la liste courante via le marqueur `dismissed` (réversible, remis à
+// zéro au passage en caisse). Un seul couple action/undo sert le retrait d'une
+// ligne, d'un rayon entier ou d'une sélection.
+// ---------------------------------------------------------------------------
+
+/** Une ligne à retirer : ses articles manuels (à supprimer) + faut-il masquer la clé générée. */
+export interface RemoveLineInput {
+  key: string;
+  manualIds: string[];
+  dismiss: boolean; // true si la ligne a une provenance générée (repas/essentiel/catalogue)
+}
+
+/** Données restaurables d'un retrait (pour l'annulation). */
+export interface RemovedLines {
+  manualSnapshots: Array<ManualSnapshot>;
+  dismissedKeys: string[];
+}
+
+export async function removeLinesAction(lines: RemoveLineInput[]): Promise<RemovedLines> {
+  const { supabase, householdId } = await requireHousehold();
+  const allManualIds = lines.flatMap((l) => l.manualIds).filter(Boolean);
+  let manualSnapshots: ManualSnapshot[] = [];
+  if (allManualIds.length > 0) {
+    const { data } = await supabase
+      .from('shopping_manual_item')
+      .select('label, quantity, unit, food_id')
+      .in('id', allManualIds);
+    manualSnapshots = (data as ManualSnapshot[] | null) ?? [];
+    await supabase.from('shopping_manual_item').delete().in('id', allManualIds);
+  }
+  const dismissedKeys = lines.filter((l) => l.dismiss).map((l) => l.key);
+  await dismissShoppingItems(supabase, householdId, dismissedKeys);
+  revalidatePath('/courses');
+  revalidatePath('/courses/magasin');
+  return { manualSnapshots, dismissedKeys };
+}
+
+/** Annule un retrait (recrée les articles manuels + ramène les lignes générées). */
+export async function undoRemoveLinesAction(data: RemovedLines): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  if (data.manualSnapshots.length > 0) {
+    await supabase
+      .from('shopping_manual_item')
+      .insert(data.manualSnapshots.map((s) => ({ household_id: householdId, ...s })));
+  }
+  await restoreShoppingItems(supabase, householdId, data.dismissedKeys);
+  revalidatePath('/courses');
+  revalidatePath('/courses/magasin');
+}
+
+/**
+ * Multi-sélection → promotion en ESSENTIELS. Anti-doublon par aliment / libellé
+ * normalisé (un seul chargement des récurrents existants). @returns le nombre ajouté.
+ */
+export async function bulkPromoteEssentialsAction(
+  items: Array<{ label: string; foodId: string | null; quantity: number | null; unit: string | null }>,
+): Promise<number> {
+  const { supabase, householdId } = await requireHousehold();
+  const { data: existing } = await supabase
+    .from('shopping_recurring_item')
+    .select('food_id, label')
+    .eq('household_id', householdId);
+  const haveFood = new Set((existing ?? []).map((r) => r.food_id).filter((x): x is string => !!x));
+  const haveLabel = new Set((existing ?? []).map((r) => (r.label ? normalizeLabel(r.label) : '')).filter(Boolean));
+
+  const rows: Array<{ household_id: string; food_id: string | null; label: string | null; default_quantity: number | null; unit: string | null }> = [];
+  for (const it of items) {
+    const label = it.label.trim();
+    if (!label && !it.foodId) continue;
+    const dup = it.foodId ? haveFood.has(it.foodId) : haveLabel.has(normalizeLabel(label));
+    if (dup) continue;
+    rows.push({ household_id: householdId, food_id: it.foodId, label: label || null, default_quantity: it.quantity, unit: it.unit || null });
+    if (it.foodId) haveFood.add(it.foodId);
+    else haveLabel.add(normalizeLabel(label));
+  }
+  if (rows.length > 0) await supabase.from('shopping_recurring_item').insert(rows);
+  revalidatePath('/courses');
+  revalidatePath('/courses/historique');
+  return rows.length;
+}
+
+/** Multi-sélection → ranger plusieurs articles dans un même rayon (mémorisé par libellé). */
+export async function bulkSetCategoryAction(
+  items: Array<{ label: string; foodId: string | null; iconSlug: string | null }>,
+  categoryKey: string | null,
+): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  for (const it of items) {
+    if (!it.label.trim()) continue;
+    await setFoodPref(supabase, householdId, { label: it.label, foodId: it.foodId, categoryKey, iconSlug: it.iconSlug });
+  }
+  revalidatePath('/courses');
+  revalidatePath('/courses/magasin');
+}
+
+/**
+ * Réordonne les rayons d'un cran (mode magasin + liste). L'univers des rayons
+ * (intégrés + customs) et l'ordre courant sont résolus côté serveur ; on permute
+ * la clé avec son voisin puis on enregistre l'ordre complet.
+ */
+export async function moveRayonAction(input: { key: string; dir: 'up' | 'down' }): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  const [customCats, orderMap] = await Promise.all([
+    listHouseholdCategories(supabase, householdId),
+    loadRayonOrder(supabase, householdId),
+  ]);
+  const universe = orderRayonKeys(customCats, orderMap);
+  const i = universe.indexOf(input.key);
+  if (i < 0) return;
+  const j = input.dir === 'up' ? i - 1 : i + 1;
+  if (j < 0 || j >= universe.length) return;
+  [universe[i], universe[j]] = [universe[j], universe[i]];
+  await saveRayonOrder(supabase, householdId, universe);
+  revalidatePath('/courses');
+  revalidatePath('/courses/magasin');
+}
+
+/** Enregistre un ordre complet de rayons (réordonnancement par glisser-déposer). */
+export async function reorderRayonsAction(orderedKeys: string[]): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  await saveRayonOrder(supabase, householdId, orderedKeys);
+  revalidatePath('/courses');
+  revalidatePath('/courses/magasin');
 }

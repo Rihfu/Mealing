@@ -185,16 +185,16 @@ export async function generateShoppingList(
     }
   }
 
-  const checkedKeys = new Set(
-    ((unwrap(
-      await db
-        .from('shopping_item_state')
-        .select('item_key, checked')
-        .eq('household_id', params.householdId),
-    ) ?? []) as Array<{ item_key: string; checked: boolean }>)
-      .filter((c) => c.checked)
-      .map((c) => c.item_key),
-  );
+  const itemStates = (unwrap(
+    await db
+      .from('shopping_item_state')
+      .select('item_key, checked, dismissed')
+      .eq('household_id', params.householdId),
+  ) ?? []) as Array<{ item_key: string; checked: boolean; dismissed: boolean }>;
+  const checkedKeys = new Set(itemStates.filter((c) => c.checked).map((c) => c.item_key));
+  // Lignes RETIRÉES de la liste courante (≠ cochées) : masquées du rendu et du
+  // checkout. Remises à zéro au passage en caisse (cf. checkoutPurchasedToStock).
+  const dismissedKeys = new Set(itemStates.filter((c) => c.dismissed).map((c) => c.item_key));
 
   // Résolution rayon + icône + identité d'une ligne. Ordre :
   //   1) préférence FOYER (déplacement/mémoire perso) — prioritaire (perso > global) ;
@@ -292,6 +292,7 @@ export async function generateShoppingList(
 
   const lines: ShoppingLine[] = [];
   for (const m of merged.values()) {
+    if (dismissedKeys.has(m.key)) continue; // ligne retirée de la liste courante
     const { quantity, unit } = finalizeQty(m.acc);
     const manualOnly = m.sources.size === 1 && m.sources.has('manual');
     // Marqueur "deja en stock" : info quand un ajout manuel est deja couvert par le stock.
@@ -468,9 +469,13 @@ export async function checkoutPurchasedToStock(
 
     if (existing) {
       const patch: Record<string, unknown> = { present: true };
-      const sameUnit = normalizeUnit(existing.unit) === normalizeUnit(line.unit);
-      if (hasQty && existing.tracking_mode === 'quantity' && sameUnit) {
-        patch.quantity = (existing.quantity ?? 0) + (line.quantity as number);
+      if (hasQty && existing.tracking_mode === 'quantity') {
+        // Cumul SENSIBLE AUX UNITÉS (g↔kg, ml↔cl↔L…) : même unité → somme directe ;
+        // unités différentes mais réconciliables → somme en base puis re-conversion
+        // dans l'unité du stock. Incompatibles (dimensions différentes / inconnues)
+        // → on ne peut pas sommer fiablement : on marque présent sans fausser la qté.
+        const merged = mergeStockQuantity(existing.quantity, existing.unit, line.quantity as number, line.unit);
+        if (merged != null) patch.quantity = merged;
       }
       const { error } = await db.from('stock').update(patch).eq('id', existing.id);
       if (error) throw new Error(error.message);
@@ -502,6 +507,54 @@ export async function checkoutPurchasedToStock(
 
 function roundQty(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+/**
+ * Cumule une quantité entrante dans une quantité de stock existante, en réconciliant
+ * les unités (cf. src/lib/units). Renvoie la nouvelle quantité exprimée dans l'unité
+ * du STOCK, ou null si les unités ne se réconcilient pas (dimensions différentes /
+ * inconnues) → l'appelant ne touche alors pas à la quantité (présence seulement).
+ */
+function mergeStockQuantity(
+  stockQty: number | null,
+  stockUnit: string | null | undefined,
+  addQty: number,
+  addUnit: string | null | undefined,
+): number | null {
+  const base = stockQty ?? 0;
+  if (normalizeUnit(stockUnit) === normalizeUnit(addUnit)) return roundQty(base + addQty);
+  const a = toBase(base, stockUnit);
+  const b = toBase(addQty, addUnit);
+  if (a == null || b == null || a.dim !== b.dim) return null; // incompatibles
+  const sum = fromBase(a.value + b.value, stockUnit ?? undefined);
+  return sum != null ? roundQty(sum) : null;
+}
+
+/**
+ * RETRAIT d'une ou plusieurs lignes générées (repas/essentiel/catalogue) de la
+ * liste courante (≠ cochées) : pose un marqueur `dismissed` par clé d'identité.
+ * Remis à zéro au passage en caisse. Les lignes 100 % manuelles, elles, se
+ * suppriment réellement (shopping_manual_item) — géré côté action.
+ */
+export async function dismissShoppingItems(db: DB, householdId: string, keys: string[]): Promise<void> {
+  if (keys.length === 0) return;
+  const now = new Date().toISOString();
+  const { error } = await db.from('shopping_item_state').upsert(
+    keys.map((k) => ({ household_id: householdId, item_key: k, dismissed: true, dismissed_at: now })),
+    { onConflict: 'household_id,item_key' },
+  );
+  if (error) throw new Error(error.message);
+}
+
+/** Annule le retrait de lignes (les fait revenir dans la liste courante). */
+export async function restoreShoppingItems(db: DB, householdId: string, keys: string[]): Promise<void> {
+  if (keys.length === 0) return;
+  const { error } = await db
+    .from('shopping_item_state')
+    .update({ dismissed: false, dismissed_at: null })
+    .eq('household_id', householdId)
+    .in('item_key', keys);
+  if (error) throw new Error(error.message);
 }
 
 /**
@@ -596,6 +649,28 @@ function remainingAfterStock(
   return fromBase(remainingBase, needUnit) ?? remainingBase;
 }
 
+/**
+ * Manque PRÉCIS d'un ingrédient déjà PRÉSENT en stock — pour « ingrédients manquants »
+ * (constat n°1). Contrairement à `remainingAfterStock`, on NE re-propose PAS un article
+ * présent quand on ne peut pas prouver le manque : pas de quantité, unité non chiffrée,
+ * unités incompatibles, ou stock suffisant → `null` (couvert, précision approximative
+ * assumée). Renvoie la quantité restante (dans l'unité du besoin) seulement si l'on
+ * démontre un manque réel en unités compatibles.
+ */
+function preciseShortfall(
+  needQty: number | null,
+  needUnit: string | undefined,
+  stockBase: Quantity | null | undefined,
+): number | null {
+  if (needQty == null) return null; // besoin sans quantité → couvert (présent)
+  if (stockBase == null) return null; // présent mais non chiffrable / unité non réconciliable
+  const needBase = toBase(needQty, needUnit);
+  if (needBase == null || needBase.dim !== stockBase.dim) return null; // unités incompatibles → couvert
+  const remainingBase = needBase.value - stockBase.value;
+  if (remainingBase <= 0) return null; // assez en stock
+  return fromBase(remainingBase, needUnit) ?? remainingBase;
+}
+
 interface StockRow {
   food_id: string | null;
   label: string | null;
@@ -625,9 +700,34 @@ async function loadStockCoverage(db: DB, householdId: string): Promise<StockCove
       .eq('household_id', householdId),
   ) ?? []) as StockRow[];
 
+  // Nom des aliments liés (food_id) : permet d'indexer aussi le stock lié au
+  // catalogue PAR LIBELLÉ, afin qu'un besoin de recette en TEXTE LIBRE (« Œufs »,
+  // « Beurre ») soit reconnu comme couvert par un article de stock lié (sinon il
+  // réapparaissait à tort dans « ingrédients manquants »). Cf. constat juin 2026.
+  const linkedFoodIds = Array.from(new Set(stock.map((s) => s.food_id).filter((x): x is string => !!x)));
+  const foodNameById = new Map<string, string>();
+  if (linkedFoodIds.length > 0) {
+    const foods = (unwrap(await db.from('food').select('id, name').in('id', linkedFoodIds)) ?? []) as Array<{
+      id: string;
+      name: string;
+    }>;
+    for (const f of foods) foodNameById.set(f.id, f.name);
+  }
+
   const stockBaseByFood = new Map<string, Quantity | null>();
   const presentFoods = new Set<string>();
   const stockByLabel = new Map<string, { qty?: number; unit?: string; present: boolean }>();
+
+  const indexByLabel = (label: string | null | undefined, s: StockRow) => {
+    const clean = label?.trim();
+    if (!clean) return;
+    const key = normalizeLabel(clean);
+    const cur = stockByLabel.get(key) ?? { present: false, unit: s.unit ?? undefined };
+    cur.present = cur.present || s.present || (s.quantity ?? 0) > 0;
+    if (s.quantity != null) cur.qty = (cur.qty ?? 0) + s.quantity;
+    if (!cur.unit && s.unit) cur.unit = s.unit;
+    stockByLabel.set(key, cur);
+  };
 
   for (const s of stock) {
     if (s.food_id) {
@@ -636,16 +736,10 @@ async function loadStockCoverage(db: DB, householdId: string): Promise<StockCove
       } else if (s.present) {
         presentFoods.add(s.food_id);
       }
+      // Indexe aussi par le NOM de l'aliment lié (couverture des besoins en texte libre).
+      indexByLabel(foodNameById.get(s.food_id), s);
     }
-    const label = s.label?.trim();
-    if (label) {
-      const key = normalizeLabel(label);
-      const cur = stockByLabel.get(key) ?? { present: false, unit: s.unit ?? undefined };
-      cur.present = cur.present || s.present || (s.quantity ?? 0) > 0;
-      if (s.quantity != null) cur.qty = (cur.qty ?? 0) + s.quantity;
-      if (!cur.unit && s.unit) cur.unit = s.unit;
-      stockByLabel.set(key, cur);
-    }
+    indexByLabel(s.label, s);
   }
   return { stock, presentFoods, stockBaseByFood, stockByLabel };
 }
@@ -689,12 +783,16 @@ export async function recipeMissingIngredients(
     if (ing.food_id) {
       if (presentFoods.has(ing.food_id)) continue; // présence en stock → couvert
       const foodName = (Array.isArray(ing.food) ? ing.food[0] : ing.food)?.name ?? '';
-      if (ing.quantity == null) {
-        missing.push({ foodId: ing.food_id, label: foodName, quantity: null, unit: ing.unit });
+      const base = stockBaseByFood.get(ing.food_id);
+      if (base === undefined) {
+        // Aucun stock pour cet aliment → manquant (besoin entier).
+        missing.push({ foodId: ing.food_id, label: foodName, quantity: ing.quantity, unit: ing.unit });
         continue;
       }
-      const remaining = remainingAfterStock(ing.quantity, ing.unit ?? undefined, stockBaseByFood.get(ing.food_id));
-      if (remaining > 0) missing.push({ foodId: ing.food_id, label: foodName, quantity: roundQty(remaining), unit: ing.unit });
+      // En stock : COUVERT, sauf manque prouvé en unités compatibles (constat n°1 :
+      // on ne re-propose pas un article déjà en stock sur une incompatibilité d'unité).
+      const rem = preciseShortfall(ing.quantity, ing.unit ?? undefined, base);
+      if (rem != null) missing.push({ foodId: ing.food_id, label: foodName, quantity: roundQty(rem), unit: ing.unit });
       continue;
     }
 
@@ -705,10 +803,10 @@ export async function recipeMissingIngredients(
       missing.push({ foodId: null, label, quantity: ing.quantity, unit: ing.unit });
       continue;
     }
-    // Présent mais sans quantité chiffrée → couverture supposée.
-    if (ing.quantity == null || stockItem.qty == null) continue;
-    const remaining = remainingAfterStock(ing.quantity, ing.unit ?? undefined, toBase(stockItem.qty, stockItem.unit));
-    if (remaining > 0) missing.push({ foodId: null, label, quantity: roundQty(remaining), unit: ing.unit });
+    // Présent en stock → COUVERT, sauf manque prouvé en unités compatibles.
+    const stockBase = stockItem.qty == null ? null : toBase(stockItem.qty, stockItem.unit);
+    const rem = preciseShortfall(ing.quantity, ing.unit ?? undefined, stockBase);
+    if (rem != null) missing.push({ foodId: null, label, quantity: roundQty(rem), unit: ing.unit });
   }
 
   return missing;

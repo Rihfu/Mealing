@@ -129,6 +129,36 @@ export async function clearFoodPref(db: DB, householdId: string, label: string):
     .eq('label_norm', normalizeLabel(label));
 }
 
+/**
+ * Ordre d'affichage des rayons CHOISI par le foyer (liste + mode magasin).
+ * Clé = clé intégrée ('legumes'…) OU uuid de shopping_category (rayon custom).
+ * Renvoyé comme map clé→position ; les rayons absents gardent l'ordre par défaut
+ * (résolu côté appelant). Vide tant que l'utilisateur n'a pas réordonné.
+ */
+export async function loadRayonOrder(db: DB, householdId: string): Promise<Map<string, number>> {
+  const rows = (unwrap(
+    await db
+      .from('household_rayon_order')
+      .select('rayon_key, position')
+      .eq('household_id', householdId),
+  ) ?? []) as Array<{ rayon_key: string; position: number }>;
+  return new Map(rows.map((r) => [r.rayon_key, r.position]));
+}
+
+/**
+ * Enregistre l'ordre COMPLET des rayons (positions 0..n-1 dans l'ordre fourni).
+ * Remplace l'ordre précédent du foyer (delete + insert) — simple et idempotent.
+ */
+export async function saveRayonOrder(db: DB, householdId: string, orderedKeys: string[]): Promise<void> {
+  await db.from('household_rayon_order').delete().eq('household_id', householdId);
+  if (orderedKeys.length === 0) return;
+  const now = new Date().toISOString();
+  const { error } = await db.from('household_rayon_order').insert(
+    orderedKeys.map((rayon_key, position) => ({ household_id: householdId, rayon_key, position, updated_at: now })),
+  );
+  if (error) throw new Error(error.message);
+}
+
 /** Charge et indexe les préférences d'un foyer (pour le classement de la liste). */
 export async function loadFoodPrefs(db: DB, householdId: string): Promise<FoodPrefIndex> {
   const rows = (unwrap(

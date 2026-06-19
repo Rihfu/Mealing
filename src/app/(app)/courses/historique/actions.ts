@@ -9,6 +9,7 @@ import {
   deleteTrip,
   updateTripItem,
   deleteTripItem,
+  deleteTripItems,
   reconductTripItems,
   findCatalogFoodIdByLabel,
 } from '@/lib/core';
@@ -59,6 +60,13 @@ export async function updateTripItemAction(input: {
 export async function deleteTripItemAction(itemId: string): Promise<void> {
   const { supabase } = await requireHousehold();
   if (itemId) await deleteTripItem(supabase, itemId);
+  revalidatePath('/courses/historique');
+}
+
+/** Retire plusieurs articles d'un relevé d'un coup (ex. vider un rayon). */
+export async function deleteTripItemsAction(itemIds: string[]): Promise<void> {
+  const { supabase } = await requireHousehold();
+  if (itemIds.length > 0) await deleteTripItems(supabase, itemIds);
   revalidatePath('/courses/historique');
 }
 

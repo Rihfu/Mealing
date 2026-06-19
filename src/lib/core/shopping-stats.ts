@@ -125,8 +125,11 @@ export async function computeShoppingStats(db: DB, householdId: string): Promise
     for (let i = 1; i < dates.length; i++) sum += (dates[i] - dates[i - 1]) / DAY;
     avgDaysBetween = sum / (dates.length - 1);
   }
+  // Cadence hebdo : on N'EXTRAPOLE PAS sur une fenêtre plus courte qu'une semaine
+  // (plusieurs relevés le même jour faisaient exploser le chiffre — borne min 7 j).
   const spanDays = Math.max((dates[dates.length - 1] - dates[0]) / DAY, 0);
-  const tripsPerWeek = spanDays > 0 ? (trips.length / spanDays) * 7 : null;
+  const MIN_SPAN_DAYS = 7;
+  const tripsPerWeek = trips.length >= 2 ? (trips.length / Math.max(spanDays, MIN_SPAN_DAYS)) * 7 : null;
 
   // Panier + provenance + prix + agrégats produit/rayon.
   const basketSeries: number[] = [];
