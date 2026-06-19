@@ -41,7 +41,7 @@ function BigCheck({ checked }: { checked: boolean }) {
  * SUR PLACE (devant le rayon) plutôt que tout d'un coup au rangement. Les prix saisis
  * sont partagés avec la modale « J'ai fait mes courses » (prix contrôlés).
  */
-export function StoreList({ groups }: { groups: StoreGroup[] }) {
+export function StoreList({ groups, onCheckout }: { groups: StoreGroup[]; onCheckout?: () => void }) {
   const [, startTransition] = useTransition();
   // Prix saisis (client) ; pré-remplis depuis le dernier prix connu pour les articles déjà cochés.
   const [prices, setPrices] = useState<Record<string, string>>(() =>
@@ -86,11 +86,24 @@ export function StoreList({ groups }: { groups: StoreGroup[] }) {
         .sort((a, b) => Number(fullyChecked(a)) - Number(fullyChecked(b)))
     : groups;
 
-  const checked = groups.flatMap((g) => g.items).filter((i) => isChecked(i));
+  const allItems = groups.flatMap((g) => g.items);
+  const checked = allItems.filter((i) => isChecked(i));
+  const total = allItems.length;
+  const doneCount = checked.length;
+  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
   return (
     <>
-      <div className="mb-1 mt-4 flex items-center justify-end">
+      {/* Progression (suit les coches optimistes, pas l'état serveur). */}
+      <div className="mt-3 flex items-center gap-3">
+        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-line">
+          <div className="h-full rounded-full bg-green-strong transition-all" style={{ width: `${pct}%` }} />
+        </div>
+        <span className="whitespace-nowrap text-sm font-bold">
+          {doneCount} / {total}
+        </span>
+      </div>
+      <div className="mb-1 mt-2 flex items-center justify-end">
         <button
           type="button"
           onClick={() => setSortChecked((s) => !s)}
@@ -172,6 +185,7 @@ export function StoreList({ groups }: { groups: StoreGroup[] }) {
               fullWidth
               prices={prices}
               onPriceChange={setPrice}
+              onDone={onCheckout}
               items={checked.map((it) => ({
                 key: it.key,
                 name: it.name,

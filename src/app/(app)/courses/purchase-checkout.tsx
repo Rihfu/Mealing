@@ -21,12 +21,15 @@ export function PurchaseCheckout({
   fullWidth = false,
   prices: ctrlPrices,
   onPriceChange,
+  onDone,
 }: {
   items: CheckoutItem[];
   fullWidth?: boolean;
   /** Prix CONTRÔLÉS par le parent (mode magasin : saisis en rayon, partagés avec la modale). */
   prices?: Record<string, string>;
   onPriceChange?: (key: string, value: string) => void;
+  /** Appelé après un passage en caisse réussi (ex. rafraîchir le cache du mode magasin). */
+  onDone?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -58,6 +61,7 @@ export function PurchaseCheckout({
     startTransition(async () => {
       await checkoutToStockAction(Object.keys(map).length > 0 ? map : undefined);
       setOpen(false);
+      onDone?.();
     });
   }
 
