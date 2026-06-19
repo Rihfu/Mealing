@@ -13,8 +13,11 @@ import {
   searchFoodCatalog,
   findCatalogFoodIdByLabel,
   getOrCreateCatalogFood,
+  applyDueMealsToStock,
+  undoMealStockApplication,
   type StockTrackingMode,
   type FoodSuggestion,
+  type MealStockSummary,
 } from '@/lib/core';
 
 async function requireHousehold() {
@@ -167,5 +170,23 @@ export async function deleteStockAction(stockId: string): Promise<void> {
 export async function toggleStockPresenceAction(stockId: string, present: boolean): Promise<void> {
   const { supabase } = await requireHousehold();
   await supabase.from('stock').update({ present }).eq('id', stockId);
+  revalidatePath('/stock');
+}
+
+/**
+ * Réconcilie les repas passés → décrément automatique du stock (specs 3.4).
+ * Déclenchée au montage de la page Stock (effet client, PAS au rendu serveur → pas
+ * de décrément au prefetch). Idempotente. Renvoie le résumé pour l'annulation.
+ */
+export async function applyDueMealsAction(): Promise<MealStockSummary> {
+  const { supabase, householdId } = await requireHousehold();
+  const summary = await applyDueMealsToStock(supabase, householdId);
+  if (summary.decrements.length > 0) revalidatePath('/stock');
+  return summary;
+}
+
+export async function undoMealsAction(summary: MealStockSummary): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  await undoMealStockApplication(supabase, householdId, summary);
   revalidatePath('/stock');
 }

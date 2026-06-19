@@ -489,6 +489,7 @@ export type Database = {
           produces_leftover: boolean
           recipe_id: string | null
           slot: string
+          stock_applied_at: string | null
           total_quantity_prepared: number | null
           total_quantity_unit: string | null
           updated_at: string
@@ -505,6 +506,7 @@ export type Database = {
           produces_leftover?: boolean
           recipe_id?: string | null
           slot: string
+          stock_applied_at?: string | null
           total_quantity_prepared?: number | null
           total_quantity_unit?: string | null
           updated_at?: string
@@ -521,6 +523,7 @@ export type Database = {
           produces_leftover?: boolean
           recipe_id?: string | null
           slot?: string
+          stock_applied_at?: string | null
           total_quantity_prepared?: number | null
           total_quantity_unit?: string | null
           updated_at?: string

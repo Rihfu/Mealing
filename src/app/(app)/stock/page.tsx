@@ -6,6 +6,7 @@ import { groupByLocation } from './locations';
 import { StockList, type SItem } from './stock-list';
 import { AddStock } from './add-stock';
 import { EstimateButton } from './stock-tools';
+import { MealReconcile } from './meal-reconcile';
 
 interface StockRow {
   id: string;
@@ -80,6 +81,8 @@ export default async function StockPage() {
         </div>
         <EstimateButton />
       </div>
+
+      <MealReconcile />
 
       {priority.length > 0 && (
         <section className="rounded-2xl border border-clay bg-clay-tint p-3.5 lg:col-start-1">
