@@ -76,6 +76,8 @@ const WRITE_SCHEMAS = {
 
 type WriteName = keyof typeof WRITE_SCHEMAS;
 const WRITE_NAMES = Object.keys(WRITE_SCHEMAS) as WriteName[];
+// Actions « singleton » : une seule occurrence sensée par plan (on remplace si répétée).
+const SINGLETON_WRITES = new Set<WriteName>(['reorder_rayons', 'checkout']);
 
 export interface ProposedAction {
   name: WriteName;
@@ -302,10 +304,17 @@ export async function runAgent(
           messages.push({ role: 'tool', toolCallId: call.id, content: 'Paramètres invalides pour cette action.' });
           continue;
         }
-        const argsJson = JSON.stringify(parsed.data);
-        const dup = plan.some((p) => p.name === call.name && JSON.stringify(p.args) === argsJson);
-        if (!dup) {
-          plan.push({ name: call.name as WriteName, args: parsed.data as Record<string, unknown>, summary: summarize(call.name as WriteName, parsed.data as Record<string, unknown>) });
+        const wname = call.name as WriteName;
+        const entry: ProposedAction = { name: wname, args: parsed.data as Record<string, unknown>, summary: summarize(wname, parsed.data as Record<string, unknown>) };
+        if (SINGLETON_WRITES.has(wname)) {
+          // Une seule occurrence sensée (réordonnancement, checkout) → on remplace.
+          const idx = plan.findIndex((p) => p.name === wname);
+          if (idx >= 0) plan[idx] = entry;
+          else plan.push(entry);
+        } else {
+          const argsJson = JSON.stringify(parsed.data);
+          const dup = plan.some((p) => p.name === wname && JSON.stringify(p.args) === argsJson);
+          if (!dup) plan.push(entry);
         }
         messages.push({ role: 'tool', toolCallId: call.id, content: 'OK, action ajoutée au plan à confirmer. Ne la propose pas à nouveau ; réponds simplement à l’utilisateur.' });
       } else {
