@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Nunito, Caveat } from "next/font/google";
 import "./globals.css";
+import { ServiceWorkerRegister } from "./sw-register";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -24,6 +25,13 @@ const caveat = Caveat({
 export const metadata: Metadata = {
   title: "Mealing",
   description: "Planification de repas, nutrition et courses — sans charge mentale.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Mealing" },
+  icons: { apple: "/icon-192.png" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#fbf7ef",
 };
 
 export default function RootLayout({
@@ -36,7 +44,10 @@ export default function RootLayout({
       lang="fr"
       className={`${fraunces.variable} ${nunito.variable} ${caveat.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        {children}
+        <ServiceWorkerRegister />
+      </body>
     </html>
   );
 }

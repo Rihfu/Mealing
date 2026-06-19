@@ -44,6 +44,8 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // Exécute le proxy partout sauf assets statiques.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    // Exclut aussi le service worker et le manifest (ne doivent pas être touchés
+    // par le refresh de session ; le SW doit rester servi tel quel, scope racine).
+    '/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };
