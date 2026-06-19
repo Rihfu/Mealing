@@ -1073,7 +1073,9 @@ export type Database = {
           id: string
           label: string | null
           present: boolean
+          printed_expiry: string | null
           quantity: number | null
+          storage_location: string | null
           tracking_mode: string
           unit: string | null
           updated_at: string
@@ -1087,7 +1089,9 @@ export type Database = {
           id?: string
           label?: string | null
           present?: boolean
+          printed_expiry?: string | null
           quantity?: number | null
+          storage_location?: string | null
           tracking_mode?: string
           unit?: string | null
           updated_at?: string
@@ -1101,7 +1105,9 @@ export type Database = {
           id?: string
           label?: string | null
           present?: boolean
+          printed_expiry?: string | null
           quantity?: number | null
+          storage_location?: string | null
           tracking_mode?: string
           unit?: string | null
           updated_at?: string
@@ -1123,6 +1129,102 @@ export type Database = {
           },
           {
             foreignKeyName: "stock_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stock_event: {
+        Row: {
+          food_id: string | null
+          household_id: string
+          id: string
+          kind: string
+          label: string | null
+          occurred_at: string
+          quantity: number | null
+          source: string | null
+          stock_id: string | null
+          unit: string | null
+        }
+        Insert: {
+          food_id?: string | null
+          household_id: string
+          id?: string
+          kind: string
+          label?: string | null
+          occurred_at?: string
+          quantity?: number | null
+          source?: string | null
+          stock_id?: string | null
+          unit?: string | null
+        }
+        Update: {
+          food_id?: string | null
+          household_id?: string
+          id?: string
+          kind?: string
+          label?: string | null
+          occurred_at?: string
+          quantity?: number | null
+          source?: string | null
+          stock_id?: string | null
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_event_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: false
+            referencedRelation: "food"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_event_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_event_stock_id_fkey"
+            columns: ["stock_id"]
+            isOneToOne: false
+            referencedRelation: "stock"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      storage_location: {
+        Row: {
+          created_at: string
+          household_id: string
+          icon_slug: string | null
+          id: string
+          label: string
+          position: number
+        }
+        Insert: {
+          created_at?: string
+          household_id: string
+          icon_slug?: string | null
+          id?: string
+          label: string
+          position?: number
+        }
+        Update: {
+          created_at?: string
+          household_id?: string
+          icon_slug?: string | null
+          id?: string
+          label?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storage_location_household_id_fkey"
             columns: ["household_id"]
             isOneToOne: false
             referencedRelation: "household"

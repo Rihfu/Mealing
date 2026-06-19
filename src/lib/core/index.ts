@@ -13,6 +13,8 @@ export * from './shopping-stats';
 export * from './shopping-product';
 export * from './conservation';
 export * from './stock';
+export * from './storage';
+export * from './stock-events';
 export * from './meals';
 export * from './consumption';
 export * from './household';
