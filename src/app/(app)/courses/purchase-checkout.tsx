@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { checkoutToStockAction } from './actions';
+import { enqueueOp } from '@/lib/offline/queue';
 
 export interface CheckoutItem {
   key: string; // clé d'identité de la ligne (pour rattacher le prix au relevé)
@@ -33,6 +34,8 @@ export function PurchaseCheckout({
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  // Passage en caisse mis en file HORS-LIGNE (synchronisé au retour réseau).
+  const [queuedOffline, setQueuedOffline] = useState(false);
   // Pré-remplissage du dernier prix payé connu (modifiable). En mode contrôlé,
   // c'est le parent qui détient les prix (saisie en rayon en mode magasin).
   const [internalPrices, setInternalPrices] = useState<Record<string, string>>(() =>
@@ -58,11 +61,45 @@ export function PurchaseCheckout({
       const v = raw != null && raw.trim() !== '' ? Number(raw.replace(',', '.')) : NaN;
       if (!Number.isNaN(v) && v > 0) map[it.key] = v;
     }
-    startTransition(async () => {
-      await checkoutToStockAction(Object.keys(map).length > 0 ? map : undefined);
+    // Hors-ligne (ou si l'appel échoue) → on met le passage en caisse EN FILE : il sera
+    // rejoué au retour du réseau, APRÈS les coches (ordre FIFO), rangeant les achats au
+    // stock. On NE déclenche PAS onDone (qui, en magasin, viderait la file).
+    const queue = async () => {
+      await enqueueOp({ kind: 'checkout', prices: map });
       setOpen(false);
-      onDone?.();
+      setQueuedOffline(true);
+    };
+    const online = typeof navigator === 'undefined' || navigator.onLine;
+    if (!online) {
+      startTransition(queue);
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await checkoutToStockAction(Object.keys(map).length > 0 ? map : undefined);
+        setOpen(false);
+        onDone?.();
+      } catch {
+        await queue();
+      }
     });
+  }
+
+  // Confirmation hors-ligne : le passage en caisse est mémorisé, il sera enregistré
+  // (achats rangés au stock) automatiquement dès le retour du réseau.
+  if (queuedOffline) {
+    return (
+      <div
+        className={`flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ${fullWidth ? 'w-full' : ''}`}
+        style={{ background: 'var(--color-sage-tint)', color: 'var(--color-sage-deep)' }}
+        role="status"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+        Achats enregistrés — synchro au retour du réseau
+      </div>
+    );
   }
 
   return (

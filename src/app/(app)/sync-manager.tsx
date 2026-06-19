@@ -2,16 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { CACHE_VERSION, purgeCacheIfStale } from '@/lib/offline/idb';
-import { flushQueue, getQueue, QUEUE_EVENT, type QueuedOp } from '@/lib/offline/queue';
-import { toggleCheckAction } from './courses/actions';
-
-/** Rejoue une coche mise en file hors-ligne (set d'état idempotent côté serveur). */
-const replay = async (op: QueuedOp) => {
-  const fd = new FormData();
-  fd.set('item_key', op.key);
-  fd.set('checked', String(op.checked));
-  await toggleCheckAction(fd);
-};
+import { flushQueue, getQueue, QUEUE_EVENT } from '@/lib/offline/queue';
+import { replayOp } from './courses/sync-replay';
 
 /**
  * Gestionnaire de synchro GLOBAL (Phase 4 PWA) — monté dans le shell de l'app :
@@ -37,7 +29,7 @@ export function SyncManager() {
     getQueue().then(async (q) => {
       if (q.length === 0) return;
       const n = q.length;
-      const ok = await flushQueue(replay);
+      const ok = await flushQueue(replayOp);
       if (ok) {
         setJustSynced(n);
         setTimeout(() => setJustSynced(0), 2500);
@@ -86,7 +78,7 @@ export function SyncManager() {
     color = 'var(--color-sage-deep)';
     dot = 'var(--color-green-strong)';
   } else {
-    label = justSynced > 1 ? `${justSynced} coches synchronisées` : 'Synchronisé';
+    label = justSynced > 1 ? `${justSynced} éléments synchronisés` : 'Synchronisé';
     bg = 'var(--color-sage-tint)';
     color = 'var(--color-sage-deep)';
     dot = 'var(--color-green-strong)';

@@ -2,10 +2,13 @@ import { idbGet, idbSet } from './idb';
 
 /**
  * File d'attente (IndexedDB) des mutations faites HORS-LIGNE, rejouées au retour du
- * réseau. Pour l'instant : les coches du mode magasin. Ordre préservé (FIFO) afin que
- * la synchro reflète la séquence réelle des actions de l'utilisateur.
+ * réseau : coches du mode magasin ET passage en caisse (« J'ai fait mes courses »).
+ * Ordre préservé (FIFO) → les coches sont rejouées AVANT le checkout, donc l'état
+ * serveur est correct au moment de ranger les achats au stock.
  */
-export type QueuedOp = { kind: 'toggle'; key: string; checked: boolean };
+export type QueuedOp =
+  | { kind: 'toggle'; key: string; checked: boolean }
+  | { kind: 'checkout'; prices: Record<string, number> };
 
 const KEY = 'sync:magasin-queue';
 
@@ -19,10 +22,13 @@ export async function getQueue(): Promise<QueuedOp[]> {
   return (await idbGet<QueuedOp[]>(KEY)) ?? [];
 }
 
-/** Empile une opération. Pour une coche, on écrase la précédente sur la même clé
- *  (seul l'état final compte) tout en gardant l'ordre d'apparition. */
+/** Empile une opération en dédoublonnant : une coche écrase la précédente sur la même
+ *  clé (seul l'état final compte) ; un checkout écrase tout checkout antérieur (un seul
+ *  passage en caisse en attente). L'ordre d'apparition est par ailleurs préservé. */
 export async function enqueueOp(op: QueuedOp): Promise<number> {
-  const q = (await getQueue()).filter((o) => !(o.kind === 'toggle' && o.key === op.key));
+  let q = await getQueue();
+  if (op.kind === 'toggle') q = q.filter((o) => !(o.kind === 'toggle' && o.key === op.key));
+  else if (op.kind === 'checkout') q = q.filter((o) => o.kind !== 'checkout');
   q.push(op);
   await idbSet(KEY, q);
   notifyChange();

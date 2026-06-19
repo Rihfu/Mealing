@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState, useTransition } from 'react';
 import { toggleCheckAction } from '../actions';
 import { PurchaseCheckout } from '../purchase-checkout';
 import { idbGet, idbSet } from '@/lib/offline/idb';
-import { clearQueue, enqueueOp, flushQueue, getQueue, type QueuedOp } from '@/lib/offline/queue';
+import { clearQueue, enqueueOp, flushQueue, getQueue } from '@/lib/offline/queue';
+import { replayOp } from '../sync-replay';
 
 /** Article du mode magasin (sérialisable, dérivé d'une ShoppingLine). */
 export interface StoreItem {
@@ -123,13 +124,7 @@ export function StoreList({ groups, refresh }: { groups: StoreGroup[]; refresh?:
   // on rafraîchit l'instantané du magasin.
   const flush = useCallback(() => {
     startTransition(async () => {
-      const replay = async (op: QueuedOp) => {
-        const fd = new FormData();
-        fd.set('item_key', op.key);
-        fd.set('checked', String(op.checked));
-        await toggleCheckAction(fd);
-      };
-      const ok = await flushQueue(replay);
+      const ok = await flushQueue(replayOp);
       const q = await getQueue();
       setPendingSync(q.length);
       if (ok) refresh?.();

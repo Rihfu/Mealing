@@ -40,11 +40,26 @@ export async function getProductBundleAction(foodId: string): Promise<ProductBun
   return { detail, nutrition: nutrition ?? [] };
 }
 
+/** map avec concurrence bornée (évite de saturer USDA/OFF + le budget temps de l'action). */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let i = 0;
+  const worker = async () => {
+    while (i < items.length) {
+      const idx = i++;
+      results[idx] = await fn(items[idx]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 /**
  * Pré-charge les fiches de TOUS les articles de la liste (un appel groupé) pour les
  * consulter HORS-LIGNE en magasin. Renvoie un dictionnaire foodId → bundle ; le client
- * le persiste en IndexedDB. (Nutrition : valeurs déjà stockées ; le complément
- * fournisseur reste à la demande à l'ouverture d'une fiche en ligne.)
+ * le persiste en IndexedDB. **Complète la nutrition jamais stockée** (USDA/OFF,
+ * best-effort, concurrence limitée) pour que les fiches soient complètes hors-ligne —
+ * garde-fou n°3 respecté : valeurs du FOURNISSEUR, jamais l'IA.
  */
 export async function prefetchListFichesAction(): Promise<Record<string, ProductBundle>> {
   const { supabase, userId, profile } = await getAuthContext();
@@ -55,15 +70,20 @@ export async function prefetchListFichesAction(): Promise<Record<string, Product
   const foodIds = Array.from(new Set(lines.map((l) => l.foodId).filter((x): x is string => !!x)));
 
   const out: Record<string, ProductBundle> = {};
-  await Promise.all(
-    foodIds.map(async (id) => {
-      const [detail, nutrition] = await Promise.all([
-        computeProductStats(supabase, hh, id),
-        getFoodNutrition(supabase, id),
-      ]);
-      out[id] = { detail, nutrition: nutrition ?? [] };
-    }),
-  );
+  await mapLimit(foodIds, 4, async (id) => {
+    let nutrition = await getFoodNutrition(supabase, id);
+    // Nutrition jamais stockée → on la récupère une fois auprès du fournisseur (best-effort).
+    if (!nutrition || nutrition.length === 0) {
+      try {
+        await fetchAndStoreNutrition(supabase, id);
+        nutrition = await getFoodNutrition(supabase, id);
+      } catch {
+        // best-effort : si le fournisseur ne renvoie rien, on garde un bundle sans nutrition.
+      }
+    }
+    const detail = await computeProductStats(supabase, hh, id);
+    out[id] = { detail, nutrition: nutrition ?? [] };
+  });
   return out;
 }
 
