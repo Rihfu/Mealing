@@ -30,9 +30,52 @@ export interface ChatResult {
   model: string;
 }
 
+/* ----------------------------- Tool calling ------------------------------ */
+/*
+ * Function calling (API OpenAI, supporté par Groq) : socle de l'assistant AGENTIQUE.
+ * Le modèle peut demander l'exécution d'« outils » (lecture des données) puis, une
+ * fois les résultats reçus, répondre ou proposer des outils d'écriture. Le garde-fou
+ * de confirmation reste applicatif : les outils d'écriture ne sont jamais exécutés par
+ * le fournisseur — ils sont collectés côté agent et confirmés par l'utilisateur.
+ */
+
+/** Définition d'un outil exposé au modèle (paramètres = JSON Schema). */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+/** Appel d'outil émis par le modèle (`arguments` = JSON brut, à parser/valider). */
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+/** Message enrichi du fil de conversation à outils (format OpenAI). */
+export type ToolChatMessage =
+  | { role: 'system' | 'user'; content: string }
+  | { role: 'assistant'; content: string | null; toolCalls?: ToolCall[] }
+  | { role: 'tool'; toolCallId: string; content: string };
+
+export interface ToolChatResult {
+  /** Texte de réponse (présent quand le modèle ne demande plus d'outil). */
+  content: string | null;
+  /** Outils demandés par le modèle à ce tour (vide quand il répond). */
+  toolCalls: ToolCall[];
+  model: string;
+}
+
 export interface AIProvider {
   readonly name: string;
   /** Le modèle utilisé par défaut si `options.model` n'est pas fourni. */
   readonly defaultModel: string;
   chat(messages: ChatMessage[], options?: ChatOptions): Promise<ChatResult>;
+  /** Tour de conversation avec outils (function calling). Optionnel selon le fournisseur. */
+  chatWithTools?(
+    messages: ToolChatMessage[],
+    tools: ToolDefinition[],
+    options?: ChatOptions,
+  ): Promise<ToolChatResult>;
 }
