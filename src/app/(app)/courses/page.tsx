@@ -7,6 +7,7 @@ import { groupByRayon, orderRayonKeys } from './rayons';
 import { AddArticle } from './add-article';
 import { PurchaseCheckout } from './purchase-checkout';
 import { ManageAislesButton } from './category-controls';
+import { PrepareOffline } from './prepare-offline';
 import { EssentialsManager } from './essentials-manager';
 import { ShoppingList, DoneList, type SGroup, type SLine } from './shopping-list';
 import { clearCheckedAction } from './actions';
@@ -108,18 +109,21 @@ export default async function CoursesPage() {
               Historique
             </Link>
             {active.length > 0 && (
-              <Link
-                href="/courses/magasin"
-                className="btn-secondary flex items-center gap-2 py-2 text-sm"
-                title="Vue plein écran, gros boutons — pour cocher en magasin"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M3 5h2l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h7.6a1.5 1.5 0 0 0 1.5-1.2L21 8H7" />
-                  <circle cx="10" cy="20" r="1.4" />
-                  <circle cx="18" cy="20" r="1.4" />
-                </svg>
-                Mode magasin
-              </Link>
+              <>
+                <PrepareOffline />
+                <Link
+                  href="/courses/magasin"
+                  className="btn-secondary flex items-center gap-2 py-2 text-sm"
+                  title="Vue plein écran, gros boutons — pour cocher en magasin"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 5h2l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h7.6a1.5 1.5 0 0 0 1.5-1.2L21 8H7" />
+                    <circle cx="10" cy="20" r="1.4" />
+                    <circle cx="18" cy="20" r="1.4" />
+                  </svg>
+                  Mode magasin
+                </Link>
+              </>
             )}
           </div>
         </div>
