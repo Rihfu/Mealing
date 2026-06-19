@@ -529,12 +529,29 @@ export function ShoppingList({
   customCategories: CustomCategory[];
   rayonOrder?: string[];
 }) {
-  // Coche optimiste : la ligne cochée disparaît tout de suite de « À acheter »
-  // (la révalidation serveur la fait apparaître dans « Déjà pris » juste après).
-  const [groups, hideOptimistic] = useOptimistic(serverGroups, (gs: SGroup[], key: string) =>
-    gs.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== key) })).filter((g) => g.items.length > 0),
+  // État OPTIMISTE de la liste : la coche fait disparaître la ligne tout de suite
+  // (« hide »), le déplacement la fait changer de rayon tout de suite (« move »).
+  // La révalidation serveur réconcilie ensuite — plus d'attente du round-trip.
+  const [groups, applyOptimistic] = useOptimistic(
+    serverGroups,
+    (gs: SGroup[], a: { kind: 'hide'; key: string } | { kind: 'move'; key: string; to: string }) => {
+      if (a.kind === 'hide') {
+        return gs.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== a.key) })).filter((g) => g.items.length > 0);
+      }
+      let moved: SLine | undefined;
+      const without = gs.map((g) => {
+        const f = g.items.find((i) => i.key === a.key);
+        if (f) moved = f;
+        return { ...g, items: g.items.filter((i) => i.key !== a.key) };
+      });
+      if (!moved) return gs;
+      const line = { ...moved, category: a.to };
+      return without
+        .map((g) => (g.key === a.to ? { ...g, items: [...g.items, line] } : g))
+        .filter((g) => g.items.length > 0);
+    },
   );
-  const { pending, animating, toggle } = useToggle(hideOptimistic);
+  const { pending, animating, toggle } = useToggle((key) => applyOptimistic({ kind: 'hide', key }));
   const [drag, setDrag] = useState<DragState>(null);
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [overKey, setOverKey] = useState<string | null>(null);
@@ -740,7 +757,13 @@ export function ShoppingList({
       overRef.current = null;
       if (d.kind === 'item') {
         if (target && target !== d.from && target !== OTHER_KEY) {
-          setFoodCategoryAction({ label: d.line.name, foodId: d.line.foodId, categoryKey: target, iconSlug: d.line.iconSlug });
+          const line = d.line;
+          // Déplacement OPTIMISTE : la tuile change de rayon tout de suite ; la
+          // préférence foyer est enregistrée en arrière-plan (réconciliée au refresh).
+          startReorder(async () => {
+            applyOptimistic({ kind: 'move', key: line.key, to: target });
+            await setFoodCategoryAction({ label: line.name, foodId: line.foodId, categoryKey: target, iconSlug: line.iconSlug });
+          });
         }
       } else if (
         target &&
@@ -776,7 +799,7 @@ export function ShoppingList({
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [drag, rayonOrder]);
+  }, [drag, rayonOrder, applyOptimistic]);
 
   return (
     <>
