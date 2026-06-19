@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { removeEssentialAction } from './actions';
+import { useCoursesRefresh } from './courses-refresh';
 
 export interface EssentialView {
   id: string;
@@ -15,12 +16,16 @@ export interface EssentialView {
 export function EssentialsManager({ items }: { items: EssentialView[] }) {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [, start] = useTransition();
+  // Sur la page Courses (cache-first), rafraîchit l'instantané ; sur la page Stats
+  // (hors provider), c'est un no-op et la révalidation serveur fait le travail.
+  const refresh = useCoursesRefresh();
 
   function remove(id: string) {
     setPendingId(id);
     start(async () => {
       await removeEssentialAction(id);
       setPendingId(null);
+      await refresh();
     });
   }
 

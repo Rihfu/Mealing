@@ -18,6 +18,7 @@ import {
   deleteCategoryAction,
   moveRayonAction,
 } from './actions';
+import { useCoursesRefresh } from './courses-refresh';
 
 export interface CustomCategory {
   id: string;
@@ -156,6 +157,7 @@ export function RangerModal({
   const [cat, setCat] = useState<string | null>(currentCategory);
   const [icon, setIcon] = useState<string | null>(currentIcon);
   const [pending, startTransition] = useTransition();
+  const refresh = useCoursesRefresh();
 
   // Création de rayon (inline).
   const [creating, setCreating] = useState(false);
@@ -167,6 +169,7 @@ export function RangerModal({
     startTransition(async () => {
       await setFoodCategoryAction({ label, foodId, categoryKey, iconSlug });
       onClose();
+      await refresh();
     });
   }
 
@@ -174,6 +177,7 @@ export function RangerModal({
     startTransition(async () => {
       await clearFoodCategoryAction(label);
       onClose();
+      await refresh();
     });
   }
 
@@ -184,6 +188,7 @@ export function RangerModal({
       const id = await createCategoryAction({ label: lbl, iconSlug: newIcon, tint: newTint });
       if (id) await setFoodCategoryAction({ label, foodId, categoryKey: id, iconSlug: icon });
       onClose();
+      await refresh();
     });
   }
 
@@ -433,6 +438,7 @@ export function ManageAislesButton({
   const [label, setLabel] = useState('');
   const [tint, setTint] = useState(DEFAULT_TINT);
   const [icon, setIcon] = useState<string | null>(null);
+  const refresh = useCoursesRefresh();
 
   // Libellé + teinte d'un rayon (intégré ou custom) pour la liste de réordonnancement.
   const customById = new Map(customCategories.map((c) => [c.id, c]));
@@ -445,6 +451,7 @@ export function ManageAislesButton({
   function move(key: string, dir: 'up' | 'down') {
     startTransition(async () => {
       await moveRayonAction({ key, dir });
+      await refresh();
     });
   }
 
@@ -464,12 +471,14 @@ export function ManageAislesButton({
       setLabel('');
       setIcon(null);
       setTint(DEFAULT_TINT);
+      await refresh();
     });
   }
 
   function remove(id: string) {
     startTransition(async () => {
       await deleteCategoryAction(id);
+      await refresh();
     });
   }
 

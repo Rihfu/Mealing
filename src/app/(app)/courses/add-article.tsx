@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { addManualAction, searchCatalogAction } from './actions';
+import { useCoursesRefresh } from './courses-refresh';
 import { UNIT_OPTIONS } from '@/lib/units';
 import { normalizeLabel } from '@/lib/text';
 import { ProductIcon, categoryLabel } from '@/lib/product-assets';
@@ -34,6 +35,7 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
   const [unit, setUnit] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const refresh = useCoursesRefresh();
 
   // Anti-doublon / anti-surplus (G) : avertir si l'article est déjà sur la liste ou en stock.
   const warning = useMemo(() => {
@@ -115,6 +117,7 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
     try {
       await addManualAction(formData);
       reset();
+      await refresh();
     } finally {
       setSubmitting(false);
     }

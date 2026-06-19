@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { idbGet, idbSet } from './idb';
 
 export interface CachedResource<T> {
@@ -9,8 +9,12 @@ export interface CachedResource<T> {
   loading: boolean;
   /** true si la revalidation réseau a échoué (on affiche alors le cache). */
   offline: boolean;
-  /** force une revalidation réseau (ex. après une mutation). */
-  refresh: () => void;
+  /**
+   * Force une revalidation réseau (ex. après une mutation). La promesse se résout APRÈS
+   * la mise à jour des données → on peut l'`await` dans une transition pour que les états
+   * optimistes (useOptimistic) se réconcilient sans clignotement.
+   */
+  refresh: () => Promise<void>;
 }
 
 /**
@@ -23,8 +27,38 @@ export function useCachedResource<T>(key: string, loader: () => Promise<T>): Cac
   const [data, setData] = useState<T | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
+  // Garde anti-course : seule la réponse de la dernière revalidation est appliquée.
+  const reqId = useRef(0);
 
-  const run = useCallback(() => {
+  // setState toujours dans des callbacks de promesse (différés) → pas de cascade de
+  // rendus synchrone dans l'effet. Renvoie une promesse résolue après mise à jour.
+  const revalidate = useCallback((): Promise<void> => {
+    const my = ++reqId.current;
+    const online = typeof navigator === 'undefined' || navigator.onLine;
+    if (!online) {
+      return idbGet<T>(key).then((cached) => {
+        if (my !== reqId.current) return;
+        if (cached !== undefined) setData(cached);
+        setOffline(true);
+        setLoading(false);
+      });
+    }
+    return loader()
+      .then((fresh) => {
+        if (my !== reqId.current) return;
+        setData(fresh);
+        setLoading(false);
+        setOffline(false);
+        void idbSet(key, fresh);
+      })
+      .catch(() => {
+        if (my !== reqId.current) return;
+        setOffline(true);
+        setLoading(false);
+      });
+  }, [key, loader]);
+
+  useEffect(() => {
     let cancelled = false;
     // 1) cache d'abord (instantané)
     idbGet<T>(key).then((cached) => {
@@ -33,47 +67,16 @@ export function useCachedResource<T>(key: string, loader: () => Promise<T>): Cac
         setLoading(false);
       }
     });
-    // 2) revalidation réseau (si en ligne)
-    const online = typeof navigator === 'undefined' || navigator.onLine;
-    if (online) {
-      loader()
-        .then((fresh) => {
-          if (cancelled) return;
-          setData(fresh);
-          setLoading(false);
-          setOffline(false);
-          void idbSet(key, fresh);
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setOffline(true);
-            setLoading(false);
-          }
-        });
-    } else {
-      // hors-ligne : on reste sur le cache (déjà lu ci-dessus)
-      idbGet<T>(key).then(() => {
-        if (!cancelled) {
-          setOffline(true);
-          setLoading(false);
-        }
-      });
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [key, loader]);
-
-  useEffect(() => {
-    const cleanup = run();
+    // 2) revalidation réseau (en arrière-plan)
+    void revalidate();
     // Revalide automatiquement au retour de connexion.
-    const onOnline = () => run();
+    const onOnline = () => void revalidate();
     window.addEventListener('online', onOnline);
     return () => {
-      cleanup();
+      cancelled = true;
       window.removeEventListener('online', onOnline);
     };
-  }, [run]);
+  }, [key, revalidate]);
 
-  return { data, loading, offline, refresh: run };
+  return { data, loading, offline, refresh: revalidate };
 }

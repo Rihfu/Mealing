@@ -7,6 +7,7 @@ import { ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-
 import { UNIT_OPTIONS } from '@/lib/units';
 import { RangerModal, BulkRangerModal, type CustomCategory } from './category-controls';
 import { pushUndoToast } from './undo-toast';
+import { useCoursesRefresh } from './courses-refresh';
 import { catView } from './rayons';
 import {
   toggleCheckAction,
@@ -70,6 +71,7 @@ function norm(s: string): string {
 function useToggle(onOptimistic?: (key: string) => void) {
   const [pending, startTransition] = useTransition();
   const [animating, setAnimating] = useState<Set<string>>(new Set());
+  const refresh = useCoursesRefresh();
 
   function toggle(line: SLine, checked: boolean) {
     setAnimating((s) => new Set(s).add(line.key));
@@ -80,6 +82,9 @@ function useToggle(onOptimistic?: (key: string) => void) {
       fd.set('checked', String(checked));
       fd.set('item_key', line.key);
       await toggleCheckAction(fd);
+      // Recharge l'instantané AVANT de clore la transition → l'état optimiste se
+      // réconcilie avec les données fraîches sans clignotement.
+      await refresh();
       setAnimating((s) => {
         const n = new Set(s);
         n.delete(line.key);
@@ -271,10 +276,12 @@ function Row({
   const [justPinned, setJustPinned] = useState(false);
   const [pinning, startPin] = useTransition();
   const isEssential = line.sources.includes('recurring') || justPinned;
+  const refresh = useCoursesRefresh();
   function pin() {
     startPin(async () => {
       await promoteToEssentialAction({ label: line.name, foodId: line.foodId, quantity: line.quantity, unit: line.unit });
       setJustPinned(true);
+      await refresh();
     });
   }
 
@@ -292,6 +299,7 @@ function Row({
         unit: u || null,
       });
       setEditing(false);
+      await refresh();
     });
   }
 
@@ -565,6 +573,7 @@ export function ShoppingList({
   const [, startRemove] = useTransition();
   const [bulkPending, startBulk] = useTransition();
   const [, startReorder] = useTransition();
+  const refresh = useCoursesRefresh();
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkRanger, setBulkRanger] = useState(false);
@@ -625,7 +634,11 @@ export function ShoppingList({
     const label = lines.length === 1 ? `« ${lines[0].name} » retiré` : `${lines.length} articles retirés`;
     startRemove(async () => {
       const data = await removeLinesAction(inputs);
-      pushUndoToast(label, () => undoRemoveLinesAction(data));
+      pushUndoToast(label, async () => {
+        await undoRemoveLinesAction(data);
+        await refresh();
+      });
+      await refresh();
     });
   }
 
@@ -634,6 +647,7 @@ export function ShoppingList({
     startBulk(async () => {
       await bulkPromoteEssentialsAction(items);
       exitSelect();
+      await refresh();
     });
   }
   function bulkDelete() {
@@ -645,6 +659,7 @@ export function ShoppingList({
     const items = selectedLines.map((l) => ({ label: l.name, foodId: l.foodId, iconSlug: l.iconSlug }));
     await bulkSetCategoryAction(items, categoryKey);
     exitSelect();
+    await refresh();
   }
 
   // Appui long générique (tactile + souris) : déclenche `activate` si on maintient
@@ -763,6 +778,7 @@ export function ShoppingList({
           startReorder(async () => {
             applyOptimistic({ kind: 'move', key: line.key, to: target });
             await setFoodCategoryAction({ label: line.name, foodId: line.foodId, categoryKey: target, iconSlug: line.iconSlug });
+            await refresh();
           });
         }
       } else if (
@@ -777,7 +793,10 @@ export function ShoppingList({
         const ti = without.indexOf(target);
         const movingDown = rayonOrder.indexOf(d.key) < rayonOrder.indexOf(target);
         without.splice(movingDown ? ti + 1 : ti, 0, d.key);
-        startReorder(() => reorderRayonsAction(without));
+        startReorder(async () => {
+          await reorderRayonsAction(without);
+          await refresh();
+        });
       }
       // Laisse le clic de fin de glisser se résoudre avant de réautoriser le toggle.
       setTimeout(() => {
@@ -799,7 +818,7 @@ export function ShoppingList({
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [drag, rayonOrder, applyOptimistic]);
+  }, [drag, rayonOrder, applyOptimistic, refresh]);
 
   return (
     <>
