@@ -265,6 +265,50 @@ export async function findCatalogFoodIdByLabel(db: DB, label: string): Promise<s
   return matchCatalog(index, label)?.id ?? null;
 }
 
+/** Slug stable d'un libellé pour l'identité catalogue (`external_id = cat:<slug>`). */
+function catalogSlug(label: string): string {
+  return normalizeLabel(label)
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * Récupère (ou crée) un aliment de CATALOGUE pour un libellé libre, afin que TOUT
+ * article ait une identité produit → fiche produit cliquable, rayon, icône, et
+ * nutrition à la demande (via le fournisseur). Idempotent par slug (`cat:<slug>`).
+ * N'ajoute AUCUNE valeur nutritionnelle ici (garde-fou n°3). `name`/`category`
+ * proviennent de l'IA en amont (best-effort) ; repli sur le libellé brut.
+ * @returns l'id du food, ou null si le libellé ne donne pas de slug exploitable.
+ */
+export async function getOrCreateCatalogFood(
+  db: DB,
+  input: { label: string; name?: string | null; category?: string | null },
+): Promise<string | null> {
+  const slug = catalogSlug(input.label);
+  if (!slug) return null;
+  const externalId = `cat:${slug}`;
+
+  const existing = await db.from('food').select('id').eq('source', 'manual').eq('external_id', externalId).maybeSingle();
+  if (existing.error) throw new Error(existing.error.message);
+  if (existing.data) return (existing.data as { id: string }).id;
+
+  const name = (input.name ?? '').trim() || input.label.trim();
+  const ins = await db
+    .from('food')
+    .insert({ name, source: 'manual', external_id: externalId, default_unit: 'g', base_amount: 100, category: input.category ?? null })
+    .select('id')
+    .single();
+  if (ins.error) {
+    // Course (slug créé en parallèle par une autre requête) → on relit.
+    const again = await db.from('food').select('id').eq('source', 'manual').eq('external_id', externalId).maybeSingle();
+    if (again.data) return (again.data as { id: string }).id;
+    throw new Error(ins.error.message);
+  }
+  return (ins.data as { id: string }).id;
+}
+
 /**
  * Importe un aliment externe (suggestion sans `foodId`) dans le catalogue local
  * et renvoie son id — à appeler quand l'utilisateur sélectionne une suggestion

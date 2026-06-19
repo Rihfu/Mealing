@@ -86,7 +86,19 @@ function useToggle() {
   return { pending, animating, toggle };
 }
 
-/** Petit bouton « retirer de la liste » (corbeille). */
+/** Corbeille claire (bac à couvercle) — picto partagé pour les actions de suppression. */
+export function TrashIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 6h18" />
+      <path d="M9 6V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6" />
+      <path d="M5.6 6 6.8 19.2A2 2 0 0 0 8.8 21h6.4a2 2 0 0 0 2-1.8L18.4 6" />
+      <path d="M10 10.5v6M14 10.5v6" />
+    </svg>
+  );
+}
+
+/** Petit bouton « retirer de la liste » (corbeille sur pastille rouge pâle, repérable). */
 function RemoveButton({ onClick }: { onClick: () => void }) {
   return (
     <button
@@ -94,11 +106,9 @@ function RemoveButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       aria-label="Retirer de la liste"
       title="Retirer de la liste"
-      className="text-ink-soft/70 hover:text-clay-deep"
+      className="flex h-7 w-7 items-center justify-center rounded-full bg-clay-tint/50 text-clay-deep transition-colors hover:bg-clay-tint"
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M3 6h18M8 6V4h8v2m-1 0v14H9V6" />
-      </svg>
+      <TrashIcon size={15} />
     </button>
   );
 }
@@ -192,9 +202,7 @@ function RowActionsMenu({
               }}
               className={`${item} text-clay-deep`}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M3 6h18M8 6V4h8v2m-1 0v14H9V6" />
-              </svg>
+              <TrashIcon size={16} />
               Retirer de la liste
             </button>
           )}
@@ -286,6 +294,8 @@ function Row({
     <li
       data-food={line.foodId ?? undefined}
       onPointerDown={!selectMode && !done ? onPressStart : undefined}
+      onContextMenu={!selectMode && !done ? (e) => e.preventDefault() : undefined}
+      style={!selectMode && !done ? { WebkitTouchCallout: 'none' } : undefined}
       className={`flex items-center gap-3 rounded-lg px-1 py-2 transition-all duration-200 hover:bg-sage-tint/40 ${animating ? 'opacity-40' : ''} ${selected ? 'bg-sage-tint/60' : ''} ${flash ? 'bg-sage-tint ring-1 ring-green-strong' : ''}`}
     >
       {selectMode ? (
@@ -465,11 +475,9 @@ function ViderRayon({ label, onConfirm }: { label: string; onConfirm: () => void
         onClick={() => setOpen((o) => !o)}
         aria-label={`Vider le rayon ${label}`}
         title="Retirer tous les articles de ce rayon"
-        className="flex h-8 w-8 items-center justify-center rounded-full text-ink-soft/70 hover:bg-clay-tint/40 hover:text-clay-deep"
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-clay-tint/50 text-clay-deep transition-colors hover:bg-clay-tint"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M3 6h18M8 6V4h8v2m-1 0v14H9V6" />
-        </svg>
+        <TrashIcon size={16} />
       </button>
       {open && (
         <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-xl border border-line bg-surface p-3 text-left shadow-soft">
@@ -522,6 +530,7 @@ export function ShoppingList({
   const [overKey, setOverKey] = useState<string | null>(null);
   const overRef = useRef<string | null>(null);
   const justDragged = useRef(false);
+  const posRef = useRef({ x: 0, y: 0 }); // dernière position du pointeur (pour l'auto-scroll)
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -623,6 +632,7 @@ export function ShoppingList({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onEnd);
       window.removeEventListener('pointercancel', onEnd);
+      window.removeEventListener('contextmenu', onCtx);
     };
     const onMove = (ev: PointerEvent) => {
       if (Math.abs(ev.clientX - sx) > 8 || Math.abs(ev.clientY - sy) > 8) {
@@ -631,6 +641,9 @@ export function ShoppingList({
       }
     };
     const onEnd = () => clear();
+    // Bloque le menu contextuel du navigateur (l'appui long sur un lien l'ouvrait et
+    // annulait le glisser). Le glisser maintient ensuite son propre blocage.
+    const onCtx = (ev: Event) => ev.preventDefault();
     const timer = window.setTimeout(() => {
       clear();
       if (!moved) activate();
@@ -638,12 +651,14 @@ export function ShoppingList({
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onEnd);
     window.addEventListener('pointercancel', onEnd);
+    window.addEventListener('contextmenu', onCtx);
   }
 
   function startItemDrag(line: SLine, from: string, x: number, y: number) {
     justDragged.current = true;
     overRef.current = null;
     setOverKey(null);
+    posRef.current = { x, y };
     setPos({ x, y });
     setDrag({ kind: 'item', line, from });
   }
@@ -655,25 +670,57 @@ export function ShoppingList({
     justDragged.current = true;
     overRef.current = null;
     setOverKey(null);
+    posRef.current = { x, y };
     setPos({ x, y });
     setDrag({ kind: 'rayon', key: g.key, label: g.label, tint: g.tint, ink: g.ink, iconSlug: g.iconSlug });
   }
 
   useEffect(() => {
     if (!drag) return;
-    // Pendant un glisser, on neutralise le scroll/sélection natifs (tactile inclus).
-    const prevTouch = document.body.style.touchAction;
-    const prevSelect = document.body.style.userSelect;
-    document.body.style.touchAction = 'none';
-    document.body.style.userSelect = 'none';
-    const onMove = (e: PointerEvent) => {
-      e.preventDefault();
-      setPos({ x: e.clientX, y: e.clientY });
-      const sec = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-rayon]') as HTMLElement | null;
+    // Pendant un glisser : neutralise le scroll/sélection natifs ET le menu contextuel.
+    const bodyStyle = document.body.style;
+    const prevTouch = bodyStyle.getPropertyValue('touch-action');
+    const prevSelect = bodyStyle.getPropertyValue('user-select');
+    bodyStyle.setProperty('touch-action', 'none');
+    bodyStyle.setProperty('user-select', 'none');
+
+    // Cible (rayon) sous le pointeur, recalculée à chaque mouvement ET à chaque
+    // défilement automatique (le contenu glisse sous un doigt immobile).
+    const updateOver = (x: number, y: number) => {
+      const sec = document.elementFromPoint(x, y)?.closest('[data-rayon]') as HTMLElement | null;
       const k = sec?.dataset.rayon ?? null;
       overRef.current = k;
       setOverKey(k);
     };
+
+    // Auto-scroll : si le pointeur approche le haut/bas de l'écran, on fait défiler la
+    // page — vitesse croissante à mesure qu'on s'approche du bord (listes longues).
+    const EDGE = 96;
+    let raf = 0;
+    const autoScroll = () => {
+      const { x, y } = posRef.current;
+      const vh = window.innerHeight;
+      let dy = 0;
+      if (y < EDGE) dy = -Math.ceil(((EDGE - y) / EDGE) * 24) - 3;
+      else if (y > vh - EDGE) dy = Math.ceil(((y - (vh - EDGE)) / EDGE) * 24) + 3;
+      if (dy !== 0) {
+        window.scrollBy(0, dy);
+        updateOver(x, y);
+      }
+      raf = requestAnimationFrame(autoScroll);
+    };
+    raf = requestAnimationFrame(autoScroll);
+
+    const onMove = (e: PointerEvent) => {
+      e.preventDefault();
+      posRef.current = { x: e.clientX, y: e.clientY };
+      setPos({ x: e.clientX, y: e.clientY });
+      updateOver(e.clientX, e.clientY);
+    };
+    // touchmove non-passif : SEUL moyen fiable de bloquer le scroll natif tactile
+    // (preventDefault sur pointermove ne suffit pas sur mobile).
+    const onTouchMove = (e: TouchEvent) => e.preventDefault();
+    const onCtx = (e: Event) => e.preventDefault();
     const onUp = () => {
       const target = overRef.current;
       const d = drag;
@@ -705,12 +752,17 @@ export function ShoppingList({
       }, 0);
     };
     window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('contextmenu', onCtx);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
     return () => {
-      document.body.style.touchAction = prevTouch;
-      document.body.style.userSelect = prevSelect;
+      cancelAnimationFrame(raf);
+      bodyStyle.setProperty('touch-action', prevTouch);
+      bodyStyle.setProperty('user-select', prevSelect);
       window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('contextmenu', onCtx);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
@@ -764,7 +816,11 @@ export function ShoppingList({
             data-rayon={g.key}
             className={`rounded-lg border-t border-line first:border-t-0 ${itemOver ? 'bg-sage-tint/40 ring-1 ring-green-strong' : ''} ${rayonOver ? 'ring-2 ring-green-strong' : ''} ${isDraggingThis ? 'opacity-40' : ''}`}
           >
-            <div className="flex items-center gap-1.5 py-2 font-display text-sm font-semibold">
+            <div
+              className="flex items-center gap-1.5 py-2 font-display text-sm font-semibold"
+              onContextMenu={draggable && !selectMode ? (e) => e.preventDefault() : undefined}
+              style={draggable && !selectMode ? { WebkitTouchCallout: 'none' } : undefined}
+            >
               <button
                 type="button"
                 onClick={() => toggleCollapse(g.key)}

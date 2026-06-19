@@ -144,53 +144,67 @@ function ItemRow({ item, editing, tripId }: { item: HItem; editing: boolean; tri
   }
 
   return (
-    <li className={`flex items-center gap-3 rounded-lg px-1 py-2 transition-colors duration-200 hover:bg-sage-tint/40 ${pending ? 'opacity-40' : ''}`}>
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sage-tint text-sage-deep">
-        <ProductIcon slug={item.iconSlug} size={18} />
-      </span>
-      <FoodLink foodId={item.foodId} from={`/courses/historique?trip=${tripId}`} className="text-sm">{item.label}</FoodLink>
-      <span className="ml-auto flex items-center gap-2.5">
-        {prov && <ProvenanceBadge kind={prov} />}
-        {editing && editingQty ? (
+    <li className={`flex flex-col gap-2 rounded-lg px-1 py-2 transition-colors duration-200 hover:bg-sage-tint/40 ${pending ? 'opacity-40' : ''}`}>
+      <div className="flex items-center gap-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sage-tint text-sage-deep">
+          <ProductIcon slug={item.iconSlug} size={18} />
+        </span>
+        <FoodLink foodId={item.foodId} from={`/courses/historique?trip=${tripId}`} className="min-w-0 flex-1 truncate text-sm">{item.label}</FoodLink>
+        <span className="ml-auto flex shrink-0 items-center gap-2.5">
+          {prov && <ProvenanceBadge kind={prov} labelHiddenOnMobile />}
+          {!editingQty &&
+            (editing ? (
+              <button type="button" onClick={openQty} title="Modifier quantité / prix" className="text-sm text-ink-soft hover:text-ink hover:underline">
+                {fmtQty(item) || '+ qté'}
+                {item.price != null && <span className="text-ink-soft"> · {fmtPrice(item.price)}</span>}
+              </button>
+            ) : (
+              (fmtQty(item) || item.price != null) && (
+                <span className="text-sm text-ink-soft">
+                  {fmtQty(item)}
+                  {item.price != null && <span>{fmtQty(item) ? ' · ' : ''}{fmtPrice(item.price)}</span>}
+                </span>
+              )
+            ))}
+          {editing &&
+            !editingQty &&
+            (confirmDel ? (
+              <span className="flex items-center gap-1.5 text-xs">
+                <span className="text-ink-soft">Retirer&nbsp;?</span>
+                <button type="button" onClick={remove} disabled={pending} className="font-bold text-clay-deep disabled:opacity-60">Oui</button>
+                <button type="button" onClick={() => setConfirmDel(false)} className="text-ink-soft">Non</button>
+              </span>
+            ) : (
+              <button type="button" onClick={() => setConfirmDel(true)} aria-label="Retirer" title="Retirer du relevé" className="flex h-7 w-7 items-center justify-center rounded-full bg-clay-tint/50 text-clay-deep transition-colors hover:bg-clay-tint">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 6h18" />
+                  <path d="M9 6V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6" />
+                  <path d="M5.6 6 6.8 19.2A2 2 0 0 0 8.8 21h6.4a2 2 0 0 0 2-1.8L18.4 6" />
+                  <path d="M10 10.5v6M14 10.5v6" />
+                </svg>
+              </button>
+            ))}
+        </span>
+      </div>
+
+      {/* Édition de la qté / unité / prix : 2ᵉ ligne pleine largeur (tient sur mobile). */}
+      {editing && editingQty && (
+        <div className="flex flex-wrap items-center gap-2 pl-11">
+          <input type="number" step="any" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Qté" aria-label="Quantité" className="field-input w-16 px-2 py-1 text-sm" />
+          <select value={u} onChange={(e) => setU(e.target.value)} aria-label="Unité" className="field-input w-[5rem] px-1 py-1 text-sm">
+            {UNIT_OPTIONS.map((o) => (
+              <option key={o.code} value={o.code}>{o.label}</option>
+            ))}
+          </select>
           <span className="flex items-center gap-1">
-            <input type="number" step="any" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Qté" aria-label="Quantité" className="field-input w-14 px-2 py-1 text-sm" />
-            <select value={u} onChange={(e) => setU(e.target.value)} aria-label="Unité" className="field-input w-[4.5rem] px-1 py-1 text-sm">
-              {UNIT_OPTIONS.map((o) => (
-                <option key={o.code} value={o.code}>{o.label}</option>
-              ))}
-            </select>
-            <input type="number" step="any" inputMode="decimal" value={p} onChange={(e) => setP(e.target.value)} placeholder="Prix" aria-label="Prix (€)" className="field-input w-16 px-2 py-1 text-right text-sm" />
+            <input type="number" step="any" inputMode="decimal" value={p} onChange={(e) => setP(e.target.value)} placeholder="Prix" aria-label="Prix (€)" className="field-input w-20 px-2 py-1 text-right text-sm" />
             <span className="text-xs text-ink-soft">€</span>
-            <button type="button" onClick={saveQty} disabled={pending} aria-label="Enregistrer" title="Enregistrer" className="text-green-strong disabled:opacity-60">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-            </button>
           </span>
-        ) : editing ? (
-          <button type="button" onClick={openQty} title="Modifier quantité / prix" className="text-sm text-ink-soft hover:text-ink hover:underline">
-            {fmtQty(item) || '+ qté'}
-            {item.price != null && <span className="text-ink-soft"> · {fmtPrice(item.price)}</span>}
+          <button type="button" onClick={saveQty} disabled={pending} className="btn-secondary ml-auto py-1.5 text-xs disabled:opacity-60">
+            Enregistrer
           </button>
-        ) : (
-          (fmtQty(item) || item.price != null) && (
-            <span className="text-sm text-ink-soft">
-              {fmtQty(item)}
-              {item.price != null && <span>{fmtQty(item) ? ' · ' : ''}{fmtPrice(item.price)}</span>}
-            </span>
-          )
-        )}
-        {editing &&
-          (confirmDel ? (
-            <span className="flex items-center gap-1.5 text-xs">
-              <span className="text-ink-soft">Retirer&nbsp;?</span>
-              <button type="button" onClick={remove} disabled={pending} className="font-bold text-clay-deep disabled:opacity-60">Oui</button>
-              <button type="button" onClick={() => setConfirmDel(false)} className="text-ink-soft">Non</button>
-            </span>
-          ) : (
-            <button type="button" onClick={() => setConfirmDel(true)} aria-label="Retirer" title="Retirer du relevé" className="text-ink-soft hover:text-clay-deep">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m-1 0v14H9V6" /></svg>
-            </button>
-          ))}
-      </span>
+        </div>
+      )}
     </li>
   );
 }

@@ -6,6 +6,7 @@ import {
   searchFoodCatalog,
   importFoodByRef,
   findCatalogFoodIdByLabel,
+  getOrCreateCatalogFood,
   checkoutPurchasedToStock,
   getShoppingWindow,
   setFoodPref,
@@ -115,27 +116,26 @@ export async function addManualAction(formData: FormData): Promise<void> {
     foodId = await findCatalogFoodIdByLabel(supabase, label);
   }
 
+  // Toujours pas d'identité ? On en CRÉE une (catalogue) : nom générique + rayon via
+  // l'IA (best-effort, liste fermée), nutrition NON touchée (garde-fou n°3). Ainsi
+  // tout article ajouté a une fiche produit cliquable (corrige Morue/Truffe & co.).
+  if (!foodId) {
+    let cls: { name: string; category: string | null } | null = null;
+    try {
+      const { classifyImportedFood } = await import('@/lib/ai/categorize-food');
+      cls = await classifyImportedFood(label);
+    } catch {
+      cls = null;
+    }
+    foodId = await getOrCreateCatalogFood(supabase, { label, name: cls?.name ?? null, category: cls?.category ?? null });
+  }
+
   // Si l'article est lié à un aliment, on affiche son nom (générique FR / curé)
   // plutôt que la saisie brute (ex. nom USDA verbeux) — l'app reste générale.
   let displayLabel = label;
   if (foodId) {
     const { data: f } = await supabase.from('food').select('name').eq('id', foodId).maybeSingle();
     if (f?.name) displayLabel = f.name;
-  }
-
-  // Texte libre non reconnu (ni catalogue ni import) : on demande à l'IA un rayon
-  // (best-effort, liste fermée) et on le MÉMORISE comme préférence foyer → la ligne
-  // est classée au lieu de « Autres », et reclassée à la prochaine occurrence.
-  // Garde-fou n°3 respecté : le rayon n'est pas une donnée nutritionnelle.
-  if (!foodId) {
-    let aiCategory: string | null = null;
-    try {
-      const { classifyImportedFood } = await import('@/lib/ai/categorize-food');
-      aiCategory = (await classifyImportedFood(label))?.category ?? null;
-    } catch {
-      aiCategory = null;
-    }
-    if (aiCategory) await setFoodPref(supabase, householdId, { label, categoryKey: aiCategory });
   }
 
   await supabase.from('shopping_manual_item').insert({
