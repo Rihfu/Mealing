@@ -16,21 +16,35 @@ export interface CheckoutItem {
  * dans le stock (datés du jour). Saisie de prix OPTIONNELLE par article → archivée
  * dans l'historique pour les stats de dépenses. Action réversible côté stock.
  */
-export function PurchaseCheckout({ items, fullWidth = false }: { items: CheckoutItem[]; fullWidth?: boolean }) {
+export function PurchaseCheckout({
+  items,
+  fullWidth = false,
+  prices: ctrlPrices,
+  onPriceChange,
+}: {
+  items: CheckoutItem[];
+  fullWidth?: boolean;
+  /** Prix CONTRÔLÉS par le parent (mode magasin : saisis en rayon, partagés avec la modale). */
+  prices?: Record<string, string>;
+  onPriceChange?: (key: string, value: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  // Pré-remplissage du dernier prix payé connu (modifiable).
-  const [prices, setPrices] = useState<Record<string, string>>(() =>
+  // Pré-remplissage du dernier prix payé connu (modifiable). En mode contrôlé,
+  // c'est le parent qui détient les prix (saisie en rayon en mode magasin).
+  const [internalPrices, setInternalPrices] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       items.filter((it) => it.suggestedPrice != null).map((it) => [it.key, String(it.suggestedPrice)]),
     ),
   );
+  const prices = ctrlPrices ?? internalPrices;
   const hasSuggested = items.some((it) => it.suggestedPrice != null);
   const n = items.length;
   const s = n > 1 ? 's' : '';
 
   function setPrice(key: string, v: string) {
-    setPrices((p) => ({ ...p, [key]: v }));
+    if (onPriceChange) onPriceChange(key, v);
+    else setInternalPrices((p) => ({ ...p, [key]: v }));
   }
 
   function confirm() {

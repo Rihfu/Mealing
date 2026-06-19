@@ -15,7 +15,7 @@ const DATE_FMT = new Intl.DateTimeFormat('fr-FR', {
 export default async function HistoriquePage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; trip?: string }>;
 }) {
   const { supabase, profile, userId } = await getAuthContext();
   if (!userId) redirect('/login');
@@ -26,6 +26,7 @@ export default async function HistoriquePage({
   await purgeOldShoppingTrips(supabase, householdId);
 
   const sp = await searchParams;
+  const openTripId = typeof sp.trip === 'string' ? sp.trip : null; // relevé à ré-ouvrir au retour de fiche
   const requestedPage = Math.max(0, (Number(sp.page) || 1) - 1); // URL 1-indexée → interne 0-indexée
   const [{ trips, page, pageCount, total }, customCats] = await Promise.all([
     listShoppingTrips(supabase, householdId, requestedPage),
@@ -84,7 +85,7 @@ export default async function HistoriquePage({
       ) : (
         <div className="flex flex-col gap-3">
           {cards.map((t) => (
-            <TripCard key={t.id} trip={t} customCats={customCatsView} />
+            <TripCard key={t.id} trip={t} customCats={customCatsView} defaultOpen={t.id === openTripId} />
           ))}
 
           {pageCount > 1 && (

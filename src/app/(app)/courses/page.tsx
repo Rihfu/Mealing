@@ -129,8 +129,16 @@ export default async function CoursesPage() {
         </p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-        <div className="flex flex-col gap-4">
+      {/* Sur mobile (flex), l'ordre est : Ajouter un article → À acheter → Mes essentiels
+          (saisie en haut = plus intuitif). Sur desktop (grid), placement explicite :
+          liste à gauche (pleine hauteur), ajout + essentiels à droite. */}
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+        <section className="order-1 rounded-2xl border border-line bg-surface p-4 shadow-soft lg:order-none lg:col-start-2 lg:row-start-1 lg:sticky lg:top-24">
+          <h2 className="mb-3 font-display text-lg font-semibold">Ajouter un article</h2>
+          <AddArticle onList={onListRefs} inStock={inStockRefs} />
+        </section>
+
+        <div className="order-2 flex flex-col gap-4 lg:order-none lg:col-start-1 lg:row-start-1 lg:row-span-2">
           <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
             <div className="mb-2 flex items-center justify-between gap-3">
               <h2 className="font-display text-lg font-semibold">À acheter</h2>
@@ -147,16 +155,29 @@ export default async function CoursesPage() {
                 qu’un essentiel vient à manquer.
               </p>
             ) : (
-              <ShoppingList groups={activeGroups} customCategories={customCats} />
+              <ShoppingList groups={activeGroups} customCategories={customCats} rayonOrder={rayonOrder} />
             )}
           </section>
 
           {done.length > 0 && (
             <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
-              <details open>
+              <details open className="group">
                 <summary className="flex cursor-pointer list-none items-center justify-between font-display text-lg font-semibold">
                   <span>Déjà pris ({done.length})</span>
-                  <span className="text-sm font-normal text-ink-soft">afficher / masquer</span>
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                    className="text-ink-soft transition-transform group-open:rotate-180"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
                 </summary>
                 <div className="mt-2">
                   <form action={clearCheckedAction} className="mb-2 flex justify-end">
@@ -181,23 +202,16 @@ export default async function CoursesPage() {
           )}
         </div>
 
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
-          <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
-            <h2 className="mb-3 font-display text-lg font-semibold">Ajouter un article</h2>
-            <AddArticle onList={onListRefs} inStock={inStockRefs} />
-          </section>
-
-          <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
-            <div className="mb-2 flex items-baseline justify-between gap-2">
-              <h2 className="font-display text-lg font-semibold">Mes essentiels</h2>
-              <Link href="/courses/historique/stats" className="text-xs font-semibold text-green-strong hover:underline">
-                Gérer
-              </Link>
-            </div>
-            <p className="mb-2 text-xs text-ink-soft">Tes basiques — ils reviennent tout seuls dans la liste.</p>
-            <EssentialsManager items={essentials.map((e) => ({ id: e.id, label: e.label }))} />
-          </section>
-        </aside>
+        <section className="order-3 rounded-2xl border border-line bg-surface p-4 shadow-soft lg:order-none lg:col-start-2 lg:row-start-2">
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg font-semibold">Mes essentiels</h2>
+            <Link href="/courses/historique/stats" className="text-xs font-semibold text-green-strong hover:underline">
+              Gérer
+            </Link>
+          </div>
+          <p className="mb-2 text-xs text-ink-soft">Tes basiques — ils reviennent tout seuls dans la liste.</p>
+          <EssentialsManager items={essentials.map((e) => ({ id: e.id, label: e.label }))} />
+        </section>
       </div>
 
       <UndoToastHost />

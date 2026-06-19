@@ -23,7 +23,9 @@ export function FoodLink({
   return (
     <Link
       href={`/courses/produit/${foodId}?from=${encodeURIComponent(from)}`}
-      className={`${className} hover:text-green-strong hover:underline`.trim()}
+      // Feedback de tap explicite (mobile) : surbrillance + couleur active immédiates,
+      // car la fiche met un instant à charger (sinon on ne sait pas si le tap a pris).
+      className={`${className} -mx-1 rounded px-1 transition-colors hover:text-green-strong hover:underline active:bg-sage-tint active:text-green-strong`.trim()}
     >
       {children}
     </Link>

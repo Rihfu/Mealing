@@ -17,6 +17,7 @@ import {
   undoRemoveLinesAction,
   bulkPromoteEssentialsAction,
   bulkSetCategoryAction,
+  reorderRayonsAction,
 } from './actions';
 
 type Source = 'recipe' | 'recurring' | 'manual';
@@ -217,6 +218,7 @@ function Row({
   selected = false,
   onSelectToggle,
   onRemove,
+  onPressStart,
 }: {
   line: SLine;
   customCategories: CustomCategory[];
@@ -230,6 +232,8 @@ function Row({
   selected?: boolean;
   onSelectToggle?: () => void;
   onRemove?: (line: SLine) => void;
+  /** Démarre l'armement d'un appui long (mobile) pour glisser la tuile vers un rayon. */
+  onPressStart?: (e: React.PointerEvent) => void;
 }) {
   const v = catView(line.category, customCategories);
   const tint = v?.tint ?? 'var(--color-sage-tint)';
@@ -281,6 +285,7 @@ function Row({
   return (
     <li
       data-food={line.foodId ?? undefined}
+      onPointerDown={!selectMode && !done ? onPressStart : undefined}
       className={`flex items-center gap-3 rounded-lg px-1 py-2 transition-all duration-200 hover:bg-sage-tint/40 ${animating ? 'opacity-40' : ''} ${selected ? 'bg-sage-tint/60' : ''} ${flash ? 'bg-sage-tint ring-1 ring-green-strong' : ''}`}
     >
       {selectMode ? (
@@ -441,26 +446,92 @@ function Row({
   );
 }
 
+/** Bouton « vider le rayon » + confirmation en pop-over (cible de tap large, claire). */
+function ViderRayon({ label, onConfirm }: { label: string; onConfirm: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDoc);
+    return () => document.removeEventListener('pointerdown', onDoc);
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label={`Vider le rayon ${label}`}
+        title="Retirer tous les articles de ce rayon"
+        className="flex h-8 w-8 items-center justify-center rounded-full text-ink-soft/70 hover:bg-clay-tint/40 hover:text-clay-deep"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M3 6h18M8 6V4h8v2m-1 0v14H9V6" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-xl border border-line bg-surface p-3 text-left shadow-soft">
+          <p className="font-display text-sm font-semibold">Vider « {label} » ?</p>
+          <p className="mt-0.5 text-xs font-normal text-ink-soft">Les articles seront retirés de ta liste — annulable.</p>
+          <div className="mt-2.5 flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onConfirm();
+              }}
+              className="btn-danger flex-1 py-2 text-sm"
+            >
+              Vider
+            </button>
+            <button type="button" onClick={() => setOpen(false)} className="btn-secondary py-2 text-sm">
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type DragState =
+  | { kind: 'item'; line: SLine; from: string }
+  | { kind: 'rayon'; key: string; label: string; tint: string; ink: string; iconSlug: string | null }
+  | null;
+
 /**
- * Liste « À acheter » : coche animée + glisser-déposer d'un rayon à l'autre, retrait
- * d'une ligne ou d'un rayon entier (avec annulation), et MULTI-SÉLECTION inter-rayons
- * pour ranger / promouvoir en essentiels / retirer plusieurs articles d'un coup.
+ * Liste « À acheter » : coche animée + glisser-déposer (appui long sur mobile, poignée
+ * sur desktop) d'une tuile vers un rayon ET d'un rayon pour le réordonner ; rayons
+ * repliables (chevron) ; retrait d'une ligne ou d'un rayon entier (avec annulation) ;
+ * MULTI-SÉLECTION inter-rayons (ranger / essentiels / retirer).
  */
-export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; customCategories: CustomCategory[] }) {
+export function ShoppingList({
+  groups,
+  customCategories,
+  rayonOrder = [],
+}: {
+  groups: SGroup[];
+  customCategories: CustomCategory[];
+  rayonOrder?: string[];
+}) {
   const { pending, animating, toggle } = useToggle();
-  const [drag, setDrag] = useState<{ line: SLine; from: string } | null>(null);
+  const [drag, setDrag] = useState<DragState>(null);
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [overKey, setOverKey] = useState<string | null>(null);
   const overRef = useRef<string | null>(null);
+  const justDragged = useRef(false);
   const [query, setQuery] = useState('');
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-  // Retrait (ligne / rayon / sélection) + multi-sélection.
+  // Retrait (ligne / rayon / sélection) + multi-sélection + réordonnancement.
   const [, startRemove] = useTransition();
   const [bulkPending, startBulk] = useTransition();
+  const [, startReorder] = useTransition();
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkRanger, setBulkRanger] = useState(false);
-  const [confirmRayon, setConfirmRayon] = useState<string | null>(null);
 
   // Retour de la fiche produit : l'article consulté (?viewed=<foodId>) est mis en
   // valeur tant que le param est là, scrollé à vue, puis le param est retiré au bout
@@ -501,6 +572,14 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
   function toggleSelectAll() {
     setSelected(allShownSelected ? new Set() : new Set(shownLines.map((l) => l.key)));
   }
+  function toggleCollapse(key: string) {
+    setCollapsed((s) => {
+      const n = new Set(s);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
+  }
 
   // Retire des lignes de la liste courante (manuel → suppression ; généré → masqué),
   // avec annulation. Mutualisé : ligne unique, rayon entier, sélection.
@@ -532,8 +611,61 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
     exitSelect();
   }
 
+  // Appui long générique (tactile + souris) : déclenche `activate` si on maintient
+  // l'appui ~350 ms sans bouger ; un déplacement (scroll) ou un relâchement annule.
+  function armLongPress(e: React.PointerEvent, activate: () => void) {
+    if (e.button != null && e.button !== 0) return;
+    const sx = e.clientX;
+    const sy = e.clientY;
+    let moved = false;
+    const clear = () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
+    };
+    const onMove = (ev: PointerEvent) => {
+      if (Math.abs(ev.clientX - sx) > 8 || Math.abs(ev.clientY - sy) > 8) {
+        moved = true;
+        clear();
+      }
+    };
+    const onEnd = () => clear();
+    const timer = window.setTimeout(() => {
+      clear();
+      if (!moved) activate();
+    }, 350);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
+  }
+
+  function startItemDrag(line: SLine, from: string, x: number, y: number) {
+    justDragged.current = true;
+    overRef.current = null;
+    setOverKey(null);
+    setPos({ x, y });
+    setDrag({ kind: 'item', line, from });
+  }
+  function startRayonDrag(g: SGroup, x: number, y: number, e?: React.PointerEvent) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    justDragged.current = true;
+    overRef.current = null;
+    setOverKey(null);
+    setPos({ x, y });
+    setDrag({ kind: 'rayon', key: g.key, label: g.label, tint: g.tint, ink: g.ink, iconSlug: g.iconSlug });
+  }
+
   useEffect(() => {
     if (!drag) return;
+    // Pendant un glisser, on neutralise le scroll/sélection natifs (tactile inclus).
+    const prevTouch = document.body.style.touchAction;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.touchAction = 'none';
+    document.body.style.userSelect = 'none';
     const onMove = (e: PointerEvent) => {
       e.preventDefault();
       setPos({ x: e.clientX, y: e.clientY });
@@ -544,32 +676,45 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
     };
     const onUp = () => {
       const target = overRef.current;
-      const { line, from } = drag;
+      const d = drag;
+      if (!d) return;
       setDrag(null);
       setOverKey(null);
       overRef.current = null;
-      if (target && target !== from && target !== OTHER_KEY) {
-        setFoodCategoryAction({ label: line.name, foodId: line.foodId, categoryKey: target, iconSlug: line.iconSlug });
+      if (d.kind === 'item') {
+        if (target && target !== d.from && target !== OTHER_KEY) {
+          setFoodCategoryAction({ label: d.line.name, foodId: d.line.foodId, categoryKey: target, iconSlug: d.line.iconSlug });
+        }
+      } else if (
+        target &&
+        target !== d.key &&
+        target !== OTHER_KEY &&
+        rayonOrder.includes(d.key) &&
+        rayonOrder.includes(target)
+      ) {
+        // Réordonne le rayon dans l'ordre COMPLET du foyer (ses articles suivent).
+        const without = rayonOrder.filter((k) => k !== d.key);
+        const ti = without.indexOf(target);
+        const movingDown = rayonOrder.indexOf(d.key) < rayonOrder.indexOf(target);
+        without.splice(movingDown ? ti + 1 : ti, 0, d.key);
+        startReorder(() => reorderRayonsAction(without));
       }
+      // Laisse le clic de fin de glisser se résoudre avant de réautoriser le toggle.
+      setTimeout(() => {
+        justDragged.current = false;
+      }, 0);
     };
     window.addEventListener('pointermove', onMove, { passive: false });
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
     return () => {
+      document.body.style.touchAction = prevTouch;
+      document.body.style.userSelect = prevSelect;
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [drag]);
-
-  function startDrag(e: React.PointerEvent, line: SLine, from: string) {
-    e.preventDefault();
-    e.stopPropagation();
-    overRef.current = null;
-    setOverKey(null);
-    setPos({ x: e.clientX, y: e.clientY });
-    setDrag({ line, from });
-  }
+  }, [drag, rayonOrder]);
 
   return (
     <>
@@ -608,94 +753,111 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
         <p className="py-4 text-center text-sm text-ink-soft">Aucun article ne correspond à « {query} ».</p>
       )}
       {shownGroups.map((g) => {
-        const over = overKey === g.key && drag != null && drag.from !== g.key;
-        const clearable = g.key !== OTHER_KEY;
+        const isCollapsed = collapsed.has(g.key);
+        const itemOver = overKey === g.key && drag?.kind === 'item' && drag.from !== g.key;
+        const rayonOver = overKey === g.key && drag?.kind === 'rayon' && drag.key !== g.key;
+        const isDraggingThis = drag?.kind === 'rayon' && drag.key === g.key;
+        const draggable = g.key !== OTHER_KEY;
         return (
-          <details
+          <div
             key={g.key}
-            open
             data-rayon={g.key}
-            className={`rounded-lg border-t border-line first:border-t-0 ${over ? 'bg-sage-tint/40 ring-1 ring-green-strong' : ''}`}
+            className={`rounded-lg border-t border-line first:border-t-0 ${itemOver ? 'bg-sage-tint/40 ring-1 ring-green-strong' : ''} ${rayonOver ? 'ring-2 ring-green-strong' : ''} ${isDraggingThis ? 'opacity-40' : ''}`}
           >
-            <summary className="flex cursor-pointer list-none items-center gap-2 py-2 font-display text-sm font-semibold">
+            <div className="flex items-center gap-1.5 py-2 font-display text-sm font-semibold">
+              <button
+                type="button"
+                onClick={() => toggleCollapse(g.key)}
+                aria-label={isCollapsed ? 'Déplier le rayon' : 'Replier le rayon'}
+                aria-expanded={!isCollapsed}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-ink-soft hover:bg-sage-tint/50"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`transition-transform ${isCollapsed ? '-rotate-90' : ''}`}>
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
               <span className="flex h-5 w-5 items-center justify-center rounded-md text-[10px]" style={{ background: g.tint, color: g.ink }}>
                 {g.iconSlug ? <ProductIcon slug={g.iconSlug} size={12} /> : '●'}
               </span>
-              <span className="flex-1">{g.label}</span>
+              {/* Le libellé bascule le repli au tap ; appui long (mobile) = glisser le rayon. */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (justDragged.current) return;
+                  toggleCollapse(g.key);
+                }}
+                onPointerDown={draggable && !selectMode ? (e) => armLongPress(e, () => startRayonDrag(g, e.clientX, e.clientY)) : undefined}
+                className="flex-1 truncate text-left"
+              >
+                {g.label}
+              </button>
               <span className="text-xs font-normal text-ink-soft">{g.items.length}</span>
-              {!selectMode &&
-                (confirmRayon === g.key ? (
-                  <span className="flex items-center gap-1.5 text-xs" onClick={(e) => e.preventDefault()}>
-                    <span className="text-ink-soft">Vider&nbsp;?</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        removeLines(g.items);
-                        setConfirmRayon(null);
-                      }}
-                      className="font-bold text-clay-deep"
-                    >
-                      Oui
-                    </button>
-                    <button type="button" onClick={() => setConfirmRayon(null)} className="text-ink-soft">
-                      Non
-                    </button>
-                  </span>
-                ) : (
-                  clearable && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setConfirmRayon(g.key);
-                      }}
-                      aria-label={`Vider le rayon ${g.label}`}
-                      title="Retirer tous les articles de ce rayon"
-                      className="text-xs font-semibold text-ink-soft/70 hover:text-clay-deep"
-                    >
-                      vider
-                    </button>
-                  )
+              {!selectMode && draggable && <ViderRayon label={g.label} onConfirm={() => removeLines(g.items)} />}
+              {!selectMode && draggable && (
+                <button
+                  type="button"
+                  aria-label="Réordonner ce rayon"
+                  title="Glisser pour réordonner le rayon"
+                  onPointerDown={(e) => startRayonDrag(g, e.clientX, e.clientY, e)}
+                  className="hidden h-7 w-7 cursor-grab items-center justify-center rounded-md text-ink-soft/60 hover:text-ink-soft active:cursor-grabbing lg:flex"
+                  style={{ touchAction: 'none' }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <circle cx="9" cy="6" r="1.5" />
+                    <circle cx="15" cy="6" r="1.5" />
+                    <circle cx="9" cy="12" r="1.5" />
+                    <circle cx="15" cy="12" r="1.5" />
+                    <circle cx="9" cy="18" r="1.5" />
+                    <circle cx="15" cy="18" r="1.5" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {!isCollapsed && (
+              <ul className="divide-y divide-line pl-1">
+                {g.items.map((line) => (
+                  <Row
+                    key={line.key}
+                    line={line}
+                    customCategories={customCategories}
+                    mode="active"
+                    animating={animating.has(line.key)}
+                    pending={pending}
+                    flash={!!viewed && line.foodId === viewed}
+                    onToggle={() => toggle(line, true)}
+                    selectMode={selectMode}
+                    selected={selected.has(line.key)}
+                    onSelectToggle={() => toggleSelect(line.key)}
+                    onRemove={(l) => removeLines([l])}
+                    onPressStart={(e) => armLongPress(e, () => startItemDrag(line, g.key, e.clientX, e.clientY))}
+                    dragHandle={
+                      <button
+                        type="button"
+                        aria-label="Déplacer vers un rayon"
+                        title="Glisser pour déplacer de rayon"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          startItemDrag(line, g.key, e.clientX, e.clientY);
+                        }}
+                        className="cursor-grab text-ink-soft/60 hover:text-ink-soft active:cursor-grabbing"
+                        style={{ touchAction: 'none' }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <circle cx="9" cy="6" r="1.5" />
+                          <circle cx="15" cy="6" r="1.5" />
+                          <circle cx="9" cy="12" r="1.5" />
+                          <circle cx="15" cy="12" r="1.5" />
+                          <circle cx="9" cy="18" r="1.5" />
+                          <circle cx="15" cy="18" r="1.5" />
+                        </svg>
+                      </button>
+                    }
+                  />
                 ))}
-            </summary>
-            <ul className="divide-y divide-line pl-1">
-              {g.items.map((line) => (
-                <Row
-                  key={line.key}
-                  line={line}
-                  customCategories={customCategories}
-                  mode="active"
-                  animating={animating.has(line.key)}
-                  pending={pending}
-                  flash={!!viewed && line.foodId === viewed}
-                  onToggle={() => toggle(line, true)}
-                  selectMode={selectMode}
-                  selected={selected.has(line.key)}
-                  onSelectToggle={() => toggleSelect(line.key)}
-                  onRemove={(l) => removeLines([l])}
-                  dragHandle={
-                    <button
-                      type="button"
-                      aria-label="Déplacer vers un rayon"
-                      title="Glisser pour déplacer de rayon"
-                      onPointerDown={(e) => startDrag(e, line, g.key)}
-                      className="cursor-grab text-ink-soft/60 hover:text-ink-soft active:cursor-grabbing"
-                      style={{ touchAction: 'none' }}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <circle cx="9" cy="6" r="1.5" />
-                        <circle cx="15" cy="6" r="1.5" />
-                        <circle cx="9" cy="12" r="1.5" />
-                        <circle cx="15" cy="12" r="1.5" />
-                        <circle cx="9" cy="18" r="1.5" />
-                        <circle cx="15" cy="18" r="1.5" />
-                      </svg>
-                    </button>
-                  }
-                />
-              ))}
-            </ul>
-          </details>
+              </ul>
+            )}
+          </div>
         );
       })}
 
@@ -704,28 +866,42 @@ export function ShoppingList({ groups, customCategories }: { groups: SGroup[]; c
           className="pointer-events-none fixed z-[60] flex items-center gap-2 rounded-xl border border-green-strong bg-surface px-3 py-2 text-sm font-semibold shadow-soft"
           style={{ left: pos.x + 12, top: pos.y - 8, transform: 'rotate(-2deg)' }}
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ background: 'var(--color-sage-tint)', color: 'var(--color-sage-deep)' }}>
-            <ProductIcon slug={drag.line.iconSlug} size={18} />
-          </span>
-          {drag.line.name}
+          {drag.kind === 'item' ? (
+            <>
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ background: 'var(--color-sage-tint)', color: 'var(--color-sage-deep)' }}>
+                <ProductIcon slug={drag.line.iconSlug} size={18} />
+              </span>
+              {drag.line.name}
+            </>
+          ) : (
+            <>
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ background: drag.tint, color: drag.ink }}>
+                {drag.iconSlug ? <ProductIcon slug={drag.iconSlug} size={16} /> : '●'}
+              </span>
+              {drag.label}
+            </>
+          )}
         </div>
       )}
 
-      {/* Barre d'actions de la sélection multiple (collante en bas). */}
+      {/* Barre d'actions de la sélection multiple (collante en bas, sombre pour ressortir). */}
       {selectMode && selected.size > 0 && (
         <div className="fixed inset-x-0 bottom-5 z-50 flex justify-center px-4">
-          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface px-3 py-2 text-sm shadow-soft">
+          <div
+            className="flex flex-wrap items-center gap-2 rounded-2xl px-3 py-2.5 text-sm text-paper shadow-soft ring-1 ring-black/10"
+            style={{ background: 'var(--color-ink)' }}
+          >
             <span className="px-1 font-semibold">{selected.size} sélectionné{selected.size > 1 ? 's' : ''}</span>
-            <button type="button" onClick={bulkEssentials} disabled={bulkPending} className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 font-semibold text-amber-600 hover:border-amber-400 disabled:opacity-60">
+            <button type="button" onClick={bulkEssentials} disabled={bulkPending} className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 font-semibold text-amber-300 ring-1 ring-white/20 hover:bg-white/20 disabled:opacity-60">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M12 17.3 6.2 20.6l1.1-6.5L2.5 9.5l6.5-.9L12 2.7l3 5.9 6.5.9-4.8 4.6 1.1 6.5z" />
               </svg>
               Essentiels
             </button>
-            <button type="button" onClick={() => setBulkRanger(true)} disabled={bulkPending} className="rounded-full border border-line px-3 py-1.5 font-semibold text-green-strong hover:border-green-strong disabled:opacity-60">
+            <button type="button" onClick={() => setBulkRanger(true)} disabled={bulkPending} className="rounded-full bg-white/10 px-3 py-1.5 font-semibold ring-1 ring-white/20 hover:bg-white/20 disabled:opacity-60">
               Ranger…
             </button>
-            <button type="button" onClick={bulkDelete} disabled={bulkPending} className="rounded-full border border-line px-3 py-1.5 font-semibold text-clay-deep hover:border-clay-deep disabled:opacity-60">
+            <button type="button" onClick={bulkDelete} disabled={bulkPending} className="rounded-full bg-white/10 px-3 py-1.5 font-semibold text-clay-tint ring-1 ring-white/20 hover:bg-white/20 disabled:opacity-60">
               Retirer
             </button>
           </div>

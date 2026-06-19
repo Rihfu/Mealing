@@ -1,54 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { generateShoppingListAutoSorted, getShoppingWindow, listHouseholdCategories, getLastKnownPrices, loadRayonOrder, essentialKey, type ShoppingLine } from '@/lib/core';
+import { generateShoppingListAutoSorted, getShoppingWindow, listHouseholdCategories, getLastKnownPrices, loadRayonOrder, essentialKey } from '@/lib/core';
 import { groupByRayon } from '../rayons';
-import { PurchaseCheckout } from '../purchase-checkout';
-import { toggleCheckAction } from '../actions';
-
-/** Grosse case à cocher (mode magasin). */
-function BigCheck({ checked }: { checked: boolean }) {
-  return (
-    <span
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-2 ${
-        checked ? 'border-green-strong bg-green-strong text-white' : 'border-line-strong text-transparent'
-      }`}
-    >
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M20 6 9 17l-5-5" />
-      </svg>
-    </span>
-  );
-}
-
-/** Ligne « gros bouton » : taper n'importe où coche/décoche l'article. */
-function StoreRow({ line }: { line: ShoppingLine }) {
-  const qty = line.quantity != null ? `${line.quantity} ${line.unit ?? ''}`.trim() : '';
-
-  return (
-    // État coché unifié par clé d'identité (cf. fusion inter-sources).
-    <form action={toggleCheckAction}>
-      <input type="hidden" name="item_key" value={line.key} />
-      <input type="hidden" name="checked" value={(!line.checked).toString()} />
-      <button
-        className={`flex w-full items-center gap-3.5 rounded-2xl border px-4 text-left ${
-          line.checked
-            ? 'border-line bg-paper'
-            : 'border-line bg-surface shadow-soft'
-        }`}
-        style={{ minHeight: 64 }}
-      >
-        <BigCheck checked={line.checked} />
-        <span className={`flex-1 text-[17px] font-semibold ${line.checked ? 'text-ink-soft line-through' : ''}`}>
-          {line.name}
-        </span>
-        {qty && (
-          <span className={`text-sm text-ink-soft ${line.checked ? 'line-through' : ''}`}>{qty}</span>
-        )}
-      </button>
-    </form>
-  );
-}
+import { StoreList, type StoreGroup } from './store-list';
 
 export default async function MagasinPage() {
   const { supabase, profile, userId } = await getAuthContext();
@@ -70,6 +25,20 @@ export default async function MagasinPage() {
   const done = lines.filter((l) => l.checked);
   const total = lines.length;
   const pct = total > 0 ? Math.round((done.length / total) * 100) : 0;
+
+  // Données sérialisables pour la liste interactive (coche + saisie prix en rayon).
+  const storeGroups: StoreGroup[] = groups.map((g) => ({
+    key: g.key,
+    label: g.view?.label ?? 'Autres',
+    items: g.items.map((l) => ({
+      key: l.key,
+      name: l.name,
+      qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
+      checked: l.checked,
+      foodId: l.foodId ?? null,
+      suggestedPrice: lastPrices[essentialKey({ foodId: l.foodId ?? null, label: l.name })] ?? null,
+    })),
+  }));
 
   return (
     <div className="mx-auto w-full max-w-md pb-28">
@@ -102,38 +71,7 @@ export default async function MagasinPage() {
           </Link>
         </p>
       ) : (
-        <div className="mt-5 flex flex-col gap-5">
-          {groups.map(({ key, view, items }) => (
-            <div key={key}>
-              <h2 className="mb-2 px-1 font-display text-[15px] font-semibold text-sage-deep">
-                {view?.label ?? 'Autres'}
-              </h2>
-              <div className="flex flex-col gap-2.5">
-                {items.map((l) => (
-                  <StoreRow key={l.key} line={l} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* CTA collant : ranger les achats cochés au stock. */}
-      {done.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-20">
-          <div className="mx-auto max-w-md px-4 pb-6 pt-4" style={{ background: 'linear-gradient(to top, var(--color-paper) 72%, transparent)' }}>
-            <PurchaseCheckout
-              fullWidth
-              items={done.map((l) => ({
-                key: l.key,
-                name: l.name,
-                qty: l.quantity != null ? `${l.quantity} ${l.unit ?? ''}`.trim() : '',
-                category: null,
-                suggestedPrice: lastPrices[essentialKey({ foodId: l.foodId ?? null, label: l.name })] ?? null,
-              }))}
-            />
-          </div>
-        </div>
+        <StoreList groups={storeGroups} />
       )}
     </div>
   );

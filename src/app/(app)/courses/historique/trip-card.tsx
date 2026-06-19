@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import {
   ProductIcon,
@@ -109,7 +109,7 @@ function groupByRayon(items: HItem[], customCats: HCustomCat[]): RGroup[] {
 }
 
 /** Une ligne d'article (lecture seule, ou éditable si `editing`). */
-function ItemRow({ item, editing }: { item: HItem; editing: boolean }) {
+function ItemRow({ item, editing, tripId }: { item: HItem; editing: boolean; tripId: string }) {
   const [editingQty, setEditingQty] = useState(false);
   const [q, setQ] = useState('');
   const [u, setU] = useState('');
@@ -148,7 +148,7 @@ function ItemRow({ item, editing }: { item: HItem; editing: boolean }) {
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sage-tint text-sage-deep">
         <ProductIcon slug={item.iconSlug} size={18} />
       </span>
-      <FoodLink foodId={item.foodId} from="/courses/historique" className="text-sm">{item.label}</FoodLink>
+      <FoodLink foodId={item.foodId} from={`/courses/historique?trip=${tripId}`} className="text-sm">{item.label}</FoodLink>
       <span className="ml-auto flex items-center gap-2.5">
         {prov && <ProvenanceBadge kind={prov} />}
         {editing && editingQty ? (
@@ -265,9 +265,15 @@ function ReconductModal({ trip, onClose }: { trip: HTrip; onClose: () => void })
 }
 
 /** Carte d'un relevé : dépliable, groupé par rayon, lecture seule + mode Éditer. */
-export function TripCard({ trip, customCats }: { trip: HTrip; customCats: HCustomCat[] }) {
-  const [open, setOpen] = useState(false);
+export function TripCard({ trip, customCats, defaultOpen = false }: { trip: HTrip; customCats: HCustomCat[]; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [editing, setEditing] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Retour de la fiche produit (?trip=<id>) : on ré-ouvre le relevé consulté et on le
+  // ramène à vue — l'utilisateur ne perd pas le fil de son parcours article par article.
+  useEffect(() => {
+    if (defaultOpen) rootRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [defaultOpen]);
   const [query, setQuery] = useState('');
   const [pending, start] = useTransition();
   const [renaming, setRenaming] = useState(false);
@@ -301,7 +307,7 @@ export function TripCard({ trip, customCats }: { trip: HTrip; customCats: HCusto
   }
 
   return (
-    <div className="rounded-2xl border border-line bg-surface shadow-soft">
+    <div ref={rootRef} className="scroll-mt-24 rounded-2xl border border-line bg-surface shadow-soft">
       <div className="flex items-center gap-3 p-4">
         <button type="button" onClick={() => setOpen((o) => !o)} className="flex flex-1 items-center gap-3 text-left">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`shrink-0 text-ink-soft transition-transform ${open ? 'rotate-90' : ''}`}>
@@ -384,7 +390,7 @@ export function TripCard({ trip, customCats }: { trip: HTrip; customCats: HCusto
                   </summary>
                   <ul className="divide-y divide-line pl-1">
                     {g.items.map((it) => (
-                      <ItemRow key={it.id} item={it} editing={editing} />
+                      <ItemRow key={it.id} item={it} editing={editing} tripId={trip.id} />
                     ))}
                   </ul>
                 </details>
