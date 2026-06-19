@@ -40,25 +40,36 @@ export async function generateShoppingList(
   db: DB,
   params: { householdId: string; from: string; to: string },
 ): Promise<ShoppingLine[]> {
-  const meals = (unwrap(
-    await db
+  const hh = params.householdId;
+
+  // PERF : toutes les requêtes INDÉPENDANTES partent en parallèle (un seul aller-retour
+  // au lieu d'une dizaine en série). Seules `recipe_ingredient` (dépend des repas) et
+  // `food` (dépend des ids collectés) restent séquentielles ensuite.
+  const [mealsRes, offRes, recurringRes, manualRes, statesRes, coverage, catalogIndex, prefs] = await Promise.all([
+    db
       .from('planned_meal')
       .select('recipe_id, meal_date')
-      .eq('household_id', params.householdId)
+      .eq('household_id', hh)
       .gte('meal_date', params.from)
       .lte('meal_date', params.to)
       .not('recipe_id', 'is', null),
-  ) ?? []) as Array<{ recipe_id: string; meal_date: string }>;
+    db
+      .from('day_off_plan')
+      .select('off_date, scope')
+      .eq('household_id', hh)
+      .gte('off_date', params.from)
+      .lte('off_date', params.to),
+    db.from('shopping_recurring_item').select('id, food_id, label, default_quantity, unit').eq('household_id', hh),
+    db.from('shopping_manual_item').select('id, food_id, label, quantity, unit').eq('household_id', hh),
+    db.from('shopping_item_state').select('item_key, checked, dismissed').eq('household_id', hh),
+    loadStockCoverage(db, hh),
+    loadCatalogIndex(db),
+    loadFoodPrefs(db, hh),
+  ]);
 
+  const meals = (unwrap(mealsRes) ?? []) as Array<{ recipe_id: string; meal_date: string }>;
   const offDates = new Set(
-    ((unwrap(
-      await db
-        .from('day_off_plan')
-        .select('off_date, scope')
-        .eq('household_id', params.householdId)
-        .gte('off_date', params.from)
-        .lte('off_date', params.to),
-    ) ?? []) as Array<{ off_date: string; scope: string }>)
+    ((unwrap(offRes) ?? []) as Array<{ off_date: string; scope: string }>)
       .filter((o) => o.scope === 'household')
       .map((o) => o.off_date),
   );
@@ -107,9 +118,9 @@ export async function generateShoppingList(
     }
   }
 
-  // Stock agrégé (présence + quantités réconciliées par dimension) — logique de
-  // couverture partagée avec recipeMissingIngredients (cf. loadStockCoverage).
-  const { stock, presentFoods, stockBaseByFood, stockByLabel } = await loadStockCoverage(db, params.householdId);
+  // Stock agrégé (présence + quantités réconciliées par dimension) — déjà chargé en
+  // parallèle ci-dessus (cf. loadStockCoverage).
+  const { stock, presentFoods, stockBaseByFood, stockByLabel } = coverage;
 
   const neededFoodIds: string[] = [];
   const netNeed = new Map<string, { qty: number; unit?: string }>();
@@ -140,27 +151,17 @@ export async function generateShoppingList(
     if (remaining > 0) netLabelNeed.set(key, { ...need, qty: remaining });
   }
 
-  const recurring = (unwrap(
-    await db
-      .from('shopping_recurring_item')
-      .select('id, food_id, label, default_quantity, unit')
-      .eq('household_id', params.householdId),
-  ) ?? []) as Array<{
+  // Récurrents / manuels / états : déjà chargés en parallèle ci-dessus.
+  const recurring = (unwrap(recurringRes) ?? []) as Array<{
     id: string;
     food_id: string | null;
     label: string | null;
     default_quantity: number | null;
     unit: string | null;
   }>;
-
   // L'état coché n'est plus porté par la colonne `checked` mais par shopping_item_state
   // (clé d'identité unifiée), pour fusionner manuel + recette + récurrent sur une ligne.
-  const manual = (unwrap(
-    await db
-      .from('shopping_manual_item')
-      .select('id, food_id, label, quantity, unit')
-      .eq('household_id', params.householdId),
-  ) ?? []) as Array<{
+  const manual = (unwrap(manualRes) ?? []) as Array<{
     id: string;
     food_id: string | null;
     label: string;
@@ -185,12 +186,7 @@ export async function generateShoppingList(
     }
   }
 
-  const itemStates = (unwrap(
-    await db
-      .from('shopping_item_state')
-      .select('item_key, checked, dismissed')
-      .eq('household_id', params.householdId),
-  ) ?? []) as Array<{ item_key: string; checked: boolean; dismissed: boolean }>;
+  const itemStates = (unwrap(statesRes) ?? []) as Array<{ item_key: string; checked: boolean; dismissed: boolean }>;
   const checkedKeys = new Set(itemStates.filter((c) => c.checked).map((c) => c.item_key));
   // Lignes RETIRÉES de la liste courante (≠ cochées) : masquées du rendu et du
   // checkout. Remises à zéro au passage en caisse (cf. checkoutPurchasedToStock).
@@ -200,8 +196,7 @@ export async function generateShoppingList(
   //   1) préférence FOYER (déplacement/mémoire perso) — prioritaire (perso > global) ;
   //   2) base : food.category de l'aliment lié, sinon catalogue par libellé (exact + synonymes).
   // La clé de rayon peut être intégrée ('legumes'…) ou un id de shopping_category (rayon custom).
-  const catalogIndex = await loadCatalogIndex(db);
-  const prefs = await loadFoodPrefs(db, params.householdId);
+  // (catalogIndex et prefs déjà chargés en parallèle en tête de fonction.)
   const resolve = (
     inputFoodId: string | null | undefined,
     label: string,

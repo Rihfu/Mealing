@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-assets';
@@ -62,14 +62,19 @@ function norm(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 }
 
-/** Construit/maj l'ensemble des lignes « en cours d'animation » de bascule. */
-function useToggle() {
+/**
+ * Bascule coché/décoché. `onOptimistic(key)` (facultatif) retire la ligne de l'affichage
+ * INSTANTANÉMENT (état optimiste) pendant que la révalidation serveur se fait en
+ * arrière-plan → plus d'attente de 4 s avant que l'article ne bouge.
+ */
+function useToggle(onOptimistic?: (key: string) => void) {
   const [pending, startTransition] = useTransition();
   const [animating, setAnimating] = useState<Set<string>>(new Set());
 
   function toggle(line: SLine, checked: boolean) {
     setAnimating((s) => new Set(s).add(line.key));
     startTransition(async () => {
+      onOptimistic?.(line.key); // disparaît tout de suite (réconcilié à la révalidation)
       // État coché unifié par identité de ligne (cf. fusion inter-sources).
       const fd = new FormData();
       fd.set('checked', String(checked));
@@ -516,7 +521,7 @@ type DragState =
  * MULTI-SÉLECTION inter-rayons (ranger / essentiels / retirer).
  */
 export function ShoppingList({
-  groups,
+  groups: serverGroups,
   customCategories,
   rayonOrder = [],
 }: {
@@ -524,7 +529,12 @@ export function ShoppingList({
   customCategories: CustomCategory[];
   rayonOrder?: string[];
 }) {
-  const { pending, animating, toggle } = useToggle();
+  // Coche optimiste : la ligne cochée disparaît tout de suite de « À acheter »
+  // (la révalidation serveur la fait apparaître dans « Déjà pris » juste après).
+  const [groups, hideOptimistic] = useOptimistic(serverGroups, (gs: SGroup[], key: string) =>
+    gs.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== key) })).filter((g) => g.items.length > 0),
+  );
+  const { pending, animating, toggle } = useToggle(hideOptimistic);
   const [drag, setDrag] = useState<DragState>(null);
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [overKey, setOverKey] = useState<string | null>(null);
@@ -976,9 +986,10 @@ export function ShoppingList({
   );
 }
 
-/** Liste « Déjà pris » : décoche animée (la pastille se vide avant le retour). */
-export function DoneList({ lines, customCategories }: { lines: SLine[]; customCategories: CustomCategory[] }) {
-  const { pending, animating, toggle } = useToggle();
+/** Liste « Déjà pris » : décoche animée (la ligne repart instantanément vers « À acheter »). */
+export function DoneList({ lines: serverLines, customCategories }: { lines: SLine[]; customCategories: CustomCategory[] }) {
+  const [lines, hideOptimistic] = useOptimistic(serverLines, (ls: SLine[], key: string) => ls.filter((l) => l.key !== key));
+  const { pending, animating, toggle } = useToggle(hideOptimistic);
   return (
     <ul className="divide-y divide-line">
       {lines.map((line) => (

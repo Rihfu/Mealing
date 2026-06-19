@@ -102,7 +102,7 @@ export function StoreList({ groups }: { groups: StoreGroup[] }) {
           <span className={`flex h-4 w-7 shrink-0 items-center rounded-full p-0.5 transition-colors ${sortChecked ? 'bg-green-strong' : 'bg-line-strong'}`}>
             <span className={`block h-3 w-3 rounded-full bg-white transition-transform ${sortChecked ? 'translate-x-3' : ''}`} />
           </span>
-          Cochés en bas
+          Tri auto
         </button>
       </div>
       <div className="flex flex-col gap-5">
