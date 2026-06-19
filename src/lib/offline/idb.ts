@@ -56,3 +56,29 @@ export async function idbDel(key: string): Promise<void> {
     tx.onerror = () => resolve();
   });
 }
+
+export async function idbClear(): Promise<void> {
+  const db = await openDB();
+  if (!db) return;
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
+}
+
+/**
+ * Version du schéma de cache. À BUMPER quand la forme des instantanés/bundles change
+ * (sinon on risque d'afficher un cache périmé après une MAJ). `purgeCacheIfStale` vide
+ * tout le cache au prochain démarrage si la version diffère.
+ */
+export const CACHE_VERSION = '2026-06-19';
+const VERSION_KEY = '__cache_version__';
+
+export async function purgeCacheIfStale(version: string = CACHE_VERSION): Promise<void> {
+  const current = await idbGet<string>(VERSION_KEY);
+  if (current === version) return;
+  await idbClear();
+  await idbSet(VERSION_KEY, version);
+}

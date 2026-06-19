@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, useTransition } from 'react';
 import { toggleCheckAction } from '../actions';
 import { PurchaseCheckout } from '../purchase-checkout';
 import { idbGet, idbSet } from '@/lib/offline/idb';
-import { clearQueue, enqueueOp, getQueue } from '@/lib/offline/queue';
+import { clearQueue, enqueueOp, flushQueue, getQueue, type QueuedOp } from '@/lib/offline/queue';
 
 /** Article du mode magasin (sérialisable, dérivé d'une ShoppingLine). */
 export interface StoreItem {
@@ -118,25 +118,21 @@ export function StoreList({ groups, refresh }: { groups: StoreGroup[]; refresh?:
     });
   }
 
-  // Synchro : rejoue la file (FIFO) au retour du réseau. À chaque opération échouée,
-  // on s'arrête (toujours hors-ligne) et on garde la file. Sinon on vide + rafraîchit.
+  // Synchro : rejoue la file (FIFO) au retour du réseau via le flush PARTAGÉ (garde
+  // anti-concurrence avec le SyncManager global). Si quelque chose a été synchronisé,
+  // on rafraîchit l'instantané du magasin.
   const flush = useCallback(() => {
     startTransition(async () => {
-      const q = await getQueue();
-      if (q.length === 0) return;
-      for (const op of q) {
+      const replay = async (op: QueuedOp) => {
         const fd = new FormData();
         fd.set('item_key', op.key);
         fd.set('checked', String(op.checked));
-        try {
-          await toggleCheckAction(fd);
-        } catch {
-          return; // encore hors-ligne : on retentera au prochain événement « online »
-        }
-      }
-      await clearQueue();
-      setPendingSync(0);
-      refresh?.();
+        await toggleCheckAction(fd);
+      };
+      const ok = await flushQueue(replay);
+      const q = await getQueue();
+      setPendingSync(q.length);
+      if (ok) refresh?.();
     });
   }, [refresh]);
 
