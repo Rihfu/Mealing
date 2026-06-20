@@ -15,6 +15,7 @@ export * from './conservation';
 export * from './stock';
 export * from './storage';
 export * from './stock-events';
+export * from './stock-stats';
 export * from './meals';
 export * from './consumption';
 export * from './household';

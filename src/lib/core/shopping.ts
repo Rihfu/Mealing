@@ -458,6 +458,9 @@ export async function checkoutPurchasedToStock(
   }
 
   let added = 0;
+  // Journal des ENTRÉES (kind='in', source='courses') → alimente les stats Stock
+  // (gaspillage/conso/évolution). Best-effort : n'échoue jamais le checkout.
+  const inEvents: Record<string, unknown>[] = [];
   for (const line of lines) {
     const existing = line.foodId ? byFood.get(line.foodId) : byLabel.get(normalizeLabel(line.name));
     const hasQty = line.quantity != null;
@@ -486,8 +489,19 @@ export async function checkoutPurchasedToStock(
       });
       if (error) throw new Error(error.message);
     }
+    inEvents.push({
+      household_id: params.householdId,
+      food_id: line.foodId ?? null,
+      label: line.name,
+      kind: 'in',
+      quantity: line.quantity ?? null,
+      unit: line.unit ?? null,
+      source: 'courses',
+    });
     added++;
   }
+  // Insertion groupée (best-effort : on n'interrompt pas le checkout si le journal échoue).
+  if (inEvents.length > 0) await db.from('stock_event').insert(inEvents);
 
   // Les achats quittent la liste : on efface les coches (état par identité) et on
   // supprime les articles manuels rattachés aux lignes cochées (fusion inter-sources).

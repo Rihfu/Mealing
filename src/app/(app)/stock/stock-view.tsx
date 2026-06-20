@@ -1,12 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useCachedResource } from '@/lib/offline/cache';
 import { FoodLink } from '@/components/food-link';
 import { getStockSnapshotAction, type StockPageSnapshot } from './snapshot';
 import { StockRefreshProvider } from './stock-refresh';
 import { StockList } from './stock-list';
 import { AddStock } from './add-stock';
-import { EstimateButton } from './stock-tools';
 import { ManageLocations } from './locations-manager';
 import { MealReconcile } from './meal-reconcile';
 import { UndoToastHost } from '../courses/undo-toast';
@@ -42,7 +42,12 @@ export function StockView() {
             <p className="font-hand mt-0.5 text-lg text-green-strong">rangé par lieu — la péremption s’estime toute seule</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <EstimateButton />
+            <Link href="/stock/stats" className="btn-secondary flex items-center gap-2 py-2 text-sm" title="Gaspillage, consommation, évolution">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 3v18h18" /><rect x="7" y="11" width="3" height="6" rx="0.5" /><rect x="13" y="7" width="3" height="10" rx="0.5" />
+              </svg>
+              Statistiques
+            </Link>
           </div>
         </div>
 
