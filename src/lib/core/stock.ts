@@ -74,3 +74,39 @@ export async function decrementStock(
 
   return newQuantity;
 }
+
+/** Instantané d'un article de stock (pour le retrait RÉVERSIBLE + restauration). */
+export interface StockSnapshot {
+  household_id: string;
+  food_id: string | null;
+  label: string | null;
+  tracking_mode: string;
+  quantity: number | null;
+  unit: string | null;
+  present: boolean;
+  storage_location: string | null;
+  date_ouverture: string | null;
+  printed_expiry: string | null;
+  conservation_rule_id: string | null;
+}
+
+/** Retire des articles du stock en renvoyant leur instantané (pour annulation). */
+export async function removeStockItems(db: DB, ids: string[]): Promise<StockSnapshot[]> {
+  if (ids.length === 0) return [];
+  const snapshots = (unwrap(
+    await db
+      .from('stock')
+      .select('household_id, food_id, label, tracking_mode, quantity, unit, present, storage_location, date_ouverture, printed_expiry, conservation_rule_id')
+      .in('id', ids),
+  ) ?? []) as StockSnapshot[];
+  const { error } = await db.from('stock').delete().in('id', ids);
+  if (error) throw new Error(error.message);
+  return snapshots;
+}
+
+/** Restaure des articles de stock à partir de leur instantané (annulation du retrait). */
+export async function restoreStockItems(db: DB, snapshots: StockSnapshot[]): Promise<void> {
+  if (snapshots.length === 0) return;
+  const { error } = await db.from('stock').insert(snapshots);
+  if (error) throw new Error(error.message);
+}

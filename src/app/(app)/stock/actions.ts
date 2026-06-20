@@ -15,9 +15,12 @@ import {
   getOrCreateCatalogFood,
   applyDueMealsToStock,
   undoMealStockApplication,
+  removeStockItems,
+  restoreStockItems,
   type StockTrackingMode,
   type FoodSuggestion,
   type MealStockSummary,
+  type StockSnapshot,
 } from '@/lib/core';
 
 async function requireHousehold() {
@@ -161,9 +164,40 @@ export async function discardStockAction(stockId: string): Promise<void> {
   revalidatePath('/stock');
 }
 
+/** Retire des articles (réversible) → renvoie l'instantané pour l'annulation. */
+export async function removeStockItemsAction(ids: string[]): Promise<StockSnapshot[]> {
+  const { supabase } = await requireHousehold();
+  if (ids.length === 0) return [];
+  const snapshots = await removeStockItems(supabase, ids);
+  revalidatePath('/stock');
+  return snapshots;
+}
+
+export async function undoRemoveStockAction(snapshots: StockSnapshot[]): Promise<void> {
+  const { supabase } = await requireHousehold();
+  await restoreStockItems(supabase, snapshots);
+  revalidatePath('/stock');
+}
+
 export async function deleteStockAction(stockId: string): Promise<void> {
   const { supabase } = await requireHousehold();
   await supabase.from('stock').delete().eq('id', stockId);
+  revalidatePath('/stock');
+}
+
+/** Déplace plusieurs articles vers un lieu (multi-sélection). */
+export async function bulkSetStockLocationAction(ids: string[], location: string | null): Promise<void> {
+  const { supabase } = await requireHousehold();
+  if (ids.length === 0) return;
+  await supabase.from('stock').update({ storage_location: location }).in('id', ids);
+  revalidatePath('/stock');
+}
+
+/** Marque plusieurs articles ouverts/entamés (multi-sélection). */
+export async function bulkSetOpenedAction(ids: string[], opened: boolean): Promise<void> {
+  const { supabase } = await requireHousehold();
+  if (ids.length === 0) return;
+  await supabase.from('stock').update({ date_ouverture: opened ? new Date().toISOString() : null }).in('id', ids);
   revalidatePath('/stock');
 }
 

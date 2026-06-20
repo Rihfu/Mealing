@@ -7,6 +7,7 @@ import { StockList, type SItem } from './stock-list';
 import { AddStock } from './add-stock';
 import { EstimateButton } from './stock-tools';
 import { MealReconcile } from './meal-reconcile';
+import { UndoToastHost } from '../courses/undo-toast';
 
 interface StockRow {
   id: string;
@@ -112,6 +113,8 @@ export default async function StockPage() {
       <div className="lg:col-start-1">
         <StockList groups={groups} locationOptions={locationOptions} />
       </div>
+
+      <UndoToastHost />
     </div>
   );
 }
