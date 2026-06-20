@@ -1133,6 +1133,7 @@ export type Database = {
           present: boolean
           printed_expiry: string | null
           quantity: number | null
+          sort_index: number | null
           storage_location: string | null
           tracking_mode: string
           unit: string | null
@@ -1149,6 +1150,7 @@ export type Database = {
           present?: boolean
           printed_expiry?: string | null
           quantity?: number | null
+          sort_index?: number | null
           storage_location?: string | null
           tracking_mode?: string
           unit?: string | null
@@ -1165,6 +1167,7 @@ export type Database = {
           present?: boolean
           printed_expiry?: string | null
           quantity?: number | null
+          sort_index?: number | null
           storage_location?: string | null
           tracking_mode?: string
           unit?: string | null

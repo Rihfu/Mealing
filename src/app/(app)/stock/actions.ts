@@ -22,6 +22,7 @@ import {
   undoMealStockApplication,
   removeStockItems,
   restoreStockItems,
+  reorderStockItems,
   type StockTrackingMode,
   type FoodSuggestion,
   type MealStockSummary,
@@ -269,6 +270,32 @@ export async function undoRemoveStockAction(snapshots: StockSnapshot[]): Promise
 export async function deleteStockAction(stockId: string): Promise<void> {
   const { supabase } = await requireHousehold();
   await supabase.from('stock').delete().eq('id', stockId);
+  revalidatePath('/stock');
+}
+
+/** Réordonne (glisser-déposer) les articles d'un lieu : sort_index séquentiel + lieu.
+ *  `location` = clé prédéfinie / uuid custom / null (« non rangé »). */
+export async function reorderStockAction(location: string | null, orderedIds: string[]): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  await reorderStockItems(supabase, householdId, location, orderedIds);
+  revalidatePath('/stock');
+}
+
+/** Réordonne les LIEUX par glisser (en-têtes de groupe). `orderedVisibleKeys` = nouvel
+ *  ordre des lieux visibles ; on le fusionne dans l'ordre complet du foyer (les lieux non
+ *  affichés gardent leur place). Même persistance que les flèches du gestionnaire. */
+export async function reorderLocationsAction(orderedVisibleKeys: string[]): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  const { orderedLocationKeys } = await import('./locations');
+  const [custom, orderMap] = await Promise.all([
+    listStorageLocations(supabase, householdId),
+    loadLocationOrder(supabase, householdId),
+  ]);
+  const full = orderedLocationKeys(custom, orderMap);
+  const visible = new Set(orderedVisibleKeys);
+  let vi = 0;
+  const merged = full.map((k) => (visible.has(k) ? orderedVisibleKeys[vi++] : k));
+  await saveLocationOrder(supabase, householdId, merged);
   revalidatePath('/stock');
 }
 

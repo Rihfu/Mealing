@@ -63,6 +63,9 @@ export async function getStockSnapshotAction(): Promise<StockPageSnapshot | null
         'id, label, tracking_mode, quantity, unit, present, storage_location, date_ouverture, printed_expiry, food_id, food:food_id(name, external_id)',
       )
       .eq('household_id', householdId)
+      // Ordre manuel (glisser-déposer) d'abord ; les non-ordonnés (sort_index null) en
+      // dernier, par récence. groupByLocation préserve cet ordre au sein de chaque lieu.
+      .order('sort_index', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false }),
     getStockWithExpiry(supabase, householdId),
     listStorageLocations(supabase, householdId),

@@ -110,3 +110,31 @@ export async function restoreStockItems(db: DB, snapshots: StockSnapshot[]): Pro
   const { error } = await db.from('stock').insert(snapshots);
   if (error) throw new Error(error.message);
 }
+
+/**
+ * Réordonne (glisser-déposer) les articles d'UN lieu : affecte `sort_index` séquentiel
+ * (0..n) dans l'ordre fourni + (ré)affecte le lieu à chacun. Gère le réordre intra-lieu
+ * ET l'arrivée d'un article depuis un autre lieu (il figure dans `orderedIds` à sa
+ * nouvelle position). Les articles du lieu SOURCE ne sont pas touchés (ordre relatif
+ * conservé). `location` = clé prédéfinie / uuid custom / null (« non rangé »).
+ */
+export async function reorderStockItems(
+  db: DB,
+  householdId: string,
+  location: string | null,
+  orderedIds: string[],
+): Promise<void> {
+  if (orderedIds.length === 0) return;
+  await Promise.all(
+    orderedIds.map((id, i) =>
+      db
+        .from('stock')
+        .update({ sort_index: i, storage_location: location })
+        .eq('id', id)
+        .eq('household_id', householdId)
+        .then(({ error }) => {
+          if (error) throw new Error(error.message);
+        }),
+    ),
+  );
+}

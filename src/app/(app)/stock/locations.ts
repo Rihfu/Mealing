@@ -55,7 +55,8 @@ export function groupByLocation<T extends StockGroupable>(
   orderMap: Map<string, number>,
 ): Array<{ view: LocationView; items: T[] }> {
   const customById = new Map(customLocations.map((c) => [c.id, c.label]));
-  const order: string[] = [...orderedLocationKeys(customLocations, orderMap), ''];
+  // « Non rangé » EN HAUT : c'est là qu'arrivent les courses importées → incite à les ranger.
+  const order: string[] = ['', ...orderedLocationKeys(customLocations, orderMap)];
 
   const buckets = new Map<string, T[]>();
   for (const it of items) {
