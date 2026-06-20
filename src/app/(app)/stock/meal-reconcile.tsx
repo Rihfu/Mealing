@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { applyDueMealsAction, undoMealsAction } from './actions';
+import { useStockRefresh } from './stock-refresh';
 import type { MealStockSummary } from '@/lib/core';
 
 /**
@@ -14,16 +15,21 @@ export function MealReconcile() {
   const [summary, setSummary] = useState<MealStockSummary | null>(null);
   const [pending, start] = useTransition();
   const ran = useRef(false);
+  const refresh = useStockRefresh();
 
   useEffect(() => {
     if (ran.current) return; // évite le double-run (StrictMode en dev) ; idempotent côté serveur
     ran.current = true;
     applyDueMealsAction()
       .then((s) => {
-        if (s.decrements.length > 0) setSummary(s);
+        if (s.decrements.length > 0) {
+          setSummary(s);
+          // Le stock a été décrémenté côté serveur → rafraîchir l'instantané cache-first.
+          void refresh();
+        }
       })
       .catch(() => {});
-  }, []);
+  }, [refresh]);
 
   if (!summary) return null;
   const n = summary.decrements.length;
@@ -41,7 +47,7 @@ export function MealReconcile() {
         <button
           type="button"
           disabled={pending}
-          onClick={() => start(async () => { await undoMealsAction(summary); setSummary(null); })}
+          onClick={() => start(async () => { await undoMealsAction(summary); setSummary(null); await refresh(); })}
           className="rounded-full border border-sage-deep/30 px-3 py-1 font-semibold hover:bg-white/40 disabled:opacity-60"
         >
           Annuler

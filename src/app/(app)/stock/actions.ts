@@ -12,6 +12,8 @@ import {
   loadLocationOrder,
   saveLocationOrder,
   ensureStockConservation,
+  ensureFoodConservation,
+  storageDef,
   recordStockEvent,
   searchFoodCatalog,
   findCatalogFoodIdByLabel,
@@ -113,6 +115,71 @@ export async function estimateConservationAction(): Promise<{ done: number }> {
   const done = await ensureStockConservation(supabase, householdId);
   revalidatePath('/stock');
   return { done };
+}
+
+/**
+ * Estime (IA, best-effort, mise en cache) la conservation d'UN article — déclenché par
+ * la pastille « estimer ? ». Renvoie un statut pour un retour clair côté UI :
+ * - 'no-location' : pas de lieu exploitable (range-le d'abord — l'estimation est par lieu) ;
+ * - 'no-food'     : article non lié au catalogue (rare) ;
+ * - 'failed'      : l'IA n'a pas répondu (souvent le rate-limit Groq gratuit) ;
+ * - 'estimated'   : estimation faite ET affichable (une date apparaît au refresh).
+ * Pas de `revalidatePath` (cache-first) : l'appelant fait `refresh()`.
+ */
+const BASIS_HINT: Record<'placard' | 'frigo' | 'congelateur', string> = {
+  placard: 'le placard',
+  frigo: 'le frigo',
+  congelateur: 'le congélateur',
+};
+
+export async function estimateItemConservationAction(
+  stockId: string,
+): Promise<{ status: 'estimated' | 'no-location' | 'no-estimate-here' | 'no-food' | 'failed'; suggested?: string[] }> {
+  const { supabase } = await requireHousehold();
+  const { data: row } = await supabase
+    .from('stock')
+    .select('food_id, label, storage_location, date_ouverture, food:food_id(name, category)')
+    .eq('id', stockId)
+    .maybeSingle();
+  if (!row) return { status: 'failed' };
+
+  const basis = storageDef(row.storage_location)?.conservationBasis;
+  if (!basis) return { status: 'no-location' };
+
+  const food = Array.isArray(row.food) ? row.food[0] : row.food;
+  let foodId = row.food_id;
+  let name = food?.name ?? row.label ?? '';
+  // Article non lié au catalogue (ex. ajouté par l'agent IA, food_id null) → on le
+  // rattache par libellé puis on BACKFILL le lien → fiche produit + estimation possibles.
+  if (!foodId) {
+    const label = row.label ?? '';
+    foodId =
+      (await findCatalogFoodIdByLabel(supabase, label)) ??
+      (await getOrCreateCatalogFood(supabase, { label, name: label, category: null }));
+    if (foodId) {
+      await supabase.from('stock').update({ food_id: foodId }).eq('id', stockId);
+      if (!name) name = label;
+    }
+  }
+  if (!foodId) return { status: 'no-food' };
+
+  const days = await ensureFoodConservation(supabase, foodId, name || 'aliment', food?.category ?? null);
+  if (!days) return { status: 'failed' };
+
+  const b = days[basis];
+  const opened = row.date_ouverture != null;
+  const val = b ? (opened ? (b.opened ?? b.unopened) : b.unopened) : null;
+  if (val != null) return { status: 'estimated' };
+
+  // L'IA a renvoyé des repères, mais PAS pour ce lieu (ex. melon au placard → seul le
+  // frigo a une durée). Réessayer n'y changerait rien → on suggère les lieux pertinents.
+  const suggested = (['placard', 'frigo', 'congelateur'] as const)
+    .filter((k) => {
+      const x = days[k];
+      return x && (x.unopened != null || x.opened != null);
+    })
+    .map((k) => BASIS_HINT[k]);
+  return suggested.length > 0 ? { status: 'no-estimate-here', suggested } : { status: 'failed' };
 }
 
 export async function createLocationAction(label: string, iconSlug?: string | null): Promise<void> {

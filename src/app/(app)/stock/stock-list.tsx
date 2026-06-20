@@ -5,10 +5,12 @@ import { ProductIcon } from '@/lib/product-assets';
 import { FoodLink } from '@/components/food-link';
 import { TrashIcon } from '../courses/shopping-list';
 import { pushUndoToast } from '../courses/undo-toast';
+import { useStockRefresh } from './stock-refresh';
 import type { LocationView } from './locations';
 import {
   decrementStockAction,
   discardStockAction,
+  estimateItemConservationAction,
   setOpenedAction,
   setPrintedExpiryAction,
   setStockLocationAction,
@@ -48,10 +50,65 @@ function norm(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 }
 
+/**
+ * Pastille « estimer ? » pour un article sans date de péremption : déclenche l'estimation
+ * IA (par lieu, mise en cache) et donne un retour CLAIR — l'article n'a pas de lieu
+ * exploitable (range-le d'abord) ou l'IA est indisponible (rate-limit Groq → réessaie).
+ */
+type ChipState =
+  | { k: 'idle' | 'pending' | 'no-location' | 'failed' }
+  | { k: 'elsewhere'; where: string };
+
+function EstimateChip({ item }: { item: SItem }) {
+  const [state, setState] = useState<ChipState>({ k: 'idle' });
+  const refresh = useStockRefresh();
+
+  async function run() {
+    setState({ k: 'pending' });
+    try {
+      const res = await estimateItemConservationAction(item.id);
+      if (res.status === 'estimated') { await refresh(); return; } // une date remplace la pastille
+      if (res.status === 'no-location') setState({ k: 'no-location' });
+      else if (res.status === 'no-estimate-here') setState({ k: 'elsewhere', where: (res.suggested ?? []).join(' ou ') });
+      else setState({ k: 'failed' });
+    } catch {
+      setState({ k: 'failed' });
+    }
+  }
+
+  if (state.k === 'no-location') {
+    return (
+      <span className="pill bg-line text-ink-soft" title="Range-le dans un lieu (placard, frigo, congélateur…) pour estimer sa conservation.">
+        range-le d’abord
+      </span>
+    );
+  }
+  if (state.k === 'elsewhere') {
+    return (
+      <span className="pill bg-butter-tint text-ink-soft" title={`Cet aliment ne se conserve pas bien dans ce lieu. Range-le plutôt dans ${state.where} pour une estimation.`}>
+        plutôt {state.where}
+      </span>
+    );
+  }
+  if (state.k === 'failed') {
+    return (
+      <button type="button" onClick={run} className="pill bg-clay-tint text-clay-deep transition-colors hover:bg-clay-tint/70" title="L’estimation IA n’a pas répondu (souvent la limite gratuite). Réessaie dans un moment.">
+        réessayer
+      </button>
+    );
+  }
+  return (
+    <button type="button" disabled={state.k === 'pending'} onClick={run} className="pill bg-sage-tint/60 text-green-strong transition-colors hover:bg-sage-tint disabled:opacity-60" title="Estimer la durée de conservation (IA, indicatif).">
+      {state.k === 'pending' ? 'estimation…' : 'estimer ?'}
+    </button>
+  );
+}
+
 /** Pastille de péremption colorée selon l'urgence ; le libellé indique la provenance. */
 function ExpiryPill({ item }: { item: SItem }) {
   const d = item.daysRemaining;
-  if (d == null) return <span className="text-xs text-ink-soft">—</span>;
+  // key = lieu : si l'article est rangé ailleurs, le chip se réinitialise (nouvelle tentative).
+  if (d == null) return <EstimateChip key={item.storageLocation ?? '∅'} item={item} />;
   const srcLabel = item.expirySource === 'printed' ? 'DLC' : item.expirySource === 'estimate' ? 'estimé' : 'repère';
   const cls = d < 0 ? 'bg-red text-white' : d <= 3 ? 'bg-orange text-white' : 'bg-sage-tint text-green-strong';
   const text = d < 0 ? `périmé (${-d} j)` : d === 0 ? "aujourd'hui" : `${d} j`;
@@ -83,6 +140,7 @@ function RowMenu({ item, locationOptions, onRemove }: { item: SItem; locationOpt
   const [sub, setSub] = useState<'none' | 'ranger' | 'dlc'>('none');
   const [date, setDate] = useState(item.printedExpiry ?? '');
   const [, start] = useTransition();
+  const refresh = useStockRefresh();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -106,13 +164,35 @@ function RowMenu({ item, locationOptions, onRemove }: { item: SItem; locationOpt
         <div className="absolute right-0 top-full z-30 mt-1 w-60 rounded-xl border border-line bg-surface p-1 shadow-soft">
           {sub === 'none' && (
             <>
-              <button type="button" className={it} onClick={() => start(() => setOpenedAction(item.id, !item.opened).then(close))}>
-                {item.opened ? '↩︎ Marquer non entamé' : '📂 Marquer ouvert / entamé'}
+              <button type="button" className={it} onClick={() => start(async () => { await setOpenedAction(item.id, !item.opened); close(); await refresh(); })}>
+                {item.opened ? (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.36 2.64L3 8" /><path d="M3 3v5h5" /></svg>
+                    Marquer non entamé
+                  </>
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 7 4-4h10l4 4" /><path d="M3 7h18v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z" /><path d="M10 12h4" /></svg>
+                    Marquer ouvert / entamé
+                  </>
+                )}
               </button>
-              <button type="button" className={it} onClick={() => setSub('dlc')}>🗓️ {item.printedExpiry ? 'Modifier la DLC' : 'Saisir la DLC'}</button>
-              <button type="button" className={it} onClick={() => setSub('ranger')}>📦 Ranger dans un lieu</button>
-              <button type="button" className={`${it} text-clay-deep`} onClick={() => start(() => discardStockAction(item.id).then(close))}>🗑️ Jeter (périmé)</button>
-              <button type="button" className={`${it} text-ink-soft`} onClick={() => { close(); onRemove(); }}>✕ Retirer du stock</button>
+              <button type="button" className={it} onClick={() => setSub('dlc')}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2" /><path d="M8 2.5v4M16 2.5v4M3 9.5h18" /></svg>
+                {item.printedExpiry ? 'Modifier la DLC' : 'Saisir la DLC'}
+              </button>
+              <button type="button" className={it} onClick={() => setSub('ranger')}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" /><path d="M10 12h4" /></svg>
+                Ranger dans un lieu
+              </button>
+              <button type="button" className={`${it} text-clay-deep`} onClick={() => start(async () => { await discardStockAction(item.id); close(); await refresh(); })}>
+                <TrashIcon size={16} />
+                Jeter (périmé)
+              </button>
+              <button type="button" className={`${it} text-ink-soft`} onClick={() => { close(); onRemove(); }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                Retirer du stock
+              </button>
             </>
           )}
           {sub === 'dlc' && (
@@ -120,17 +200,17 @@ function RowMenu({ item, locationOptions, onRemove }: { item: SItem; locationOpt
               <p className="mb-1 text-xs font-semibold text-ink-soft">DLC imprimée (prime sur l’estimation)</p>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field-input w-full text-sm" />
               <div className="mt-2 flex gap-2">
-                <button type="button" className="btn-primary flex-1 py-1.5 text-xs" onClick={() => start(() => setPrintedExpiryAction(item.id, date || null).then(close))}>Enregistrer</button>
-                {item.printedExpiry && <button type="button" className="btn-secondary py-1.5 text-xs" onClick={() => start(() => setPrintedExpiryAction(item.id, null).then(close))}>Effacer</button>}
+                <button type="button" className="btn-primary flex-1 py-1.5 text-xs" onClick={() => start(async () => { await setPrintedExpiryAction(item.id, date || null); close(); await refresh(); })}>Enregistrer</button>
+                {item.printedExpiry && <button type="button" className="btn-secondary py-1.5 text-xs" onClick={() => start(async () => { await setPrintedExpiryAction(item.id, null); close(); await refresh(); })}>Effacer</button>}
               </div>
             </div>
           )}
           {sub === 'ranger' && (
             <div className="max-h-56 overflow-auto p-1">
               {locationOptions.map((l) => (
-                <button key={l.key} type="button" className={`${it} ${item.storageLocation === l.key ? 'font-semibold text-green-strong' : ''}`} onClick={() => start(() => setStockLocationAction(item.id, l.key).then(close))}>{l.label}</button>
+                <button key={l.key} type="button" className={`${it} ${item.storageLocation === l.key ? 'font-semibold text-green-strong' : ''}`} onClick={() => start(async () => { await setStockLocationAction(item.id, l.key); close(); await refresh(); })}>{l.label}</button>
               ))}
-              {item.storageLocation && <button type="button" className={`${it} text-ink-soft`} onClick={() => start(() => setStockLocationAction(item.id, null).then(close))}>Retirer du lieu</button>}
+              {item.storageLocation && <button type="button" className={`${it} text-ink-soft`} onClick={() => start(async () => { await setStockLocationAction(item.id, null); close(); await refresh(); })}>Retirer du lieu</button>}
             </div>
           )}
         </div>
@@ -160,6 +240,7 @@ function Row({
 }) {
   const [amount, setAmount] = useState('');
   const [, start] = useTransition();
+  const refresh = useStockRefresh();
   const expired = item.daysRemaining != null && item.daysRemaining < 0;
 
   return (
@@ -189,14 +270,14 @@ function Row({
       <ExpiryPill item={item} />
 
       {item.trackingMode === 'quantity' ? (
-        <form action={decrementStockAction} className="flex items-center gap-1" onSubmit={() => setAmount('')}>
+        <form action={(fd) => start(async () => { await decrementStockAction(fd); setAmount(''); await refresh(); })} className="flex items-center gap-1">
           <span className="whitespace-nowrap text-sm font-bold">{item.quantity ?? 0} {item.unit ?? ''}</span>
           <input type="hidden" name="stock_id" value={item.id} />
           <input name="amount" type="number" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="−" aria-label="Quantité consommée" className="field-input w-14 px-1.5 py-1 text-xs" />
           <button className="text-xs font-semibold text-green-strong hover:underline">retirer</button>
         </form>
       ) : (
-        <button type="button" onClick={() => start(() => toggleStockPresenceAction(item.id, !item.present))} className={`pill ${item.present ? 'bg-sage-tint text-green-strong' : 'bg-line text-ink-soft'}`}>
+        <button type="button" onClick={() => start(async () => { await toggleStockPresenceAction(item.id, !item.present); await refresh(); })} className={`pill ${item.present ? 'bg-sage-tint text-green-strong' : 'bg-line text-ink-soft'}`}>
           {item.present ? 'présent' : 'absent'}
         </button>
       )}
@@ -270,6 +351,7 @@ export function StockList({ groups: serverGroups, locationOptions }: { groups: S
   const [, startMove] = useTransition();
   const [, startRemove] = useTransition();
   const [bulkPending, startBulk] = useTransition();
+  const refresh = useStockRefresh();
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selectMode, setSelectMode] = useState(false);
@@ -316,11 +398,12 @@ export function StockList({ groups: serverGroups, locationOptions }: { groups: S
     const label = items.length === 1 ? `« ${items[0].name} » retiré` : `${items.length} articles retirés`;
     startRemove(async () => {
       const snapshots = await removeStockItemsAction(ids);
-      pushUndoToast(label, () => undoRemoveStockAction(snapshots));
+      pushUndoToast(label, async () => { await undoRemoveStockAction(snapshots); await refresh(); });
+      await refresh();
     });
   }
-  function bulkMarkOpened() { startBulk(async () => { await bulkSetOpenedAction([...selected], true); exitSelect(); }); }
-  function bulkMove(key: string) { startBulk(async () => { await bulkSetStockLocationAction([...selected], key === UNSORTED ? null : key); exitSelect(); }); }
+  function bulkMarkOpened() { startBulk(async () => { await bulkSetOpenedAction([...selected], true); exitSelect(); await refresh(); }); }
+  function bulkMove(key: string) { startBulk(async () => { await bulkSetStockLocationAction([...selected], key === UNSORTED ? null : key); exitSelect(); await refresh(); }); }
   function bulkRemove() { const items = selectedItems; exitSelect(); removeItems(items); }
 
   // Appui long (tactile + souris) → arme le glisser ; un mouvement/scroll annule.
@@ -393,6 +476,7 @@ export function StockList({ groups: serverGroups, locationOptions }: { groups: S
         startMove(async () => {
           applyOptimistic({ id: d.item.id, to });
           await setStockLocationAction(d.item.id, to === UNSORTED ? null : to);
+          await refresh();
         });
       }
       setTimeout(() => { justDragged.current = false; }, 0);
@@ -412,7 +496,7 @@ export function StockList({ groups: serverGroups, locationOptions }: { groups: S
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [drag, applyOptimistic]);
+  }, [drag, applyOptimistic, refresh]);
 
   if (groups.length === 0) {
     return <p className="rounded-2xl border border-line bg-surface px-3.5 py-8 text-center text-sm text-ink-soft">Stock vide.</p>;

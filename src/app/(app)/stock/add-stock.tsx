@@ -5,19 +5,26 @@ import { ProductIcon, categoryLabel } from '@/lib/product-assets';
 import { UNIT_OPTIONS } from '@/lib/units';
 import type { FoodSuggestion } from '@/lib/core';
 import { addStockAction, searchCatalogAction } from './actions';
+import { useStockRefresh } from './stock-refresh';
+
+type Mode = 'quantity' | 'presence';
 
 /**
- * Ajout au stock avec AUTOCOMPLÉTION (catalogue + USDA/OFF) — au lieu du select de 500
- * items. Le texte libre est rattaché au catalogue côté serveur → fiche + conservation
- * intelligente. On choisit le LIEU de conservation à l'ajout.
+ * Ajout au stock avec AUTOCOMPLÉTION (catalogue + USDA/OFF). Le texte libre est rattaché
+ * au catalogue côté serveur → fiche + conservation intelligente. Design aligné sur
+ * l'ajout d'article de Courses : lieu de conservation en CHIPS (pas de select natif),
+ * suivi en bouton segmenté, quantité/unité affichées seulement en mode « quantité ».
  */
 export function AddStock({ locationOptions }: { locationOptions: Array<{ key: string; label: string }> }) {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<FoodSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<FoodSuggestion | null>(null);
+  const [location, setLocation] = useState('');
+  const [mode, setMode] = useState<Mode>('quantity');
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const refresh = useStockRefresh();
 
   useEffect(() => {
     if (selected || submitting || query.trim().length < 2) return;
@@ -56,6 +63,8 @@ export function AddStock({ locationOptions }: { locationOptions: Array<{ key: st
     setQuery('');
     setSelected(null);
     setSuggestions([]);
+    setLocation('');
+    setMode('quantity');
     formRef.current?.reset();
   }
   async function handleSubmit(formData: FormData) {
@@ -66,13 +75,14 @@ export function AddStock({ locationOptions }: { locationOptions: Array<{ key: st
     try {
       await addStockAction(formData);
       reset();
+      await refresh();
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <form ref={formRef} action={handleSubmit} className="flex flex-col gap-2.5 text-sm">
+    <form ref={formRef} action={handleSubmit} className="flex flex-col gap-3 text-sm">
       <div className="relative">
         <input
           name="label"
@@ -117,26 +127,62 @@ export function AddStock({ locationOptions }: { locationOptions: Array<{ key: st
         )}
       </div>
 
-      <select name="storage_location" className="field-input" defaultValue="">
-        <option value="">— Lieu de conservation —</option>
-        {locationOptions.map((l) => (
-          <option key={l.key} value={l.key}>{l.label}</option>
-        ))}
-      </select>
+      {/* Lieu de conservation — chips (au lieu d'un select natif). */}
+      {locationOptions.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-xs font-semibold text-ink-soft">Où le ranger&nbsp;?</p>
+          <div className="flex flex-wrap gap-1.5">
+            {locationOptions.map((l) => {
+              const active = location === l.key;
+              return (
+                <button
+                  key={l.key}
+                  type="button"
+                  onClick={() => setLocation(active ? '' : l.key)}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                    active ? 'border-green-strong bg-sage-tint text-green-strong' : 'border-line text-ink-soft hover:border-green-strong/50'
+                  }`}
+                >
+                  {l.label}
+                </button>
+              );
+            })}
+          </div>
+          <input type="hidden" name="storage_location" value={location} />
+        </div>
+      )}
 
-      <div className="flex gap-2">
-        <select name="tracking_mode" className="field-input flex-1" defaultValue="quantity">
-          <option value="quantity">Suivi : quantité</option>
-          <option value="presence">Suivi : présence</option>
-        </select>
-        <input name="quantity" type="number" step="any" placeholder="Qté" className="field-input w-20" />
-        <select name="unit" className="field-input w-24" defaultValue="">
-          <option value="">unité</option>
-          {UNIT_OPTIONS.map((u) => (
-            <option key={u.code} value={u.code}>{u.label}</option>
+      {/* Suivi — bouton segmenté. */}
+      <div>
+        <p className="mb-1.5 text-xs font-semibold text-ink-soft">Suivi</p>
+        <div className="grid grid-cols-2 gap-1 rounded-xl border border-line p-1">
+          {(['quantity', 'presence'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                mode === m ? 'bg-sage-tint text-green-strong' : 'text-ink-soft hover:bg-sage-tint/40'
+              }`}
+            >
+              {m === 'quantity' ? 'Quantité' : 'Présence'}
+            </button>
           ))}
-        </select>
+        </div>
+        <input type="hidden" name="tracking_mode" value={mode} />
       </div>
+
+      {mode === 'quantity' && (
+        <div className="grid grid-cols-2 gap-2">
+          <input name="quantity" type="number" step="any" placeholder="Qté" className="field-input" />
+          <select name="unit" className="field-input" defaultValue="" aria-label="Unité">
+            <option value="">unité</option>
+            {UNIT_OPTIONS.map((u) => (
+              <option key={u.code} value={u.code}>{u.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <button type="submit" disabled={submitting} className="btn-primary py-2.5 disabled:opacity-60">
         {submitting ? 'Ajout…' : 'Ajouter au stock'}

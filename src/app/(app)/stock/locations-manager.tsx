@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { createLocationAction, deleteLocationAction, moveLocationAction } from './actions';
+import { useStockRefresh } from './stock-refresh';
 
 export interface OrderedLocation {
   key: string;
@@ -17,6 +18,7 @@ export function ManageLocations({ ordered }: { ordered: OrderedLocation[] }) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState('');
   const [pending, start] = useTransition();
+  const refresh = useStockRefresh();
 
   return (
     <>
@@ -46,14 +48,14 @@ export function ManageLocations({ ordered }: { ordered: OrderedLocation[] }) {
                       {l.label}
                       {l.isCustom && <span className="ml-1.5 text-xs text-ink-soft">perso</span>}
                     </span>
-                    <button type="button" disabled={pending || i === 0} onClick={() => start(() => moveLocationAction({ key: l.key, dir: 'up' }))} aria-label="Monter" className="rounded-md border border-line p-1 text-ink-soft hover:border-green-strong hover:text-green-strong disabled:opacity-30">
+                    <button type="button" disabled={pending || i === 0} onClick={() => start(async () => { await moveLocationAction({ key: l.key, dir: 'up' }); await refresh(); })} aria-label="Monter" className="rounded-md border border-line p-1 text-ink-soft hover:border-green-strong hover:text-green-strong disabled:opacity-30">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6" /></svg>
                     </button>
-                    <button type="button" disabled={pending || i === ordered.length - 1} onClick={() => start(() => moveLocationAction({ key: l.key, dir: 'down' }))} aria-label="Descendre" className="rounded-md border border-line p-1 text-ink-soft hover:border-green-strong hover:text-green-strong disabled:opacity-30">
+                    <button type="button" disabled={pending || i === ordered.length - 1} onClick={() => start(async () => { await moveLocationAction({ key: l.key, dir: 'down' }); await refresh(); })} aria-label="Descendre" className="rounded-md border border-line p-1 text-ink-soft hover:border-green-strong hover:text-green-strong disabled:opacity-30">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
                     </button>
                     {l.isCustom && (
-                      <button type="button" disabled={pending} onClick={() => start(() => deleteLocationAction(l.key))} className="text-xs font-semibold text-clay-deep hover:underline disabled:opacity-50">
+                      <button type="button" disabled={pending} onClick={() => start(async () => { await deleteLocationAction(l.key); await refresh(); })} className="text-xs font-semibold text-clay-deep hover:underline disabled:opacity-50">
                         supprimer
                       </button>
                     )}
@@ -67,7 +69,7 @@ export function ManageLocations({ ordered }: { ordered: OrderedLocation[] }) {
               <button
                 type="button"
                 disabled={pending || !label.trim()}
-                onClick={() => start(async () => { await createLocationAction(label.trim()); setLabel(''); })}
+                onClick={() => start(async () => { await createLocationAction(label.trim()); setLabel(''); await refresh(); })}
                 className="btn-primary mt-3 w-full py-2.5 disabled:opacity-60"
               >
                 {pending ? 'On crée…' : 'Créer le lieu'}

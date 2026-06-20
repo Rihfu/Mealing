@@ -16,6 +16,7 @@ import {
   searchFoodCatalog,
   listShoppingTrips,
   findCatalogFoodIdByLabel,
+  getOrCreateCatalogFood,
   type ShoppingLine,
   // écritures
   createHouseholdCategory,
@@ -450,7 +451,14 @@ async function executeOne(ctx: Ctx, action: ProposedAction): Promise<string> {
       return `Journée du ${a.date} marquée hors-plan.`;
     }
     case 'add_stock_item': {
-      await upsertStockItem(db, { householdId, label: String(a.label), trackingMode: 'presence', present: true });
+      // Rattachement au catalogue (comme addStockAction) → fiche produit + conservation
+      // intelligente possibles. Sans ça, l'article reste en food_id null (non estimable).
+      const label = String(a.label);
+      const foodId =
+        (await findCatalogFoodIdByLabel(db, label)) ??
+        (await getOrCreateCatalogFood(db, { label, name: label, category: null })) ??
+        undefined;
+      await upsertStockItem(db, { householdId, foodId, label, trackingMode: 'presence', present: true });
       return `« ${a.label} » ajouté au stock.`;
     }
   }

@@ -1,55 +1,54 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { fetchNutritionAction, getProductTipsAction, getConservationAction } from './actions';
+import { fetchNutritionAction, getProductTipsAction, getConservationAction, type ConservationDaysItem } from './actions';
 import type { FoodNutritionValue } from '@/lib/core';
 
-const STORAGE_LABEL: Record<string, string> = {
-  placard: 'Placard',
-  frigo: 'Réfrigérateur',
-  congelateur: 'Congélateur',
-};
-
-interface ConservationEstimate {
-  storage: 'placard' | 'frigo' | 'congelateur';
-  duration: string;
-  note?: string;
-}
-
-/** Conservation par lieu de stockage : estimation IA indicative, à la demande. */
+/**
+ * Conservation par lieu : estimation IA en JOURS, valeur FIXE (pas d'intervalle), à la
+ * demande. SOURCE UNIQUE partagée avec le Stock (même cache) → la fiche et le Stock
+ * affichent exactement la même durée.
+ */
 export function ConservationSection({ foodId }: { foodId: string }) {
-  const [options, setOptions] = useState<ConservationEstimate[] | null>(null);
+  const [items, setItems] = useState<ConservationDaysItem[] | null>(null);
   const [pending, start] = useTransition();
 
   function estimate() {
-    start(async () => setOptions((await getConservationAction(foodId)) as ConservationEstimate[]));
+    start(async () => setItems(await getConservationAction(foodId)));
   }
 
-  if (options == null) {
+  if (items == null) {
     return (
-      <button type="button" onClick={estimate} disabled={pending} className="btn-secondary py-2 text-sm disabled:opacity-60">
-        {pending ? 'Estimation…' : '🧊 Estimer la conservation'}
+      <button type="button" onClick={estimate} disabled={pending} className="btn-secondary flex items-center gap-2 py-2 text-sm disabled:opacity-60">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 3a9 9 0 1 0 9 9" /><path d="M12 7v5l3 2" />
+        </svg>
+        {pending ? 'Estimation…' : 'Estimer la conservation'}
       </button>
     );
   }
-  if (options.length === 0) {
+  if (items.length === 0) {
     return <p className="text-sm text-ink-soft">Pas d’estimation disponible pour cet aliment.</p>;
   }
   return (
     <>
       <ul className="divide-y divide-line">
-        {options.map((o) => (
+        {items.map((o) => (
           <li key={o.storage} className="py-2.5">
             <div className="flex items-center gap-2">
-              <span className="font-display text-sm font-semibold">{STORAGE_LABEL[o.storage] ?? o.storage}</span>
-              <span className="ml-auto text-sm font-semibold text-ink">{o.duration}</span>
+              <span className="font-display text-sm font-semibold">{o.label}</span>
+              <span className="ml-auto text-sm font-semibold text-ink">
+                {o.unopenedDays} jour{o.unopenedDays > 1 ? 's' : ''}
+              </span>
             </div>
-            {o.note && <p className="mt-0.5 text-xs text-ink-soft">{o.note}</p>}
+            {o.openedDays != null && o.openedDays !== o.unopenedDays && (
+              <p className="mt-0.5 text-xs text-ink-soft">une fois entamé : {o.openedDays} j</p>
+            )}
           </li>
         ))}
       </ul>
       <p className="mt-2 text-xs italic text-ink-soft">
-        Repères indicatifs (usages FR, estimés automatiquement) — la gestion fine se fait dans le Stock.
+        Repère indicatif (usages FR) — même estimation que dans le Stock.
       </p>
     </>
   );

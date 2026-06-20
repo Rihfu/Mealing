@@ -9,9 +9,25 @@ import {
   computeProductStats,
   generateShoppingList,
   getShoppingWindow,
+  ensureFoodConservation,
   type FoodNutritionValue,
   type ProductDetail,
 } from '@/lib/core';
+
+/** Libellés des lieux (alignés sur le Stock) pour l'affichage de la conservation. */
+const STORAGE_LABEL: Record<'placard' | 'frigo' | 'congelateur', string> = {
+  placard: 'Placard',
+  frigo: 'Réfrigérateur',
+  congelateur: 'Congélateur',
+};
+
+/** Conservation d'un lieu : valeur FIXE en jours (pas d'intervalle). */
+export interface ConservationDaysItem {
+  storage: 'placard' | 'frigo' | 'congelateur';
+  label: string;
+  unopenedDays: number;
+  openedDays: number | null;
+}
 
 async function requireAuth() {
   const { supabase, userId, profile } = await getAuthContext();
@@ -109,11 +125,23 @@ export async function getProductTipsAction(foodId: string): Promise<string[]> {
   return getProductTips(food.name, food.category);
 }
 
-/** Estimation IA (indicative, par lieu de stockage) de la conservation — à la demande. */
-export async function getConservationAction(foodId: string) {
+/**
+ * Conservation par lieu — valeurs FIXES en jours (source UNIQUE partagée avec le Stock).
+ * Dérivé de `ensureFoodConservation` (même cache `food_conservation` que le Stock) → la
+ * fiche et le Stock affichent EXACTEMENT la même estimation. Plus d'intervalles : une
+ * valeur définie par lieu (requis pour les futures notifications de péremption). À la demande.
+ */
+export async function getConservationAction(foodId: string): Promise<ConservationDaysItem[]> {
   const { supabase } = await requireAuth();
   const { data: food } = await supabase.from('food').select('name, category').eq('id', foodId).maybeSingle();
   if (!food) return [];
-  const { getProductConservation } = await import('@/lib/ai/product-conservation');
-  return getProductConservation(food.name, food.category);
+  const days = await ensureFoodConservation(supabase, foodId, food.name, food.category);
+  if (!days) return [];
+  return (['placard', 'frigo', 'congelateur'] as const)
+    .map((k): ConservationDaysItem | null => {
+      const v = days[k];
+      if (!v || v.unopened == null) return null;
+      return { storage: k, label: STORAGE_LABEL[k], unopenedDays: v.unopened, openedDays: v.opened ?? null };
+    })
+    .filter((x): x is ConservationDaysItem => x != null);
 }
