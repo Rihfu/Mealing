@@ -25,13 +25,13 @@ export function ManageLocations({ ordered }: { ordered: OrderedLocation[] }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="btn-secondary flex items-center gap-2 py-2 text-sm"
-        title="Créer / supprimer / réordonner les lieux"
+        className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line py-2.5 text-sm font-semibold text-green-strong hover:border-green-strong hover:bg-sage-tint/30"
+        title="Créer un lieu / réordonner / supprimer"
       >
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" />
         </svg>
-        Gérer les lieux
+        Ajouter un lieu
       </button>
 
       {open && (

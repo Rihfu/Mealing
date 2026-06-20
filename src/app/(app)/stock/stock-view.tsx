@@ -42,7 +42,6 @@ export function StockView() {
             <p className="font-hand mt-0.5 text-lg text-green-strong">rangé par lieu — la péremption s’estime toute seule</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <ManageLocations ordered={orderedLocations} />
             <EstimateButton />
           </div>
         </div>
@@ -73,7 +72,12 @@ export function StockView() {
               </section>
             )}
 
-            <StockList groups={groups} locationOptions={locationOptions} />
+            <div>
+              <ManageLocations ordered={orderedLocations} />
+              <div className="mt-2">
+                <StockList groups={groups} locationOptions={locationOptions} />
+              </div>
+            </div>
           </div>
 
           {/* Colonne droite : ajout (sticky). */}

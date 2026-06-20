@@ -51,7 +51,7 @@ export async function searchCatalogAction(query: string): Promise<FoodSuggestion
  * sinon création d'une fiche `cat:`) → fiche produit + conservation intelligente
  * disponibles. Journalise une entrée (`stock_event` kind='in').
  */
-export async function addStockAction(formData: FormData): Promise<void> {
+export async function addStockAction(formData: FormData): Promise<string | null> {
   const { supabase, householdId } = await requireHousehold();
   const trackingMode = (String(formData.get('tracking_mode')) || 'quantity') as StockTrackingMode;
   let foodId = String(formData.get('food_id') ?? '') || undefined;
@@ -60,7 +60,7 @@ export async function addStockAction(formData: FormData): Promise<void> {
   const quantity = trackingMode === 'quantity' ? num(formData.get('quantity')) : undefined;
   const unit = String(formData.get('unit') ?? '') || undefined;
 
-  if (!foodId && !label) return;
+  if (!foodId && !label) return null;
   // Rattachement au catalogue (comme Courses) → fiche + conservation par aliment.
   if (!foodId && label) {
     foodId = (await findCatalogFoodIdByLabel(supabase, label)) ?? (await getOrCreateCatalogFood(supabase, { label, name: label, category: null })) ?? undefined;
@@ -87,6 +87,8 @@ export async function addStockAction(formData: FormData): Promise<void> {
     source: 'manual',
   });
   revalidatePath('/stock');
+  // Renvoie l'id SI un lieu a été choisi → l'UI lance l'estimation auto en arrière-plan.
+  return location ? stockId : null;
 }
 
 /** Range un article dans un lieu de conservation (clé prédéfinie ou uuid custom). */

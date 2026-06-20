@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ProductIcon, categoryLabel } from '@/lib/product-assets';
 import { UNIT_OPTIONS } from '@/lib/units';
 import type { FoodSuggestion } from '@/lib/core';
-import { addStockAction, searchCatalogAction } from './actions';
+import { addStockAction, searchCatalogAction, estimateItemConservationAction } from './actions';
 import { useStockRefresh } from './stock-refresh';
 
 type Mode = 'quantity' | 'presence';
@@ -73,9 +73,11 @@ export function AddStock({ locationOptions }: { locationOptions: Array<{ key: st
     setOpen(false);
     setSuggestions([]);
     try {
-      await addStockAction(formData);
+      const stockId = await addStockAction(formData);
       reset();
       await refresh();
+      // Lieu choisi → estimation auto de conservation en arrière-plan (best-effort, auto-gardée).
+      if (stockId) estimateItemConservationAction(stockId).then((r) => { if (r.status === 'estimated') void refresh(); }).catch(() => {});
     } finally {
       setSubmitting(false);
     }

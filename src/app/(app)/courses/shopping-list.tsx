@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { DndContext, closestCenter, type CollisionDetection, type DragStartEvent, type DragOverEvent, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useDndSensors } from '@/components/sortable';
 import { ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-assets';
 import { UNIT_OPTIONS } from '@/lib/units';
 import { RangerModal, BulkRangerModal, type CustomCategory } from './category-controls';
@@ -19,6 +23,7 @@ import {
   bulkPromoteEssentialsAction,
   bulkSetCategoryAction,
   reorderRayonsAction,
+  reorderShoppingLinesAction,
 } from './actions';
 
 type Source = 'recipe' | 'recurring' | 'manual';
@@ -236,7 +241,9 @@ function Row({
   selected = false,
   onSelectToggle,
   onRemove,
-  onPressStart,
+  sortableRef,
+  sortableStyle,
+  isDragging = false,
 }: {
   line: SLine;
   customCategories: CustomCategory[];
@@ -250,8 +257,10 @@ function Row({
   selected?: boolean;
   onSelectToggle?: () => void;
   onRemove?: (line: SLine) => void;
-  /** Démarre l'armement d'un appui long (mobile) pour glisser la tuile vers un rayon. */
-  onPressStart?: (e: React.PointerEvent) => void;
+  /** @dnd-kit : ref/style du nœud triable + état soulevé (fournis par SortableRow). */
+  sortableRef?: (el: HTMLElement | null) => void;
+  sortableStyle?: React.CSSProperties;
+  isDragging?: boolean;
 }) {
   const v = catView(line.category, customCategories);
   const tint = v?.tint ?? 'var(--color-sage-tint)';
@@ -305,11 +314,10 @@ function Row({
 
   return (
     <li
+      ref={sortableRef}
       data-food={line.foodId ?? undefined}
-      onPointerDown={!selectMode && !done ? onPressStart : undefined}
-      onContextMenu={!selectMode && !done ? (e) => e.preventDefault() : undefined}
-      style={!selectMode && !done ? { WebkitTouchCallout: 'none' } : undefined}
-      className={`flex items-center gap-3 rounded-lg px-1 py-2 transition-all duration-200 hover:bg-sage-tint/40 ${animating ? 'opacity-40' : ''} ${selected ? 'bg-sage-tint/60' : ''} ${flash ? 'bg-sage-tint ring-1 ring-green-strong' : ''}`}
+      style={{ ...(sortableStyle ?? {}), ...(!selectMode && !done ? { WebkitTouchCallout: 'none' } : {}) }}
+      className={`flex items-center gap-3 rounded-lg px-1 py-2 transition-colors duration-200 hover:bg-sage-tint/40 ${animating ? 'opacity-40' : ''} ${selected ? 'bg-sage-tint/60' : ''} ${flash ? 'bg-sage-tint ring-1 ring-green-strong' : ''} ${isDragging ? 'relative bg-surface shadow-soft ring-1 ring-green-strong' : ''}`}
     >
       {selectMode ? (
         <button type="button" aria-label={selected ? 'Désélectionner' : 'Sélectionner'} onClick={onSelectToggle} className="block">
@@ -436,11 +444,10 @@ function Row({
         ) : (
           line.qty && <span className={`text-sm text-ink-soft ${done ? 'line-through' : ''}`}>{line.qty}</span>
         )}
-        {/* Retirer + glisser : desktop seulement (sur mobile, tout passe par le menu « ⋯ »). */}
+        {/* Retirer : desktop seulement (sur mobile, tout passe par le menu « ⋯ »). */}
         {!selectMode && !done && onRemove && (
           <span className="hidden items-center gap-2.5 lg:flex">
             <RemoveButton onClick={() => onRemove(line)} />
-            {dragHandle}
           </span>
         )}
         {/* Menu « ⋯ » : regroupe les actions sur mobile pour éviter les lignes surchargées. */}
@@ -453,6 +460,8 @@ function Row({
             onRemove={onRemove ? () => onRemove(line) : undefined}
           />
         )}
+        {/* Poignée de glisser : toujours visible (desktop + mobile via appui long @dnd-kit). */}
+        {!selectMode && !done && dragHandle}
       </span>
 
       {!selectMode && !done && rangerOpen && (
@@ -517,10 +526,148 @@ function ViderRayon({ label, onConfirm }: { label: string; onConfirm: () => void
   );
 }
 
-type DragState =
-  | { kind: 'item'; line: SLine; from: string }
-  | { kind: 'rayon'; key: string; label: string; tint: string; ink: string; iconSlug: string | null }
-  | null;
+/** Collision @dnd-kit séparant les deux niveaux : un ARTICLE ne collisionne qu'avec des
+ *  articles, un EN-TÊTE de rayon qu'avec des en-têtes (ids `grp:`) → on vise une ligne
+ *  précise (pas la grande zone du rayon). */
+const collisionStrategy: CollisionDetection = (args) => {
+  const isGroup = String(args.active.id).startsWith('grp:');
+  const containers = args.droppableContainers.filter((c) => String(c.id).startsWith('grp:') === isGroup);
+  return closestCenter({ ...args, droppableContainers: containers });
+};
+
+const HandleSvg = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
+  </svg>
+);
+
+/** Props communes passées du composant liste aux lignes/rayons triables. */
+interface RowShared {
+  customCategories: CustomCategory[];
+  animatingSet: Set<string>;
+  pending: boolean;
+  toggle: (line: SLine, checked: boolean) => void;
+  selectMode: boolean;
+  selected: Set<string>;
+  viewed: string | null;
+  dragDisabled: boolean;
+  onSelectToggle: (key: string) => void;
+  onRemoveLine: (line: SLine) => void;
+}
+
+/** Ligne TRIABLE : le <li> de Row devient le nœud sortable, la poignée ⠿ porte les listeners. */
+function SortableRow({ line, shared }: { line: SLine; shared: RowShared }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: line.key,
+    disabled: shared.dragDisabled,
+  });
+  const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 20 : undefined };
+  return (
+    <Row
+      line={line}
+      customCategories={shared.customCategories}
+      mode="active"
+      animating={shared.animatingSet.has(line.key)}
+      pending={shared.pending}
+      flash={!!shared.viewed && line.foodId === shared.viewed}
+      onToggle={() => shared.toggle(line, true)}
+      selectMode={shared.selectMode}
+      selected={shared.selected.has(line.key)}
+      onSelectToggle={() => shared.onSelectToggle(line.key)}
+      onRemove={(l) => shared.onRemoveLine(l)}
+      sortableRef={setNodeRef}
+      sortableStyle={style}
+      isDragging={isDragging}
+      dragHandle={
+        <button
+          type="button"
+          aria-label="Glisser pour réordonner / changer de rayon"
+          title="Glisser (appui long sur mobile)"
+          {...attributes}
+          {...listeners}
+          className="cursor-grab touch-none text-ink-soft/60 hover:text-ink-soft active:cursor-grabbing"
+        >
+          {HandleSvg}
+        </button>
+      }
+    />
+  );
+}
+
+/** Rayon TRIABLE : en-tête (poignée = réordre des rayons) + liste triable des lignes. */
+function SortableRayon({
+  g,
+  shared,
+  collapsed,
+  onToggleCollapse,
+  onViderRayon,
+}: {
+  g: SGroup;
+  shared: RowShared;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  onViderRayon: () => void;
+}) {
+  const draggable = g.key !== OTHER_KEY;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `grp:${g.key}`,
+    disabled: shared.dragDisabled || !draggable,
+  });
+  const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 20 : undefined };
+  const itemKeys = useMemo(() => g.items.map((i) => i.key), [g.items]);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      data-rayon={g.key}
+      className={`relative rounded-lg border-t border-line first:border-t-0 ${isDragging ? 'shadow-soft ring-1 ring-green-strong' : ''}`}
+    >
+      <div className="flex items-center gap-1.5 py-2 font-display text-sm font-semibold">
+        {draggable && !shared.selectMode && !shared.dragDisabled && (
+          <button
+            type="button"
+            aria-label="Réordonner ce rayon"
+            title="Glisser pour réordonner le rayon"
+            {...attributes}
+            {...listeners}
+            className="flex h-7 w-7 cursor-grab touch-none items-center justify-center rounded-md text-ink-soft/60 hover:text-ink-soft active:cursor-grabbing"
+          >
+            {HandleSvg}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          aria-label={collapsed ? 'Déplier le rayon' : 'Replier le rayon'}
+          aria-expanded={!collapsed}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-ink-soft hover:bg-sage-tint/50"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`transition-transform ${collapsed ? '-rotate-90' : ''}`}>
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+        <span className="flex h-5 w-5 items-center justify-center rounded-md text-[10px]" style={{ background: g.tint, color: g.ink }}>
+          {g.iconSlug ? <ProductIcon slug={g.iconSlug} size={12} /> : '●'}
+        </span>
+        <button type="button" onClick={onToggleCollapse} className="flex-1 truncate text-left">
+          {g.label}
+        </button>
+        <span className="text-xs font-normal text-ink-soft">{g.items.length}</span>
+        {!shared.selectMode && draggable && <ViderRayon label={g.label} onConfirm={onViderRayon} />}
+      </div>
+      {!collapsed && (
+        <SortableContext items={itemKeys} strategy={verticalListSortingStrategy}>
+          <ul className="divide-y divide-line pl-1">
+            {g.items.map((line) => (
+              <SortableRow key={line.key} line={line} shared={shared} />
+            ))}
+          </ul>
+        </SortableContext>
+      )}
+    </div>
+  );
+}
 
 /**
  * Liste « À acheter » : coche animée + glisser-déposer (appui long sur mobile, poignée
@@ -540,32 +687,21 @@ export function ShoppingList({
   // État OPTIMISTE de la liste : la coche fait disparaître la ligne tout de suite
   // (« hide »), le déplacement la fait changer de rayon tout de suite (« move »).
   // La révalidation serveur réconcilie ensuite — plus d'attente du round-trip.
-  const [groups, applyOptimistic] = useOptimistic(
-    serverGroups,
-    (gs: SGroup[], a: { kind: 'hide'; key: string } | { kind: 'move'; key: string; to: string }) => {
-      if (a.kind === 'hide') {
-        return gs.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== a.key) })).filter((g) => g.items.length > 0);
-      }
-      let moved: SLine | undefined;
-      const without = gs.map((g) => {
-        const f = g.items.find((i) => i.key === a.key);
-        if (f) moved = f;
-        return { ...g, items: g.items.filter((i) => i.key !== a.key) };
-      });
-      if (!moved) return gs;
-      const line = { ...moved, category: a.to };
-      return without
-        .map((g) => (g.key === a.to ? { ...g, items: [...g.items, line] } : g))
-        .filter((g) => g.items.length > 0);
-    },
+  const sensors = useDndSensors();
+  // Ordre affiché : source de vérité pendant un glisser, resynchronisé depuis le serveur
+  // quand on ne glisse pas (synchro prop→état AU RENDU, pattern React, cf. Stock).
+  const [board, setBoard] = useState<SGroup[]>(serverGroups);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [syncedServer, setSyncedServer] = useState(serverGroups);
+  if (!activeId && serverGroups !== syncedServer) {
+    setSyncedServer(serverGroups);
+    setBoard(serverGroups);
+  }
+  const dragFromRayon = useRef<string | null>(null); // rayon d'origine d'un article glissé
+  // Coche optimiste : la ligne disparaît tout de suite du board (réconciliée au refresh).
+  const { pending, animating, toggle } = useToggle((key) =>
+    setBoard((b) => b.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== key) })).filter((g) => g.items.length > 0)),
   );
-  const { pending, animating, toggle } = useToggle((key) => applyOptimistic({ kind: 'hide', key }));
-  const [drag, setDrag] = useState<DragState>(null);
-  const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [overKey, setOverKey] = useState<string | null>(null);
-  const overRef = useRef<string | null>(null);
-  const justDragged = useRef(false);
-  const posRef = useRef({ x: 0, y: 0 }); // dernière position du pointeur (pour l'auto-scroll)
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -591,13 +727,14 @@ export function ShoppingList({
   }, [viewed, router]);
 
   // Recherche : filtre les lignes par libellé (rayons vidés masqués). Le tri/DnD reste intact.
-  const totalItems = groups.reduce((n, g) => n + g.items.length, 0);
+  const totalItems = board.reduce((n, g) => n + g.items.length, 0);
   const q = norm(query.trim());
+  const dragDisabled = selectMode || q.length > 0;
   const shownGroups = q
-    ? groups.map((g) => ({ ...g, items: g.items.filter((l) => norm(l.name).includes(q)) })).filter((g) => g.items.length > 0)
-    : groups;
+    ? board.map((g) => ({ ...g, items: g.items.filter((l) => norm(l.name).includes(q)) })).filter((g) => g.items.length > 0)
+    : board;
 
-  const allLines = useMemo(() => groups.flatMap((g) => g.items), [groups]);
+  const allLines = useMemo(() => board.flatMap((g) => g.items), [board]);
   const shownLines = useMemo(() => shownGroups.flatMap((g) => g.items), [shownGroups]);
   const selectedLines = useMemo(() => allLines.filter((l) => selected.has(l.key)), [allLines, selected]);
   const allShownSelected = shownLines.length > 0 && shownLines.every((l) => selected.has(l.key));
@@ -662,163 +799,114 @@ export function ShoppingList({
     await refresh();
   }
 
-  // Appui long générique (tactile + souris) : déclenche `activate` si on maintient
-  // l'appui ~350 ms sans bouger ; un déplacement (scroll) ou un relâchement annule.
-  function armLongPress(e: React.PointerEvent, activate: () => void) {
-    if (e.button != null && e.button !== 0) return;
-    const sx = e.clientX;
-    const sy = e.clientY;
-    let moved = false;
-    const clear = () => {
-      window.clearTimeout(timer);
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onEnd);
-      window.removeEventListener('pointercancel', onEnd);
-      window.removeEventListener('contextmenu', onCtx);
-    };
-    const onMove = (ev: PointerEvent) => {
-      if (Math.abs(ev.clientX - sx) > 8 || Math.abs(ev.clientY - sy) > 8) {
-        moved = true;
-        clear();
-      }
-    };
-    const onEnd = () => clear();
-    // Bloque le menu contextuel du navigateur (l'appui long sur un lien l'ouvrait et
-    // annulait le glisser). Le glisser maintient ensuite son propre blocage.
-    const onCtx = (ev: Event) => ev.preventDefault();
-    const timer = window.setTimeout(() => {
-      clear();
-      if (!moved) activate();
-    }, 350);
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onEnd);
-    window.addEventListener('pointercancel', onEnd);
-    window.addEventListener('contextmenu', onCtx);
+  // ----- Glisser-déposer @dnd-kit (parité Stock) : réordre d'une ligne dans son rayon,
+  // déplacement entre rayons (change la catégorie), réordre des rayons par l'en-tête. -----
+  const rayonSortableIds = useMemo(
+    () => shownGroups.filter((g) => g.key !== OTHER_KEY).map((g) => `grp:${g.key}`),
+    [shownGroups],
+  );
+
+  function onDragStart(e: DragStartEvent) {
+    const id = String(e.active.id);
+    setActiveId(id);
+    dragFromRayon.current = id.startsWith('grp:') ? null : (board.find((g) => g.items.some((i) => i.key === id))?.key ?? null);
   }
 
-  function startItemDrag(line: SLine, from: string, x: number, y: number) {
-    justDragged.current = true;
-    overRef.current = null;
-    setOverKey(null);
-    posRef.current = { x, y };
-    setPos({ x, y });
-    setDrag({ kind: 'item', line, from });
-  }
-  function startRayonDrag(g: SGroup, x: number, y: number, e?: React.PointerEvent) {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    justDragged.current = true;
-    overRef.current = null;
-    setOverKey(null);
-    posRef.current = { x, y };
-    setPos({ x, y });
-    setDrag({ kind: 'rayon', key: g.key, label: g.label, tint: g.tint, ink: g.ink, iconSlug: g.iconSlug });
-  }
-
-  useEffect(() => {
-    if (!drag) return;
-    // Pendant un glisser : neutralise le scroll/sélection natifs ET le menu contextuel.
-    const bodyStyle = document.body.style;
-    const prevTouch = bodyStyle.getPropertyValue('touch-action');
-    const prevSelect = bodyStyle.getPropertyValue('user-select');
-    bodyStyle.setProperty('touch-action', 'none');
-    bodyStyle.setProperty('user-select', 'none');
-
-    // Cible (rayon) sous le pointeur, recalculée à chaque mouvement ET à chaque
-    // défilement automatique (le contenu glisse sous un doigt immobile).
-    const updateOver = (x: number, y: number) => {
-      const sec = document.elementFromPoint(x, y)?.closest('[data-rayon]') as HTMLElement | null;
-      const k = sec?.dataset.rayon ?? null;
-      overRef.current = k;
-      setOverKey(k);
-    };
-
-    // Auto-scroll : si le pointeur approche le haut/bas de l'écran, on fait défiler la
-    // page — vitesse croissante à mesure qu'on s'approche du bord (listes longues).
-    const EDGE = 96;
-    let raf = 0;
-    const autoScroll = () => {
-      const { x, y } = posRef.current;
-      const vh = window.innerHeight;
-      let dy = 0;
-      if (y < EDGE) dy = -Math.ceil(((EDGE - y) / EDGE) * 24) - 3;
-      else if (y > vh - EDGE) dy = Math.ceil(((y - (vh - EDGE)) / EDGE) * 24) + 3;
-      if (dy !== 0) {
-        window.scrollBy(0, dy);
-        updateOver(x, y);
-      }
-      raf = requestAnimationFrame(autoScroll);
-    };
-    raf = requestAnimationFrame(autoScroll);
-
-    const onMove = (e: PointerEvent) => {
-      e.preventDefault();
-      posRef.current = { x: e.clientX, y: e.clientY };
-      setPos({ x: e.clientX, y: e.clientY });
-      updateOver(e.clientX, e.clientY);
-    };
-    // touchmove non-passif : SEUL moyen fiable de bloquer le scroll natif tactile
-    // (preventDefault sur pointermove ne suffit pas sur mobile).
-    const onTouchMove = (e: TouchEvent) => e.preventDefault();
-    const onCtx = (e: Event) => e.preventDefault();
-    const onUp = () => {
-      const target = overRef.current;
-      const d = drag;
-      if (!d) return;
-      setDrag(null);
-      setOverKey(null);
-      overRef.current = null;
-      if (d.kind === 'item') {
-        if (target && target !== d.from && target !== OTHER_KEY) {
-          const line = d.line;
-          // Déplacement OPTIMISTE : la tuile change de rayon tout de suite ; la
-          // préférence foyer est enregistrée en arrière-plan (réconciliée au refresh).
-          startReorder(async () => {
-            applyOptimistic({ kind: 'move', key: line.key, to: target });
-            await setFoodCategoryAction({ label: line.name, foodId: line.foodId, categoryKey: target, iconSlug: line.iconSlug });
-            await refresh();
-          });
+  // Survol d'un AUTRE rayon : on y déplace la ligne en direct (le trou s'ouvre là-bas).
+  // « Autres » n'est jamais une cible (on ne range pas dans le non-classé).
+  function onDragOver(e: DragOverEvent) {
+    const aId = String(e.active.id);
+    if (aId.startsWith('grp:')) return;
+    const oId = e.over ? String(e.over.id) : null;
+    if (!oId || oId.startsWith('grp:') || oId === aId) return;
+    setBoard((prev) => {
+      const aRayon = prev.find((g) => g.items.some((i) => i.key === aId))?.key;
+      const oRayon = prev.find((g) => g.items.some((i) => i.key === oId))?.key;
+      if (aRayon == null || oRayon == null || aRayon === oRayon || oRayon === OTHER_KEY) return prev;
+      const line = prev.find((g) => g.key === aRayon)!.items.find((i) => i.key === aId)!;
+      const moved: SLine = { ...line, category: oRayon };
+      return prev.map((g) => {
+        if (g.key === aRayon) return { ...g, items: g.items.filter((i) => i.key !== aId) };
+        if (g.key === oRayon) {
+          const items = g.items.filter((i) => i.key !== aId);
+          const idx = items.findIndex((i) => i.key === oId);
+          items.splice(idx < 0 ? items.length : idx, 0, moved);
+          return { ...g, items };
         }
-      } else if (
-        target &&
-        target !== d.key &&
-        target !== OTHER_KEY &&
-        rayonOrder.includes(d.key) &&
-        rayonOrder.includes(target)
-      ) {
-        // Réordonne le rayon dans l'ordre COMPLET du foyer (ses articles suivent).
-        const without = rayonOrder.filter((k) => k !== d.key);
-        const ti = without.indexOf(target);
-        const movingDown = rayonOrder.indexOf(d.key) < rayonOrder.indexOf(target);
-        without.splice(movingDown ? ti + 1 : ti, 0, d.key);
-        startReorder(async () => {
-          await reorderRayonsAction(without);
-          await refresh();
-        });
+        return g;
+      });
+    });
+  }
+
+  function onDragEnd(e: DragEndEvent) {
+    const aId = String(e.active.id);
+    setActiveId(null);
+    const oId = e.over ? String(e.over.id) : null;
+    const cur = board;
+
+    if (aId.startsWith('grp:')) {
+      // Réordre des rayons dans l'ordre COMPLET du foyer (ses articles suivent).
+      if (!oId || !oId.startsWith('grp:') || aId === oId) return;
+      const aKey = aId.slice(4);
+      const oKey = oId.slice(4);
+      if (!rayonOrder.includes(aKey) || !rayonOrder.includes(oKey)) return;
+      const keys = [...rayonOrder];
+      const from = keys.indexOf(aKey);
+      const to = keys.indexOf(oKey);
+      if (from < 0 || to < 0 || from === to) return;
+      const newKeys = arrayMove(keys, from, to);
+      const idx = new Map(newKeys.map((k, i) => [k, i]));
+      setBoard(
+        [...cur].sort(
+          (a, b) =>
+            (idx.has(a.key) ? (idx.get(a.key) as number) : a.key === OTHER_KEY ? 2e9 : 1e9) -
+            (idx.has(b.key) ? (idx.get(b.key) as number) : b.key === OTHER_KEY ? 2e9 : 1e9),
+        ),
+      );
+      startReorder(async () => { await reorderRayonsAction(newKeys); await refresh(); });
+      return;
+    }
+
+    // Article : il a pu changer de rayon (onDragOver). On le replace à la position du dépôt
+    // dans son rayon courant, puis on persiste : catégorie (si changée) + ordre des lignes.
+    const grp = cur.find((g) => g.items.some((i) => i.key === aId));
+    if (!grp) return;
+    let items = grp.items;
+    if (oId && !oId.startsWith('grp:') && oId !== aId && items.some((i) => i.key === oId)) {
+      const keys = items.map((i) => i.key);
+      const from = keys.indexOf(aId);
+      const to = keys.indexOf(oId);
+      if (from >= 0 && to >= 0 && from !== to) {
+        items = arrayMove(items, from, to);
+        setBoard(cur.map((g) => (g.key === grp.key ? { ...g, items } : g)));
       }
-      // Laisse le clic de fin de glisser se résoudre avant de réautoriser le toggle.
-      setTimeout(() => {
-        justDragged.current = false;
-      }, 0);
-    };
-    window.addEventListener('pointermove', onMove, { passive: false });
-    window.addEventListener('touchmove', onTouchMove, { passive: false });
-    window.addEventListener('contextmenu', onCtx);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
-    return () => {
-      cancelAnimationFrame(raf);
-      bodyStyle.setProperty('touch-action', prevTouch);
-      bodyStyle.setProperty('user-select', prevSelect);
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('contextmenu', onCtx);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-    };
-  }, [drag, rayonOrder, applyOptimistic, refresh]);
+    }
+    const rayonKey = grp.key;
+    const orderedKeys = items.map((i) => i.key);
+    const line = items.find((i) => i.key === aId);
+    const movedCategory = dragFromRayon.current != null && dragFromRayon.current !== rayonKey;
+    dragFromRayon.current = null;
+    startReorder(async () => {
+      if (movedCategory && line && rayonKey !== OTHER_KEY) {
+        await setFoodCategoryAction({ label: line.name, foodId: line.foodId, categoryKey: rayonKey, iconSlug: line.iconSlug });
+      }
+      await reorderShoppingLinesAction(orderedKeys);
+      await refresh();
+    });
+  }
+
+  const shared: RowShared = {
+    customCategories,
+    animatingSet: animating,
+    pending,
+    toggle,
+    selectMode,
+    selected,
+    viewed,
+    dragDisabled,
+    onSelectToggle: toggleSelect,
+    onRemoveLine: (l) => removeLines([l]),
+  };
 
   return (
     <>
@@ -856,141 +944,27 @@ export function ShoppingList({
       {q && shownGroups.length === 0 && (
         <p className="py-4 text-center text-sm text-ink-soft">Aucun article ne correspond à « {query} ».</p>
       )}
-      {shownGroups.map((g) => {
-        const isCollapsed = collapsed.has(g.key);
-        const itemOver = overKey === g.key && drag?.kind === 'item' && drag.from !== g.key;
-        const rayonOver = overKey === g.key && drag?.kind === 'rayon' && drag.key !== g.key;
-        const isDraggingThis = drag?.kind === 'rayon' && drag.key === g.key;
-        const draggable = g.key !== OTHER_KEY;
-        return (
-          <div
-            key={g.key}
-            data-rayon={g.key}
-            className={`rounded-lg border-t border-line first:border-t-0 ${itemOver ? 'bg-sage-tint/40 ring-1 ring-green-strong' : ''} ${rayonOver ? 'ring-2 ring-green-strong' : ''} ${isDraggingThis ? 'opacity-40' : ''}`}
-          >
-            <div
-              className="flex items-center gap-1.5 py-2 font-display text-sm font-semibold"
-              onContextMenu={draggable && !selectMode ? (e) => e.preventDefault() : undefined}
-              style={draggable && !selectMode ? { WebkitTouchCallout: 'none' } : undefined}
-            >
-              <button
-                type="button"
-                onClick={() => toggleCollapse(g.key)}
-                aria-label={isCollapsed ? 'Déplier le rayon' : 'Replier le rayon'}
-                aria-expanded={!isCollapsed}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-ink-soft hover:bg-sage-tint/50"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`transition-transform ${isCollapsed ? '-rotate-90' : ''}`}>
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-              </button>
-              <span className="flex h-5 w-5 items-center justify-center rounded-md text-[10px]" style={{ background: g.tint, color: g.ink }}>
-                {g.iconSlug ? <ProductIcon slug={g.iconSlug} size={12} /> : '●'}
-              </span>
-              {/* Le libellé bascule le repli au tap ; appui long (mobile) = glisser le rayon. */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (justDragged.current) return;
-                  toggleCollapse(g.key);
-                }}
-                onPointerDown={draggable && !selectMode ? (e) => armLongPress(e, () => startRayonDrag(g, e.clientX, e.clientY)) : undefined}
-                className="flex-1 truncate text-left"
-              >
-                {g.label}
-              </button>
-              <span className="text-xs font-normal text-ink-soft">{g.items.length}</span>
-              {!selectMode && draggable && <ViderRayon label={g.label} onConfirm={() => removeLines(g.items)} />}
-              {!selectMode && draggable && (
-                <button
-                  type="button"
-                  aria-label="Réordonner ce rayon"
-                  title="Glisser pour réordonner le rayon"
-                  onPointerDown={(e) => startRayonDrag(g, e.clientX, e.clientY, e)}
-                  className="hidden h-7 w-7 cursor-grab items-center justify-center rounded-md text-ink-soft/60 hover:text-ink-soft active:cursor-grabbing lg:flex"
-                  style={{ touchAction: 'none' }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <circle cx="9" cy="6" r="1.5" />
-                    <circle cx="15" cy="6" r="1.5" />
-                    <circle cx="9" cy="12" r="1.5" />
-                    <circle cx="15" cy="12" r="1.5" />
-                    <circle cx="9" cy="18" r="1.5" />
-                    <circle cx="15" cy="18" r="1.5" />
-                  </svg>
-                </button>
-              )}
-            </div>
-            {!isCollapsed && (
-              <ul className="divide-y divide-line pl-1">
-                {g.items.map((line) => (
-                  <Row
-                    key={line.key}
-                    line={line}
-                    customCategories={customCategories}
-                    mode="active"
-                    animating={animating.has(line.key)}
-                    pending={pending}
-                    flash={!!viewed && line.foodId === viewed}
-                    onToggle={() => toggle(line, true)}
-                    selectMode={selectMode}
-                    selected={selected.has(line.key)}
-                    onSelectToggle={() => toggleSelect(line.key)}
-                    onRemove={(l) => removeLines([l])}
-                    onPressStart={(e) => armLongPress(e, () => startItemDrag(line, g.key, e.clientX, e.clientY))}
-                    dragHandle={
-                      <button
-                        type="button"
-                        aria-label="Déplacer vers un rayon"
-                        title="Glisser pour déplacer de rayon"
-                        onPointerDown={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          startItemDrag(line, g.key, e.clientX, e.clientY);
-                        }}
-                        className="cursor-grab text-ink-soft/60 hover:text-ink-soft active:cursor-grabbing"
-                        style={{ touchAction: 'none' }}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                          <circle cx="9" cy="6" r="1.5" />
-                          <circle cx="15" cy="6" r="1.5" />
-                          <circle cx="9" cy="12" r="1.5" />
-                          <circle cx="15" cy="12" r="1.5" />
-                          <circle cx="9" cy="18" r="1.5" />
-                          <circle cx="15" cy="18" r="1.5" />
-                        </svg>
-                      </button>
-                    }
-                  />
-                ))}
-              </ul>
-            )}
-          </div>
-        );
-      })}
-
-      {drag && (
-        <div
-          className="pointer-events-none fixed z-[60] flex items-center gap-2 rounded-xl border border-green-strong bg-surface px-3 py-2 text-sm font-semibold shadow-soft"
-          style={{ left: pos.x + 12, top: pos.y - 8, transform: 'rotate(-2deg)' }}
-        >
-          {drag.kind === 'item' ? (
-            <>
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ background: 'var(--color-sage-tint)', color: 'var(--color-sage-deep)' }}>
-                <ProductIcon slug={drag.line.iconSlug} size={18} />
-              </span>
-              {drag.line.name}
-            </>
-          ) : (
-            <>
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ background: drag.tint, color: drag.ink }}>
-                {drag.iconSlug ? <ProductIcon slug={drag.iconSlug} size={16} /> : '●'}
-              </span>
-              {drag.label}
-            </>
-          )}
-        </div>
-      )}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={collisionStrategy}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+        onDragCancel={() => setActiveId(null)}
+      >
+        <SortableContext items={rayonSortableIds} strategy={verticalListSortingStrategy}>
+          {shownGroups.map((g) => (
+            <SortableRayon
+              key={g.key}
+              g={g}
+              shared={shared}
+              collapsed={collapsed.has(g.key)}
+              onToggleCollapse={() => toggleCollapse(g.key)}
+              onViderRayon={() => removeLines(g.items)}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
 
       {/* Barre d'actions de la sélection multiple (collante en bas, sombre pour ressortir). */}
       {selectMode && selected.size > 0 && (

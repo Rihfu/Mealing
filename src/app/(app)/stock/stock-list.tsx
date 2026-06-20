@@ -161,6 +161,9 @@ function RowMenu({ item, locationOptions, onRemove }: { item: SItem; locationOpt
   const [, start] = useTransition();
   const refresh = useStockRefresh();
   const ref = useRef<HTMLDivElement>(null);
+  // Estimation auto en arrière-plan après un rangement via le menu (best-effort, auto-gardée).
+  const bgEstimate = () =>
+    estimateItemConservationAction(item.id).then((r) => { if (r.status === 'estimated') void refresh(); }).catch(() => {});
 
   useEffect(() => {
     if (!open) return;
@@ -227,7 +230,7 @@ function RowMenu({ item, locationOptions, onRemove }: { item: SItem; locationOpt
           {sub === 'ranger' && (
             <div className="max-h-56 overflow-auto p-1">
               {locationOptions.map((l) => (
-                <button key={l.key} type="button" className={`${it} ${item.storageLocation === l.key ? 'font-semibold text-green-strong' : ''}`} onClick={() => start(async () => { await setStockLocationAction(item.id, l.key); close(); await refresh(); })}>{l.label}</button>
+                <button key={l.key} type="button" className={`${it} ${item.storageLocation === l.key ? 'font-semibold text-green-strong' : ''}`} onClick={() => start(async () => { await setStockLocationAction(item.id, l.key); close(); await refresh(); bgEstimate(); })}>{l.label}</button>
               ))}
               {item.storageLocation && <button type="button" className={`${it} text-ink-soft`} onClick={() => start(async () => { await setStockLocationAction(item.id, null); close(); await refresh(); })}>Retirer du lieu</button>}
             </div>
@@ -547,11 +550,27 @@ export function StockList({ groups: serverGroups, locationOptions }: { groups: S
     });
   }
   function bulkMarkOpened() { startBulk(async () => { await bulkSetOpenedAction([...selected], true); exitSelect(); await refresh(); }); }
-  function bulkMove(key: string) { startBulk(async () => { await bulkSetStockLocationAction([...selected], key === UNSORTED ? null : key); exitSelect(); await refresh(); }); }
+  function bulkMove(key: string) {
+    const ids = [...selected];
+    startBulk(async () => { await bulkSetStockLocationAction(ids, key === UNSORTED ? null : key); exitSelect(); await refresh(); });
+    if (key !== UNSORTED) ids.forEach((id) => autoEstimate(id)); // estimation auto en fond
+  }
   function bulkRemove() { const items = selectedItems; exitSelect(); removeItems(items); }
 
+  // Estimation auto de conservation EN ARRIÈRE-PLAN après un rangement dans un lieu : ne
+  // bloque pas le geste ; l'action s'auto-garde (no-location / 429 → rien) + cache par
+  // aliment. La date apparaît au refresh (~1 s après).
+  const dragFromLieu = useRef<string | null>(null);
+  function autoEstimate(stockId: string) {
+    estimateItemConservationAction(stockId)
+      .then((r) => { if (r.status === 'estimated') void refresh(); })
+      .catch(() => {});
+  }
+
   function onDragStart(e: DragStartEvent) {
-    setActiveId(String(e.active.id));
+    const id = String(e.active.id);
+    setActiveId(id);
+    dragFromLieu.current = id.startsWith('grp:') ? null : (board.find((g) => g.items.some((i) => i.id === id))?.view.key ?? null);
   }
 
   // Glisser un ARTICLE au-dessus d'un AUTRE lieu : on l'y déplace EN DIRECT (le trou s'ouvre
@@ -618,7 +637,10 @@ export function StockList({ groups: serverGroups, locationOptions }: { groups: S
     }
     const orderedIds = items.map((i) => i.id);
     const key = grp.view.key;
+    const changedLieu = dragFromLieu.current != null && dragFromLieu.current !== key;
+    dragFromLieu.current = null;
     startMove(async () => { await reorderStockAction(key || null, orderedIds); await refresh(); });
+    if (changedLieu) autoEstimate(aId); // estimation auto si le lieu a changé
   }
 
   if (board.length === 0) {
