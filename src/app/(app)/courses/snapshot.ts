@@ -8,6 +8,7 @@ import {
   listRecurringItems,
   getLastKnownPrices,
   loadRayonOrder,
+  loadShoppingLineOrder,
   essentialKey,
   type ShoppingLine,
 } from '@/lib/core';
@@ -83,12 +84,13 @@ export async function getCoursesSnapshotAction(): Promise<CoursesSnapshot | null
 
   const { from, to } = await getShoppingWindow(supabase, householdId);
 
-  const [lines, customCats, essentials, lastPrices, orderMap, { data: stock }] = await Promise.all([
+  const [lines, customCats, essentials, lastPrices, orderMap, lineOrder, { data: stock }] = await Promise.all([
     generateShoppingListAutoSorted(supabase, { householdId, from, to }),
     listHouseholdCategories(supabase, householdId),
     listRecurringItems(supabase, householdId),
     getLastKnownPrices(supabase, householdId),
     loadRayonOrder(supabase, householdId),
+    loadShoppingLineOrder(supabase, householdId),
     supabase.from('stock').select('food_id, label, quantity, unit, present').eq('household_id', householdId),
   ]);
 
@@ -108,7 +110,7 @@ export async function getCoursesSnapshotAction(): Promise<CoursesSnapshot | null
     present: s.present,
   }));
 
-  const activeGroups: SGroup[] = groupByRayon(active, customCats, orderMap).map((g) => ({
+  const activeGroups: SGroup[] = groupByRayon(active, customCats, orderMap, lineOrder).map((g) => ({
     key: g.key,
     label: g.view?.label ?? 'Autres',
     tint: g.view?.tint ?? 'var(--color-line)',

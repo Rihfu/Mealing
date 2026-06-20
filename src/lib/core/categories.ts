@@ -159,6 +159,30 @@ export async function saveRayonOrder(db: DB, householdId: string, orderedKeys: s
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Ordre MANUEL des lignes de la liste (glisser-déposer), par CLÉ canonique de ligne
+ * (`cf:<foodId>` / `cl:<libellé normalisé>`). Position 0..n PAR RAYON — jamais comparée
+ * d'un rayon à l'autre (le groupement par rayon précède le tri). Map clé→position.
+ */
+export async function loadShoppingLineOrder(db: DB, householdId: string): Promise<Map<string, number>> {
+  const rows = (unwrap(
+    await db.from('household_shopping_order').select('item_key, position').eq('household_id', householdId),
+  ) ?? []) as Array<{ item_key: string; position: number }>;
+  return new Map(rows.map((r) => [r.item_key, r.position]));
+}
+
+/**
+ * Enregistre l'ordre des lignes d'UN rayon (positions 0..n dans l'ordre fourni). UPSERT
+ * ciblé (pas un remplacement global) : les lignes des autres rayons gardent leur position.
+ */
+export async function saveShoppingLineOrder(db: DB, householdId: string, orderedKeys: string[]): Promise<void> {
+  if (orderedKeys.length === 0) return;
+  const now = new Date().toISOString();
+  const rows = orderedKeys.map((item_key, position) => ({ household_id: householdId, item_key, position, updated_at: now }));
+  const { error } = await db.from('household_shopping_order').upsert(rows, { onConflict: 'household_id,item_key' });
+  if (error) throw new Error(error.message);
+}
+
 /** Charge et indexe les préférences d'un foyer (pour le classement de la liste). */
 export async function loadFoodPrefs(db: DB, householdId: string): Promise<FoodPrefIndex> {
   const rows = (unwrap(

@@ -16,6 +16,7 @@ import {
   listHouseholdCategories,
   loadRayonOrder,
   saveRayonOrder,
+  saveShoppingLineOrder,
   dismissShoppingItems,
   restoreShoppingItems,
   type FoodSuggestion,
@@ -402,4 +403,12 @@ export async function reorderRayonsAction(orderedKeys: string[]): Promise<void> 
   await saveRayonOrder(supabase, householdId, orderedKeys);
   revalidatePath('/courses');
   revalidatePath('/courses/magasin');
+}
+
+/** Enregistre l'ordre des lignes d'un rayon (glisser-déposer). `orderedKeys` = clés
+ *  canoniques des lignes de ce rayon, dans le nouvel ordre. */
+export async function reorderShoppingLinesAction(orderedKeys: string[]): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  await saveShoppingLineOrder(supabase, householdId, orderedKeys);
+  revalidatePath('/courses');
 }

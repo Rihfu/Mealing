@@ -65,6 +65,7 @@ export function groupByRayon(
   lines: ShoppingLine[],
   customCats: HouseholdCategory[],
   orderMap?: Map<string, number> | null,
+  lineOrder?: Map<string, number> | null,
 ): RayonGroup[] {
   const by = new Map<string, ShoppingLine[]>();
   for (const l of lines) {
@@ -72,5 +73,19 @@ export function groupByRayon(
     (by.get(k) ?? by.set(k, []).get(k)!).push(l);
   }
   const order = [...orderRayonKeys(customCats, orderMap), OTHER_KEY];
-  return order.filter((k) => by.has(k)).map((k) => ({ key: k, view: catView(k, customCats), items: by.get(k)! }));
+  return order
+    .filter((k) => by.has(k))
+    .map((k) => {
+      let items = by.get(k)!;
+      // Ordre manuel des lignes (glisser-déposer) : les lignes ordonnées d'abord (par
+      // position), les non-ordonnées ensuite, dans leur ordre de liste (tri stable).
+      if (lineOrder && lineOrder.size > 0) {
+        items = [...items].sort((a, b) => {
+          const pa = lineOrder.has(a.key) ? (lineOrder.get(a.key) as number) : Infinity;
+          const pb = lineOrder.has(b.key) ? (lineOrder.get(b.key) as number) : Infinity;
+          return pa - pb;
+        });
+      }
+      return { key: k, view: catView(k, customCats), items };
+    });
 }

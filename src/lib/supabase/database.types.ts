@@ -403,6 +403,35 @@ export type Database = {
           },
         ]
       }
+      household_shopping_order: {
+        Row: {
+          household_id: string
+          item_key: string
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          household_id: string
+          item_key: string
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          household_id?: string
+          item_key?: string
+          position?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "household_shopping_order_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nutrient_type: {
         Row: {
           category: string
