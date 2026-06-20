@@ -32,21 +32,33 @@ Renvoie un objet JSON { "placard", "frigo", "congelateur" } où CHAQUE lieu vaut
 Exemples : melon entier placard ~3, frigo ~7 ; banane placard ~5, frigo ~7 (noircit) ; lait UHT placard ~120 (ouvert, frigo ~4) ; saumon frais frigo ~2, congelateur ~180.
 INTERDIT : toute valeur nutritionnelle. Réponds UNIQUEMENT avec le JSON.`;
 
-/** Estimation numérique (jours/lieu) pour le Stock. null si l'IA échoue. */
+/**
+ * Estimation numérique (jours/lieu) pour le Stock. null si l'IA échoue.
+ * Une seconde tentative après un court délai absorbe les 429 PASSAGERS du palier gratuit
+ * Groq (cause n°1 des « réessayer » répétés) — sans masquer une panne durable (clé périmée).
+ */
 export async function estimateConservationDays(name: string, category?: string | null): Promise<ConservationDays | null> {
   const n = name.trim();
   if (!n) return null;
-  try {
-    const ai = getAIProvider();
-    const res = await ai.chat(
-      [
-        { role: 'system', content: DAYS_SYSTEM_PROMPT },
-        { role: 'user', content: `Aliment : ${n}${category ? ` (rayon : ${category})` : ''}` },
-      ],
-      { jsonMode: true, temperature: 0.2 },
-    );
-    return daysSchema.parse(JSON.parse(res.content));
-  } catch {
-    return null;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const ai = getAIProvider();
+      const res = await ai.chat(
+        [
+          { role: 'system', content: DAYS_SYSTEM_PROMPT },
+          { role: 'user', content: `Aliment : ${n}${category ? ` (rayon : ${category})` : ''}` },
+        ],
+        { jsonMode: true, temperature: 0.2 },
+      );
+      return daysSchema.parse(JSON.parse(res.content));
+    } catch (err) {
+      lastErr = err;
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
+    }
   }
+  // DIAGNOSTIC : on n'avale plus l'erreur en silence → la cause RÉELLE (429 / 401 clé
+  // périmée / parse) apparaît dans le terminal `npm run dev`. Indispensable pour trancher.
+  console.error(`[conservation] échec estimation « ${n} » →`, lastErr instanceof Error ? lastErr.message : lastErr);
+  return null;
 }

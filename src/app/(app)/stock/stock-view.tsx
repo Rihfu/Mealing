@@ -35,8 +35,8 @@ export function StockView() {
 
   return (
     <StockRefreshProvider value={refresh}>
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-        <div className="flex flex-wrap items-start justify-between gap-3 lg:col-span-2">
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="font-display text-2xl font-semibold tracking-tight">Stock</h1>
             <p className="font-hand mt-0.5 text-lg text-green-strong">rangé par lieu — la péremption s’estime toute seule</p>
@@ -49,33 +49,38 @@ export function StockView() {
 
         <MealReconcile />
 
-        {priority.length > 0 && (
-          <section className="rounded-2xl border border-clay bg-clay-tint p-3.5 lg:col-start-1">
-            <h2 className="mb-2 font-display text-base font-semibold">À consommer en priorité</h2>
-            <div className="grid gap-2 md:grid-cols-2">
-              {priority.map((e) => (
-                <div key={e.id} className="flex items-center justify-between gap-3 rounded-xl border border-clay/40 bg-surface/70 px-3 py-2">
-                  <FoodLink foodId={e.foodId} from="/stock" className="text-sm font-medium">
-                    {e.name}
-                  </FoodLink>
-                  {e.daysRemaining < 0 ? (
-                    <span className="pill bg-red text-white">périmé ({-e.daysRemaining} j)</span>
-                  ) : (
-                    <span className="pill bg-orange text-white">à consommer · {e.daysRemaining} j</span>
-                  )}
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+          {/* Colonne gauche : priorité + liste, empilées serré (un seul cellule de grille
+              → ne s'étire plus à la hauteur du panneau d'ajout). */}
+          <div className="flex flex-col gap-5">
+            {priority.length > 0 && (
+              <section className="rounded-2xl border border-clay bg-clay-tint p-3.5">
+                <h2 className="mb-2 font-display text-base font-semibold">À consommer en priorité</h2>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {priority.map((e) => (
+                    <div key={e.id} className="flex items-center justify-between gap-3 rounded-xl border border-clay/40 bg-surface/70 px-3 py-2">
+                      <FoodLink foodId={e.foodId} from="/stock" className="text-sm font-medium">
+                        {e.name}
+                      </FoodLink>
+                      {e.daysRemaining < 0 ? (
+                        <span className="pill bg-red text-white">périmé ({-e.daysRemaining} j)</span>
+                      ) : (
+                        <span className="pill bg-orange text-white">à consommer · {e.daysRemaining} j</span>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </section>
+            )}
+
+            <StockList groups={groups} locationOptions={locationOptions} />
+          </div>
+
+          {/* Colonne droite : ajout (sticky). */}
+          <section className="rounded-2xl border border-line bg-surface p-3.5 shadow-soft lg:sticky lg:top-24">
+            <h2 className="mb-3 font-display text-base font-semibold">Ajouter un article</h2>
+            <AddStock locationOptions={locationOptions} />
           </section>
-        )}
-
-        <section className="rounded-2xl border border-line bg-surface p-3.5 shadow-soft lg:sticky lg:top-24 lg:col-start-2 lg:row-start-2">
-          <h2 className="mb-3 font-display text-base font-semibold">Ajouter un article</h2>
-          <AddStock locationOptions={locationOptions} />
-        </section>
-
-        <div className="lg:col-start-1">
-          <StockList groups={groups} locationOptions={locationOptions} />
         </div>
 
         <UndoToastHost />

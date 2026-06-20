@@ -153,8 +153,10 @@ export async function applyDueMealsToStock(db: DB, householdId: string): Promise
 /** Annule une application : ré-incrémente le stock (les repas restent « appliqués »). */
 export async function undoMealStockApplication(db: DB, householdId: string, summary: MealStockSummary): Promise<void> {
   for (const d of summary.decrements) {
-    const cur = unwrap(await db.from('stock').select('quantity').eq('id', d.stockId).maybeSingle()) as { quantity: number | null } | null;
-    if (cur) await db.from('stock').update({ quantity: (cur.quantity ?? 0) + d.amount }).eq('id', d.stockId);
+    // maybeSingle() peut renvoyer data=null si l'article a été supprimé entre-temps →
+    // PAS d'unwrap (qui jette sur null) : on saute simplement la ré-incrémentation.
+    const { data: cur } = await db.from('stock').select('quantity').eq('id', d.stockId).maybeSingle();
+    if (cur) await db.from('stock').update({ quantity: ((cur as { quantity: number | null }).quantity ?? 0) + d.amount }).eq('id', d.stockId);
     await recordStockEvent(db, { householdId, stockId: d.stockId, label: d.label, kind: 'adjust', quantity: d.amount, unit: d.unit, source: 'manual' });
   }
 }

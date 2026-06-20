@@ -54,10 +54,16 @@ export async function ensureFoodConservation(
   name: string,
   category?: string | null,
 ): Promise<ConservationDays | null> {
-  const existing = (unwrap(
-    await db.from('food_conservation').select('days').eq('food_id', foodId).maybeSingle(),
-  ) ?? null) as { days: ConservationDays } | null;
-  if (existing?.days && Object.keys(existing.days).length > 0) return existing.days;
+  // ⚠️ maybeSingle() renvoie data=null quand l'aliment n'a PAS encore de cache (cas NORMAL
+  // au 1er passage). NE PAS passer par unwrap() : il jette sur data null → la toute première
+  // estimation plantait avant même d'appeler l'IA (cause des « réessayer » + cache jamais écrit).
+  const { data: existing } = await db
+    .from('food_conservation')
+    .select('days')
+    .eq('food_id', foodId)
+    .maybeSingle();
+  const cachedDays = (existing as { days: ConservationDays } | null)?.days;
+  if (cachedDays && Object.keys(cachedDays).length > 0) return cachedDays;
 
   const days = await estimateConservationDays(name, category);
   if (days && Object.keys(days).length > 0) {
