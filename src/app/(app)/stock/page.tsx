@@ -1,11 +1,12 @@
 import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { getStockWithExpiry, listStorageLocations, STORAGE_LOCATIONS } from '@/lib/core';
+import { getStockWithExpiry, listStorageLocations, loadLocationOrder } from '@/lib/core';
 import { FoodLink } from '@/components/food-link';
-import { groupByLocation } from './locations';
+import { groupByLocation, orderedLocationKeys, locationView } from './locations';
 import { StockList, type SItem } from './stock-list';
 import { AddStock } from './add-stock';
 import { EstimateButton } from './stock-tools';
+import { ManageLocations } from './locations-manager';
 import { MealReconcile } from './meal-reconcile';
 import { UndoToastHost } from '../courses/undo-toast';
 
@@ -33,7 +34,7 @@ export default async function StockPage() {
   if (!profile?.household_id) redirect('/onboarding');
   const householdId = profile.household_id as string;
 
-  const [{ data: stock }, expiries, customLocations] = await Promise.all([
+  const [{ data: stock }, expiries, customLocations, orderMap] = await Promise.all([
     supabase
       .from('stock')
       .select(
@@ -43,6 +44,7 @@ export default async function StockPage() {
       .order('created_at', { ascending: false }),
     getStockWithExpiry(supabase, householdId),
     listStorageLocations(supabase, householdId),
+    loadLocationOrder(supabase, householdId),
   ]);
 
   const expById = new Map(expiries.map((e) => [e.id, e]));
@@ -66,12 +68,15 @@ export default async function StockPage() {
     };
   });
 
-  const groups = groupByLocation(items, customLocations);
+  const groups = groupByLocation(items, customLocations, orderMap);
   const priority = expiries.filter((e) => e.daysRemaining != null && (e.daysRemaining as number) <= 3);
-  const locationOptions = [
-    ...STORAGE_LOCATIONS.map((l) => ({ key: l.key, label: l.label })),
-    ...customLocations.map((c) => ({ key: c.id, label: c.label })),
-  ];
+
+  // Lieux dans l'ordre du foyer (pour les pickers + le gestionnaire).
+  const customById = new Map(customLocations.map((c) => [c.id, c.label]));
+  const customKeys = new Set(customLocations.map((c) => c.id));
+  const orderedKeys = orderedLocationKeys(customLocations, orderMap);
+  const locationOptions = orderedKeys.map((k) => ({ key: k, label: locationView(k, customById).label }));
+  const orderedLocations = orderedKeys.map((k) => ({ key: k, label: locationView(k, customById).label, isCustom: customKeys.has(k) }));
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
@@ -80,7 +85,10 @@ export default async function StockPage() {
           <h1 className="font-display text-2xl font-semibold tracking-tight">Stock</h1>
           <p className="font-hand mt-0.5 text-lg text-green-strong">rangé par lieu — la péremption s’estime toute seule</p>
         </div>
-        <EstimateButton />
+        <div className="flex flex-wrap items-center gap-2">
+          <ManageLocations ordered={orderedLocations} />
+          <EstimateButton />
+        </div>
       </div>
 
       <MealReconcile />

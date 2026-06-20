@@ -73,6 +73,7 @@ export async function createStorageLocation(
 
 export async function deleteStorageLocation(db: DB, householdId: string, id: string): Promise<void> {
   // Les articles qui visaient ce lieu retombent en « non rangé » au rendu (couplage souple).
+  await db.from('household_location_order').delete().eq('household_id', householdId).eq('location_key', id);
   const { error } = await db.from('storage_location').delete().eq('id', id).eq('household_id', householdId);
   if (error) throw new Error(error.message);
 }
@@ -87,4 +88,25 @@ export async function setStockLocation(db: DB, stockId: string, locationKey: str
 export function storageLabel(key: string | null, custom?: Map<string, string>): string | null {
   if (!key) return null;
   return PREDEFINED.get(key)?.label ?? custom?.get(key) ?? null;
+}
+
+/** Ordre d'affichage des lieux choisi par le foyer (clé → position). */
+export async function loadLocationOrder(db: DB, householdId: string): Promise<Map<string, number>> {
+  const rows = (unwrap(
+    await db.from('household_location_order').select('location_key, position').eq('household_id', householdId),
+  ) ?? []) as Array<{ location_key: string; position: number }>;
+  return new Map(rows.map((r) => [r.location_key, r.position]));
+}
+
+/** Persiste l'ordre complet des lieux (positions 0..n) par foyer. */
+export async function saveLocationOrder(db: DB, householdId: string, orderedKeys: string[]): Promise<void> {
+  if (orderedKeys.length === 0) return;
+  const rows = orderedKeys.map((location_key, position) => ({
+    household_id: householdId,
+    location_key,
+    position,
+    updated_at: new Date().toISOString(),
+  }));
+  const { error } = await db.from('household_location_order').upsert(rows, { onConflict: 'household_id,location_key' });
+  if (error) throw new Error(error.message);
 }

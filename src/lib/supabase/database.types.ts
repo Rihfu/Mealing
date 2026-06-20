@@ -345,6 +345,35 @@ export type Database = {
           },
         ]
       }
+      household_location_order: {
+        Row: {
+          household_id: string
+          location_key: string
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          household_id: string
+          location_key: string
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          household_id?: string
+          location_key?: string
+          position?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "household_location_order_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       household_rayon_order: {
         Row: {
           household_id: string

@@ -8,6 +8,9 @@ import {
   setStockLocation,
   createStorageLocation,
   deleteStorageLocation,
+  listStorageLocations,
+  loadLocationOrder,
+  saveLocationOrder,
   ensureStockConservation,
   recordStockEvent,
   searchFoodCatalog,
@@ -122,6 +125,23 @@ export async function createLocationAction(label: string, iconSlug?: string | nu
 export async function deleteLocationAction(id: string): Promise<void> {
   const { supabase, householdId } = await requireHousehold();
   await deleteStorageLocation(supabase, householdId, id);
+  revalidatePath('/stock');
+}
+
+/** Réordonne les lieux (flèches ↑/↓) — persiste l'ordre complet du foyer. */
+export async function moveLocationAction(input: { key: string; dir: 'up' | 'down' }): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  const { orderedLocationKeys } = await import('./locations');
+  const [custom, orderMap] = await Promise.all([
+    listStorageLocations(supabase, householdId),
+    loadLocationOrder(supabase, householdId),
+  ]);
+  const keys = orderedLocationKeys(custom, orderMap);
+  const i = keys.indexOf(input.key);
+  const j = input.dir === 'up' ? i - 1 : i + 1;
+  if (i < 0 || j < 0 || j >= keys.length) return;
+  [keys[i], keys[j]] = [keys[j], keys[i]];
+  await saveLocationOrder(supabase, householdId, keys);
   revalidatePath('/stock');
 }
 
