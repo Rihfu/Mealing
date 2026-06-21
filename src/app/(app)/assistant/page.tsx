@@ -48,7 +48,7 @@ export default async function AssistantPage() {
     .slice(0, 3)
     .map((s) => ({
       name: s.name,
-      label: s.daysRemaining != null && s.daysRemaining < 0 ? 'pÃ©rimÃ©' : `${s.daysRemaining} j`,
+      label: s.daysRemaining != null && s.daysRemaining < 0 ? 'périmé' : `${s.daysRemaining} j`,
       tone: s.daysRemaining != null && s.daysRemaining < 0 ? 'danger' : 'warn',
     }));
 

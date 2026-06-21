@@ -171,7 +171,7 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
         <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
           <h2 className="mb-3 font-display text-base font-semibold">Repas du jour</h2>
           <div className="flex flex-col gap-2">
-            {(context?.meals.length ? context.meals : [{ slot: 'Aujourdâ€™hui', name: 'Aucun repas planifiÃ©' }]).map(
+            {(context?.meals.length ? context.meals : [{ slot: "Aujourd'hui", name: 'Aucun repas planifié' }]).map(
               (meal, index) => (
                 <div key={`${meal.slot}-${index}`} className="flex items-start gap-2 text-sm">
                   <span className="mt-1.5 h-2 w-2 flex-none rounded-full bg-sage" />
@@ -189,7 +189,7 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
         <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
           <h2 className="mb-3 font-display text-base font-semibold">Stock urgent</h2>
           <div className="flex flex-col gap-2">
-            {(context?.urgentStock.length ? context.urgentStock : [{ name: 'Rien Ã  signaler', label: 'frais', tone: 'ok' }]).map(
+            {(context?.urgentStock.length ? context.urgentStock : [{ name: 'Rien à signaler', label: 'frais', tone: 'ok' }]).map(
               (item) => (
                 <div key={item.name} className="flex items-center justify-between gap-3 text-sm">
                   <span className="font-medium">{item.name}</span>
@@ -205,7 +205,7 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
         <section className="rounded-2xl border border-sage bg-sage-tint p-4">
           <h2 className="mb-3 font-display text-base font-semibold">Macros du jour</h2>
           <div className="flex items-center justify-between py-1 text-sm">
-            <span className="text-ink-soft">Ã‰nergie</span>
+            <span className="text-ink-soft">Énergie</span>
             <span className="font-bold">{context?.energy ?? 0} kcal</span>
           </div>
           <div className="flex items-center justify-between py-1 text-sm">
