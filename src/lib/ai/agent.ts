@@ -18,6 +18,12 @@ import {
   findCatalogFoodIdByLabel,
   getOrCreateCatalogFood,
   type ShoppingLine,
+  // stock (lecture)
+  getStockWithExpiry,
+  getExpiryDigest,
+  listStorageLocations,
+  STORAGE_LOCATIONS,
+  storageLabel,
   // écritures
   createHouseholdCategory,
   setFoodPref,
@@ -29,6 +35,11 @@ import {
   addPlannedMeal,
   markDayOffPlan,
   upsertStockItem,
+  setStockLocation,
+  removeStockItems,
+  decrementStock,
+  recordStockEvent,
+  ensureStockConservation,
 } from '@/lib/core';
 import { categoryDef, categoryLabel, CATEGORY_ORDER } from '@/lib/product-assets';
 import { isoDate } from '@/lib/dates';
@@ -72,13 +83,19 @@ const WRITE_SCHEMAS = {
   checkout: z.object({}),
   add_meal: z.object({ date: z.string(), slot: slotEnum, recipeName: z.string().optional(), description: z.string().optional() }),
   mark_day_off: z.object({ date: z.string() }),
-  add_stock_item: z.object({ label: z.string().min(1) }),
+  add_stock_item: z.object({ label: z.string().min(1), location: z.string().optional(), quantity: z.number().optional(), unit: z.string().optional() }),
+  remove_stock_item: z.object({ id: z.string().min(1) }),
+  discard_stock_item: z.object({ id: z.string().min(1) }),
+  set_stock_location: z.object({ id: z.string().min(1), location: z.string().min(1) }),
+  mark_stock_opened: z.object({ id: z.string().min(1), opened: z.boolean() }),
+  decrement_stock: z.object({ id: z.string().min(1), amount: z.number().positive() }),
+  estimate_conservation: z.object({}),
 } as const;
 
 type WriteName = keyof typeof WRITE_SCHEMAS;
 const WRITE_NAMES = Object.keys(WRITE_SCHEMAS) as WriteName[];
 // Actions « singleton » : une seule occurrence sensée par plan (on remplace si répétée).
-const SINGLETON_WRITES = new Set<WriteName>(['reorder_rayons', 'checkout']);
+const SINGLETON_WRITES = new Set<WriteName>(['reorder_rayons', 'checkout', 'estimate_conservation']);
 
 export interface ProposedAction {
   name: WriteName;
@@ -110,6 +127,9 @@ const READ_TOOLS: ToolDefinition[] = [
   { name: 'get_nutrition', description: 'Nutrition stockée d’un produit (par libellé).', parameters: obj({ label: str() }, ['label']) },
   { name: 'get_stats', description: 'Stats de courses (cadence, panier moyen, dépenses, à racheter).', parameters: obj({}) },
   { name: 'search_catalog', description: 'Recherche un aliment au catalogue (rayon, existence).', parameters: obj({ query: str() }, ['query']) },
+  { name: 'get_stock', description: 'Stock actuel du foyer avec `id` (pour agir), lieu, quantité/présence, entamé, jours avant péremption.', parameters: obj({}) },
+  { name: 'get_expiring', description: 'Articles du stock périmés / urgents / bientôt (avec id). Pour « qu’est-ce qui périme ? ».', parameters: obj({}) },
+  { name: 'list_locations', description: 'Lieux de conservation (prédéfinis + perso) et leurs clés (pour ranger).', parameters: obj({}) },
 ];
 
 const WRITE_TOOLS: ToolDefinition[] = [
@@ -126,7 +146,13 @@ const WRITE_TOOLS: ToolDefinition[] = [
   { name: 'checkout', description: 'Valide les courses (cochés → stock + relevé). Seulement si demandé.', parameters: obj({}) },
   { name: 'add_meal', description: 'Planifie un repas.', parameters: obj({ date: str('YYYY-MM-DD'), slot: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack'] }, recipeName: str(), description: str() }, ['date', 'slot']) },
   { name: 'mark_day_off', description: 'Marque une journée hors-plan.', parameters: obj({ date: str('YYYY-MM-DD') }, ['date']) },
-  { name: 'add_stock_item', description: 'Ajoute un article au stock.', parameters: obj({ label: str() }, ['label']) },
+  { name: 'add_stock_item', description: 'Ajoute un article au stock (label requis ; location = clé de list_locations, quantity/unit optionnels).', parameters: obj({ label: str(), location: str(), quantity: num(), unit: str() }, ['label']) },
+  { name: 'remove_stock_item', description: 'Retire un article du stock SANS gaspillage (correction/doublon). id de get_stock.', parameters: obj({ id: str() }, ['id']) },
+  { name: 'discard_stock_item', description: 'JETER un article (périmé/gâché) — compte comme GASPILLAGE. id de get_stock.', parameters: obj({ id: str() }, ['id']) },
+  { name: 'set_stock_location', description: 'Range un article dans un lieu (location = clé de list_locations). id de get_stock.', parameters: obj({ id: str(), location: str() }, ['id', 'location']) },
+  { name: 'mark_stock_opened', description: 'Marque un article entamé (opened=true) ou non (false). id de get_stock.', parameters: obj({ id: str(), opened: { type: 'boolean' } }, ['id', 'opened']) },
+  { name: 'decrement_stock', description: 'Consomme une quantité d’un article (mode quantité). id de get_stock + amount > 0.', parameters: obj({ id: str(), amount: num() }, ['id', 'amount']) },
+  { name: 'estimate_conservation', description: 'Estime la durée de conservation des articles du stock qui n’en ont pas encore.', parameters: obj({}) },
 ];
 
 /* --------------------------- Lectures (exécutées) --------------------------- */
@@ -184,6 +210,48 @@ async function runReadTool(ctx: Ctx, name: string, args: Record<string, unknown>
       const res = await searchFoodCatalog(ctx.db, String(args.query ?? ''));
       return JSON.stringify(res.slice(0, 8).map((s) => ({ nom: s.name, rayon: categoryLabel(s.category ?? null), dejaImporte: !!s.foodId })));
     }
+    case 'get_stock': {
+      const [expiries, customLocs] = await Promise.all([
+        getStockWithExpiry(ctx.db, ctx.householdId),
+        listStorageLocations(ctx.db, ctx.householdId),
+      ]);
+      const customMap = new Map(customLocs.map((l) => [l.id, l.label]));
+      const { data } = await ctx.db
+        .from('stock')
+        .select('id, tracking_mode, quantity, unit, present')
+        .eq('household_id', ctx.householdId);
+      const byId = new Map(
+        ((data ?? []) as Array<{ id: string; tracking_mode: string; quantity: number | null; unit: string | null; present: boolean }>).map((r) => [r.id, r]),
+      );
+      return JSON.stringify(
+        expiries.map((e) => {
+          const r = byId.get(e.id);
+          return {
+            id: e.id,
+            nom: e.name,
+            lieu: storageLabel(e.storageLocation, customMap) ?? 'non rangé',
+            suivi: r?.tracking_mode === 'quantity' ? 'quantité' : 'présence',
+            qte: r?.tracking_mode === 'quantity' ? (r?.quantity ?? null) : null,
+            unite: r?.unit ?? null,
+            entame: e.opened,
+            jours_avant_peremption: e.daysRemaining,
+            source_peremption: e.expirySource,
+          };
+        }),
+      );
+    }
+    case 'get_expiring': {
+      const d = await getExpiryDigest(ctx.db, ctx.householdId);
+      const fmt = (arr: typeof d.expired) => arr.map((i) => ({ id: i.id, nom: i.name, jours: i.daysRemaining }));
+      return JSON.stringify({ seuil: d.threshold, total: d.total, perimes: fmt(d.expired), urgents: fmt(d.urgent), bientot: fmt(d.soon) });
+    }
+    case 'list_locations': {
+      const custom = await listStorageLocations(ctx.db, ctx.householdId);
+      return JSON.stringify([
+        ...STORAGE_LOCATIONS.map((l) => ({ key: l.key, label: l.label, type: 'prédéfini' })),
+        ...custom.map((c) => ({ key: c.id, label: c.label, type: 'personnalisé' })),
+      ]);
+    }
     default:
       return JSON.stringify({ erreur: 'outil de lecture inconnu' });
   }
@@ -226,20 +294,36 @@ function summarize(name: WriteName, a: Record<string, unknown>): string {
       return `Planifier un repas le ${a.date}`;
     case 'mark_day_off':
       return `Marquer le ${a.date} hors-plan`;
-    case 'add_stock_item':
-      return `Ajouter « ${a.label} » au stock`;
+    case 'add_stock_item': {
+      const qty = a.quantity != null ? ` ${a.quantity}${a.unit ? ` ${a.unit}` : ''}` : '';
+      return `Ajouter « ${a.label}${qty} » au stock${a.location ? ` (${a.location})` : ''}`;
+    }
+    case 'remove_stock_item':
+      return `Retirer un article du stock (sans gaspillage)`;
+    case 'discard_stock_item':
+      return `Jeter un article du stock (gaspillage)`;
+    case 'set_stock_location':
+      return `Ranger un article du stock dans un lieu`;
+    case 'mark_stock_opened':
+      return a.opened ? `Marquer un article du stock entamé` : `Marquer un article du stock non entamé`;
+    case 'decrement_stock':
+      return `Consommer ${a.amount} d’un article du stock`;
+    case 'estimate_conservation':
+      return `Estimer la conservation des articles du stock`;
   }
 }
 
 /* --------------------------------- Boucle ----------------------------------- */
 
-const SYSTEM_PROMPT = `Tu es l'assistant de Mealing, axé sur la liste de COURSES.
-Tu peux LIRE les données du foyer via des outils (liste, essentiels, rayons, historique, fiches produits, stats, catalogue) — fais-le avant de répondre quand c'est utile.
-Pour MODIFIER, tu PROPOSES des actions (outils d'écriture) ; l'utilisateur les confirmera. Tu n'exécutes jamais une écriture toi-même et tu ne supprimes JAMAIS un rayon ni un relevé d'historique.
-Appelle chaque outil d'écriture UNE SEULE FOIS. Quand tu proposes des écritures, ne dis JAMAIS que c'est fait : décris au FUTUR ce que tu vas faire (« je vais ajouter… »), puisque l'utilisateur doit d'abord confirmer.
+const SYSTEM_PROMPT = `Tu es l'assistant de Mealing (liste de COURSES et STOCK).
+Tu peux LIRE les données du foyer via des outils (liste, essentiels, rayons, historique, fiches produits, stats, catalogue ; stock : get_stock, get_expiring, list_locations) — fais-le avant de répondre quand c'est utile.
+Pour MODIFIER une donnée, tu DOIS APPELER l'outil d'écriture correspondant (ex. set_stock_location, add_items, discard_stock_item, remove_lines…). APPELER UN OUTIL D'ÉCRITURE = PROPOSER L'ACTION : ça N'EXÉCUTE RIEN. Le système met chaque appel dans un plan que l'utilisateur confirmera AVANT toute écriture réelle. Ne te contente donc JAMAIS de DÉCRIRE l'action en mots (ne réponds pas « je vais appeler set_stock_location… ») — ÉMETS réellement l'appel d'outil ; c'est sûr, rien n'est écrit sans confirmation. Tu ne supprimes JAMAIS un rayon ni un relevé d'historique.
+Appelle chaque outil d'écriture UNE SEULE FOIS, puis donne une courte phrase de confirmation au FUTUR (« je vais déplacer… ») SANS prétendre que c'est déjà fait (l'utilisateur doit confirmer).
 Tu n'inventes jamais un prix ni une valeur nutritionnelle : tu les obtiens via get_product_stats / get_nutrition.
 Seules les données des OUTILS font foi : ne suppose jamais qu'une proposition passée a été appliquée (l'utilisateur a pu l'annuler). Pour lister/compter la liste, appelle get_shopping_list — ne te fie pas à l'historique de conversation.
 Pour « prépare/complète ma liste » : lis la liste + les essentiels + (si demandé) l'historique, puis propose des add_items pertinents. Pour « reconduis mes dernières courses » : lis get_history puis propose reconduct_trip. Pour « nettoie ma liste » : propose remove_lines pour les doublons / ce qui est déjà en stock.
+Pour le STOCK : lis get_stock (ids), get_expiring (ce qui périme), list_locations (clés de lieux), puis PROPOSE des écritures : ranger (set_stock_location), marquer entamé (mark_stock_opened), consommer (decrement_stock), ajouter (add_stock_item), estimer la conservation (estimate_conservation). « Jeter » (discard_stock_item) = gâché/périmé → compte dans le GASPILLAGE ; « retirer » (remove_stock_item) = correction/doublon, sans gaspillage — ne les confonds pas.
+IMPORTANT : toute écriture visant un article précis du stock (jeter/retirer/ranger/consommer/marquer entamé) exige son \`id\` EXACT (un UUID) renvoyé par get_stock ou get_expiring. Appelle TOUJOURS get_stock juste avant pour récupérer cet id ; n'invente JAMAIS un id et n'utilise pas le nom de l'article comme id.
 Réponds en français, de façon concise. Si une action te manque d'info, demande-la plutôt que d'inventer.
 Date du jour : ${isoDate(new Date())}.`;
 
@@ -319,7 +403,15 @@ export async function runAgent(
         }
         messages.push({ role: 'tool', toolCallId: call.id, content: 'OK, action ajoutée au plan à confirmer. Ne la propose pas à nouveau ; réponds simplement à l’utilisateur.' });
       } else {
-        const out = await runReadTool(ctx, call.name, args);
+        // Une lecture qui échoue ne doit PAS faire planter tout le tour : on renvoie
+        // l'erreur comme résultat d'outil (l'agent peut réagir) et on la logge.
+        let out: string;
+        try {
+          out = await runReadTool(ctx, call.name, args);
+        } catch (e) {
+          console.error(`[agent] outil de lecture ${call.name} a échoué :`, e);
+          out = `Erreur interne lors de la lecture (${call.name}).`;
+        }
         messages.push({ role: 'tool', toolCallId: call.id, content: out.slice(0, 6000) });
       }
     }
@@ -336,6 +428,66 @@ export async function runAgent(
 /** Trouve une ligne de la liste actuelle par sa clé canonique. */
 function findLine(lines: ShoppingLine[], key: string): ShoppingLine | undefined {
   return lines.find((l) => l.key === key);
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const NO_STOCK_ROW = "Article introuvable dans le stock — utilise get_stock pour vérifier le nom/l'id exact.";
+const AMBIGUOUS_STOCK = "Plusieurs articles du stock correspondent — précise lequel (via get_stock).";
+
+interface StockTarget {
+  id: string;
+  food_id: string | null;
+  label: string | null;
+  quantity: number | null;
+  unit: string | null;
+}
+
+const normName = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
+
+/**
+ * Résout l'article de stock visé par une écriture. ROBUSTE au comportement réel du modèle
+ * qui, malgré la consigne, passe souvent le NOM au lieu de l'`id` : on tente d'abord l'id
+ * (UUID) puis on RETOMBE sur une résolution par libellé / nom d'aliment (dans les deux sens
+ * d'inclusion — il passe parfois « le yaourt X »). Renvoie l'article, null (aucun) ou
+ * 'ambiguous' (plusieurs correspondances → demander de préciser). Jamais d'exception sur un
+ * id non-UUID (sinon l'exécution du plan planterait).
+ */
+async function resolveStockTarget(
+  db: DB,
+  householdId: string,
+  idOrName: string,
+): Promise<StockTarget | null | 'ambiguous'> {
+  const v = idOrName.trim();
+  if (UUID_RE.test(v)) {
+    const { data } = await db
+      .from('stock')
+      .select('id, food_id, label, quantity, unit')
+      .eq('household_id', householdId)
+      .eq('id', v)
+      .maybeSingle();
+    if (data) return data as StockTarget;
+  }
+  const target = normName(v);
+  if (!target) return null;
+  const { data: rows } = await db
+    .from('stock')
+    .select('id, food_id, label, quantity, unit, food:food_id(name)')
+    .eq('household_id', householdId);
+  const matches = ((rows ?? []) as Array<StockTarget & { food: { name: string } | { name: string }[] | null }>).filter((r) => {
+    const f = Array.isArray(r.food) ? r.food[0] : r.food;
+    const name = normName(f?.name ?? r.label ?? '');
+    const lbl = normName(r.label ?? '');
+    if (!name && !lbl) return false;
+    if (name === target || lbl === target) return true;
+    const hit = (s: string) => s.length >= 3 && (s.includes(target) || target.includes(s));
+    return hit(name) || hit(lbl);
+  });
+  if (matches.length === 1) {
+    const m = matches[0];
+    return { id: m.id, food_id: m.food_id, label: m.label, quantity: m.quantity, unit: m.unit };
+  }
+  return matches.length > 1 ? 'ambiguous' : null;
 }
 
 /** Exécute UNE action d'écriture (après confirmation). Renvoie un libellé de résultat. */
@@ -458,8 +610,57 @@ async function executeOne(ctx: Ctx, action: ProposedAction): Promise<string> {
         (await findCatalogFoodIdByLabel(db, label)) ??
         (await getOrCreateCatalogFood(db, { label, name: label, category: null })) ??
         undefined;
-      await upsertStockItem(db, { householdId, foodId, label, trackingMode: 'presence', present: true });
-      return `« ${a.label} » ajouté au stock.`;
+      const location = a.location ? String(a.location) : undefined;
+      const quantity = a.quantity as number | undefined;
+      const unit = a.unit as string | undefined;
+      const trackingMode: 'quantity' | 'presence' = quantity != null ? 'quantity' : 'presence';
+      const stockId = await upsertStockItem(db, { householdId, foodId, label, trackingMode, quantity, unit, present: true });
+      if (location) await setStockLocation(db, stockId, location);
+      await recordStockEvent(db, { householdId, stockId, foodId: foodId ?? null, label, kind: 'in', quantity: quantity ?? null, unit: unit ?? null, source: 'manual' });
+      return `« ${label} » ajouté au stock.`;
+    }
+    case 'remove_stock_item': {
+      const t = await resolveStockTarget(db, householdId, String(a.id));
+      if (t === 'ambiguous') return AMBIGUOUS_STOCK;
+      if (!t) return NO_STOCK_ROW;
+      await removeStockItems(db, [t.id]);
+      return `« ${t.label ?? 'Article'} » retiré du stock (sans gaspillage).`;
+    }
+    case 'discard_stock_item': {
+      // Miroir de discardStockAction : journalise un REBUT (gaspillage) PUIS retire.
+      const t = await resolveStockTarget(db, householdId, String(a.id));
+      if (t === 'ambiguous') return AMBIGUOUS_STOCK;
+      if (!t) return NO_STOCK_ROW;
+      await recordStockEvent(db, { householdId, stockId: t.id, foodId: t.food_id, label: t.label, kind: 'discard', quantity: t.quantity, unit: t.unit, source: 'expiry' });
+      await removeStockItems(db, [t.id]);
+      return `« ${t.label ?? 'Article'} » jeté (compté comme gaspillage).`;
+    }
+    case 'set_stock_location': {
+      const t = await resolveStockTarget(db, householdId, String(a.id));
+      if (t === 'ambiguous') return AMBIGUOUS_STOCK;
+      if (!t) return NO_STOCK_ROW;
+      await setStockLocation(db, t.id, String(a.location));
+      return `« ${t.label ?? 'Article'} » rangé dans le lieu choisi.`;
+    }
+    case 'mark_stock_opened': {
+      const t = await resolveStockTarget(db, householdId, String(a.id));
+      if (t === 'ambiguous') return AMBIGUOUS_STOCK;
+      if (!t) return NO_STOCK_ROW;
+      await db.from('stock').update({ date_ouverture: a.opened ? new Date().toISOString() : null }).eq('id', t.id);
+      return a.opened ? `« ${t.label ?? 'Article'} » marqué entamé.` : `« ${t.label ?? 'Article'} » marqué non entamé.`;
+    }
+    case 'decrement_stock': {
+      const t = await resolveStockTarget(db, householdId, String(a.id));
+      if (t === 'ambiguous') return AMBIGUOUS_STOCK;
+      if (!t) return NO_STOCK_ROW;
+      const amount = Number(a.amount);
+      await decrementStock(db, { stockId: t.id, amount });
+      await recordStockEvent(db, { householdId, stockId: t.id, foodId: t.food_id, label: t.label, kind: 'out', quantity: amount, unit: t.unit, source: 'consumption' });
+      return `Quantité consommée (−${amount}) de « ${t.label ?? 'Article'} ».`;
+    }
+    case 'estimate_conservation': {
+      const n = await ensureStockConservation(db, householdId);
+      return `Conservation estimée pour ${n} article(s) du stock.`;
     }
   }
 }

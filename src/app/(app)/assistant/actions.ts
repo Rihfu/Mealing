@@ -18,7 +18,15 @@ export async function askAgentAction(message: string): Promise<AgentResult> {
   }
   const householdId = profile.household_id as string;
 
-  const result = await runAgent(supabase, { householdId, profileId: userId, message: trimmed });
+  // Garde-fou : un throw inattendu (erreur réseau IA transitoire, etc.) ne doit pas
+  // remonter en « Une erreur est survenue » côté client + perdre l'échange.
+  let result: AgentResult;
+  try {
+    result = await runAgent(supabase, { householdId, profileId: userId, message: trimmed });
+  } catch (e) {
+    console.error('[askAgentAction] runAgent a échoué :', e);
+    result = { type: 'reply', message: 'Une erreur interne est survenue, réessaie dans un instant.' };
+  }
 
   const assistantText =
     result.type === 'reply'
