@@ -9,21 +9,35 @@ import {
 import { isoDate, SLOTS } from '@/lib/dates';
 import { AgentChat } from './agent-chat';
 
-export default async function AssistantPage() {
+export default async function AssistantPage({ searchParams }: { searchParams: Promise<{ c?: string }> }) {
   const { supabase, userId, profile } = await getAuthContext();
   const householdId = profile?.household_id as string;
   const today = isoDate(new Date());
+  const { c: requestedConv } = await searchParams;
 
-  // Conversation active = la plus récente du profil (sans en CRÉER une au chargement —
-  // une nouvelle conversation n'est créée qu'au 1er message ou via « Nouvelle conversation »).
-  const { data: activeConv } = await supabase
-    .from('ia_conversation')
-    .select('id')
-    .eq('profile_id', userId as string)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const conversationId = (activeConv as { id: string } | null)?.id ?? '';
+  // Conversation à ouvrir : celle passée en `?c=` (ex. depuis la bulle flottante), si elle
+  // appartient au profil ; sinon la plus récente. Sans CRÉER de conversation au chargement
+  // (une nouvelle n'est créée qu'au 1er message ou via « Nouvelle conversation »).
+  let conversationId = '';
+  if (requestedConv) {
+    const { data: asked } = await supabase
+      .from('ia_conversation')
+      .select('id')
+      .eq('id', requestedConv)
+      .eq('profile_id', userId as string)
+      .maybeSingle();
+    conversationId = (asked as { id: string } | null)?.id ?? '';
+  }
+  if (!conversationId) {
+    const { data: activeConv } = await supabase
+      .from('ia_conversation')
+      .select('id')
+      .eq('profile_id', userId as string)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    conversationId = (activeConv as { id: string } | null)?.id ?? '';
+  }
 
   const [conversations, initial, { data: meals }, { data: recipes }, stock, macros] = await Promise.all([
     listConversations(supabase, userId as string),

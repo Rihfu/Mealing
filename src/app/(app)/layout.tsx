@@ -5,6 +5,7 @@ import { signOut } from '@/app/auth/actions';
 import { NavTabs } from './nav-tabs';
 import { SyncManager } from './sync-manager';
 import { ExpiryBell } from './expiry-bell';
+import { AssistantBubble } from './assistant-bubble';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { userId, profile, email } = await getAuthContext();
@@ -45,6 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </header>
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 lg:px-8 lg:py-8">{children}</main>
       <SyncManager />
+      <AssistantBubble />
     </div>
   );
 }
