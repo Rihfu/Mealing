@@ -236,21 +236,38 @@ export async function decrementStockAction(formData: FormData): Promise<void> {
   revalidatePath('/stock');
 }
 
-/** Jeter / périmé : sort l'article du stock + journalise (kind='discard'). */
-export async function discardStockAction(stockId: string): Promise<void> {
+/**
+ * Jeter / périmé : sort l'article du stock + journalise un REBUT (`kind='discard'` →
+ * alimente le gaspillage des stats). Distinct de « retirer » (qui ne journalise rien).
+ * RÉVERSIBLE : renvoie l'instantané de l'article + l'id de l'événement pour tout annuler.
+ */
+export async function discardStockAction(stockId: string): Promise<{ snapshot: StockSnapshot | null; eventId: string | null }> {
   const { supabase, householdId } = await requireHousehold();
   const { data: row } = await supabase.from('stock').select('food_id, label, quantity, unit').eq('id', stockId).maybeSingle();
-  await recordStockEvent(supabase, {
-    householdId,
-    stockId,
-    foodId: row?.food_id ?? null,
-    label: row?.label ?? null,
-    kind: 'discard',
-    quantity: row?.quantity ?? null,
-    unit: row?.unit ?? null,
-    source: 'expiry',
-  });
-  await supabase.from('stock').delete().eq('id', stockId);
+  const { data: evt } = await supabase
+    .from('stock_event')
+    .insert({
+      household_id: householdId,
+      stock_id: stockId,
+      food_id: row?.food_id ?? null,
+      label: row?.label ?? null,
+      kind: 'discard',
+      quantity: row?.quantity ?? null,
+      unit: row?.unit ?? null,
+      source: 'expiry',
+    })
+    .select('id')
+    .single();
+  const [snapshot] = await removeStockItems(supabase, [stockId]);
+  revalidatePath('/stock');
+  return { snapshot: snapshot ?? null, eventId: (evt as { id: string } | null)?.id ?? null };
+}
+
+/** Annule un « jeter » : restaure l'article + efface l'événement de rebut (stats cohérentes). */
+export async function undoDiscardStockAction(snapshot: StockSnapshot | null, eventId: string | null): Promise<void> {
+  const { supabase } = await requireHousehold();
+  if (snapshot) await restoreStockItems(supabase, [snapshot]);
+  if (eventId) await supabase.from('stock_event').delete().eq('id', eventId);
   revalidatePath('/stock');
 }
 

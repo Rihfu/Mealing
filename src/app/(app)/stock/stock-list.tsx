@@ -14,6 +14,7 @@ import type { LocationView } from './locations';
 import {
   decrementStockAction,
   discardStockAction,
+  undoDiscardStockAction,
   estimateItemConservationAction,
   setOpenedAction,
   setPrintedExpiryAction,
@@ -138,17 +139,34 @@ function ExpiryPill({ item }: { item: SItem }) {
   );
 }
 
-/** Bouton « retirer » (corbeille travaillée sur pastille rouge pâle), comme Courses. */
+/** Bouton « Jeter » (poubelle, pastille clay) : rebut/périmé → compte dans le GASPILLAGE.
+ *  Distinct de « Retirer » (qui ne compte pas). Réversible (toast d'annulation). */
+function DiscardButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Jeter (périmé)"
+      title="Jeter (périmé / gaspillage) — compte dans les statistiques"
+      className="flex h-7 w-7 items-center justify-center rounded-full bg-clay-tint/60 text-clay-deep transition-colors hover:bg-clay-tint"
+    >
+      <TrashIcon size={15} />
+    </button>
+  );
+}
+
+/** Bouton « Retirer du stock » (croix, neutre) : sort l'article SANS le compter comme
+ *  gaspillage (correction, doublon…). Réversible. Icône ✕ pour le distinguer de « Jeter ». */
 function RemoveButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label="Retirer du stock"
-      title="Retirer du stock"
-      className="flex h-7 w-7 items-center justify-center rounded-full bg-clay-tint/50 text-clay-deep transition-colors hover:bg-clay-tint"
+      title="Retirer du stock (sans gaspillage)"
+      className="flex h-7 w-7 items-center justify-center rounded-full bg-line/60 text-ink-soft transition-colors hover:bg-line"
     >
-      <TrashIcon size={15} />
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
     </button>
   );
 }
@@ -207,13 +225,9 @@ function RowMenu({ item, locationOptions, onRemove }: { item: SItem; locationOpt
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" /><path d="M10 12h4" /></svg>
                 Ranger dans un lieu
               </button>
-              <button type="button" className={`${it} text-clay-deep`} onClick={() => start(async () => { await discardStockAction(item.id); close(); await refresh(); })}>
-                <TrashIcon size={16} />
-                Jeter (périmé)
-              </button>
               <button type="button" className={`${it} text-ink-soft`} onClick={() => { close(); onRemove(); }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
-                Retirer du stock
+                Retirer du stock <span className="text-ink-soft/70">(sans gaspillage)</span>
               </button>
             </>
           )}
@@ -257,6 +271,7 @@ function RowBody({
   selected,
   onSelectToggle,
   onRemove,
+  onDiscard,
   handle,
 }: {
   item: SItem;
@@ -265,6 +280,7 @@ function RowBody({
   selected: boolean;
   onSelectToggle: () => void;
   onRemove: () => void;
+  onDiscard: () => void;
   handle?: React.ReactNode;
 }) {
   const [amount, setAmount] = useState('');
@@ -307,6 +323,7 @@ function RowBody({
 
       {!selectMode && (
         <>
+          <DiscardButton onClick={onDiscard} />
           <span className="hidden lg:flex"><RemoveButton onClick={onRemove} /></span>
           <RowMenu item={item} locationOptions={locationOptions} onRemove={onRemove} />
           {handle}
@@ -326,6 +343,7 @@ function SortableRow({
   dragDisabled,
   onSelectToggle,
   onRemove,
+  onDiscard,
 }: {
   item: SItem;
   locationOptions: LocOption[];
@@ -334,6 +352,7 @@ function SortableRow({
   dragDisabled: boolean;
   onSelectToggle: () => void;
   onRemove: () => void;
+  onDiscard: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -355,6 +374,7 @@ function SortableRow({
         selected={selected}
         onSelectToggle={onSelectToggle}
         onRemove={onRemove}
+        onDiscard={onDiscard}
         handle={
           <button
             type="button"
@@ -413,6 +433,7 @@ function GroupSection({
   onToggleCollapse,
   onToggleSelect,
   onRemoveItems,
+  onDiscardItem,
 }: {
   g: SGroup;
   locationOptions: LocOption[];
@@ -423,6 +444,7 @@ function GroupSection({
   onToggleCollapse: () => void;
   onToggleSelect: (id: string) => void;
   onRemoveItems: (items: SItem[]) => void;
+  onDiscardItem: (item: SItem) => void;
 }) {
   const isUnsorted = g.view.key === '';
   // Lieu réel = en-tête triable (réordre des lieux). « Non rangé » reste fixe (non triable).
@@ -473,6 +495,7 @@ function GroupSection({
                 dragDisabled={dragDisabled}
                 onSelectToggle={() => onToggleSelect(it.id)}
                 onRemove={() => onRemoveItems([it])}
+                onDiscard={() => onDiscardItem(it)}
               />
             ))}
           </ul>
@@ -546,6 +569,14 @@ export function StockList({ groups: serverGroups, locationOptions }: { groups: S
     startRemove(async () => {
       const snapshots = await removeStockItemsAction(ids);
       pushUndoToast(label, async () => { await undoRemoveStockAction(snapshots); await refresh(); });
+      await refresh();
+    });
+  }
+  // « Jeter » : rebut/périmé → journalise un gaspillage (distinct de « retirer »). Réversible.
+  function discardItem(item: SItem) {
+    startRemove(async () => {
+      const { snapshot, eventId } = await discardStockAction(item.id);
+      pushUndoToast(`« ${item.name} » jeté`, async () => { await undoDiscardStockAction(snapshot, eventId); await refresh(); });
       await refresh();
     });
   }
@@ -682,6 +713,7 @@ export function StockList({ groups: serverGroups, locationOptions }: { groups: S
                 onToggleCollapse={() => toggleCollapse(g.view.key)}
                 onToggleSelect={toggleSelect}
                 onRemoveItems={removeItems}
+                onDiscardItem={discardItem}
               />
             ))}
           </div>

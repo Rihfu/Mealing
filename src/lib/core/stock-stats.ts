@@ -17,6 +17,14 @@ export interface StockStatRow {
   count: number;
 }
 
+export interface ShelfLifeRow {
+  foodId: string | null;
+  label: string;
+  iconSlug: string | null;
+  avgDays: number; // âge moyen (achat → consommation/rebut)
+  samples: number; // nb de sorties observées
+}
+
 export interface StockMove {
   label: string;
   foodId: string | null;
@@ -37,6 +45,8 @@ export interface StockStats {
   outCount: number;
   wasteCount: number;
   wasteRate: number | null; // jeté / (jeté + consommé)
+  avgShelfLifeDays: number | null; // durée de vie moyenne en stock (achat → sortie/rebut)
+  shelfLife: ShelfLifeRow[]; // par aliment, du plus court au plus long
   topStocked: StockStatRow[];
   topConsumed: StockStatRow[];
   topDiscarded: StockStatRow[];
@@ -113,6 +123,47 @@ export async function computeStockStats(db: DB, householdId: string): Promise<St
   const wasteCount = evts.filter((e) => e.kind === 'discard').length;
   const wasteRate = wasteCount + outCount > 0 ? wasteCount / (wasteCount + outCount) : null;
 
+  // --- Durée de vie en stock ---
+  // Pour chaque SORTIE ('out' consommé / 'discard' jeté), on mesure l'âge depuis la
+  // DERNIÈRE ENTRÉE du même aliment → « combien de jours il a tenu avant d'être terminé
+  // ou jeté ». Les RETRAITS (« retirer ») ne sont pas journalisés → naturellement exclus.
+  const sorted = [...evts].sort((a, b) => (a.occurred_at < b.occurred_at ? -1 : a.occurred_at > b.occurred_at ? 1 : 0));
+  const byFoodSorted = new Map<string, EvtRow[]>();
+  for (const e of sorted) {
+    const k = keyOf(e);
+    const arr = byFoodSorted.get(k);
+    if (arr) arr.push(e);
+    else byFoodSorted.set(k, [e]);
+  }
+  interface Life { foodId: string | null; label: string; iconSlug: string | null; days: number[] }
+  const lives = new Map<string, Life>();
+  for (const [k, list] of byFoodSorted) {
+    let lastIn: number | null = null;
+    for (const e of list) {
+      const t = new Date(e.occurred_at).getTime();
+      if (e.kind === 'in') lastIn = t;
+      else if ((e.kind === 'out' || e.kind === 'discard') && lastIn != null) {
+        const d = (t - lastIn) / 86_400_000;
+        if (d >= 0 && d <= 365) {
+          const cur = lives.get(k) ?? { foodId: e.food_id, label: displayOf(e), iconSlug: iconOf(e), days: [] };
+          cur.days.push(d);
+          lives.set(k, cur);
+        }
+      }
+    }
+  }
+  const allDays = [...lives.values()].flatMap((l) => l.days);
+  const avgShelfLifeDays = allDays.length > 0 ? allDays.reduce((a, b) => a + b, 0) / allDays.length : null;
+  const shelfLife: ShelfLifeRow[] = [...lives.values()]
+    .map((l) => ({
+      foodId: l.foodId,
+      label: l.label,
+      iconSlug: l.iconSlug,
+      avgDays: l.days.reduce((a, b) => a + b, 0) / l.days.length,
+      samples: l.days.length,
+    }))
+    .sort((a, b) => a.avgDays - b.avgDays);
+
   const recent: StockMove[] = evts.slice(0, 15).map((e) => ({
     label: displayOf(e),
     foodId: e.food_id,
@@ -133,6 +184,8 @@ export async function computeStockStats(db: DB, householdId: string): Promise<St
     outCount,
     wasteCount,
     wasteRate,
+    avgShelfLifeDays,
+    shelfLife,
     topStocked: topBy('in'),
     topConsumed: topBy('out'),
     topDiscarded: topBy('discard'),

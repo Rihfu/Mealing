@@ -142,6 +142,31 @@ export default async function StockStatsPage() {
         )}
       </Card>
 
+      {stats.avgShelfLifeDays != null && (
+        <Card title="Durée de vie en stock" hint="de l’achat à la consommation / au rebut">
+          <div className="grid grid-cols-2 gap-2">
+            <Metric value={`${stats.avgShelfLifeDays.toFixed(stats.avgShelfLifeDays < 10 ? 1 : 0)} j`} label="en moyenne avant d’être terminé / jeté" />
+            <Metric value={String(stats.shelfLife.reduce((n, s) => n + s.samples, 0))} label="sorties observées" />
+          </div>
+          {stats.shelfLife.length > 0 && (
+            <div className="mt-3">
+              <p className="mb-1 text-xs text-ink-soft">Par aliment (du plus court au plus long)</p>
+              {stats.shelfLife.slice(0, 8).map((s) => (
+                <div key={s.foodId ?? s.label} className="flex items-center gap-3 py-1.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sage-tint text-sage-deep">
+                    <ProductIcon slug={s.iconSlug} size={18} />
+                  </span>
+                  <FoodLink foodId={s.foodId} from="/stock/stats" className="flex-1 truncate text-sm font-medium">{s.label}</FoodLink>
+                  <span className="w-24 shrink-0 text-right text-xs font-semibold text-ink-soft">
+                    ~{s.avgDays.toFixed(s.avgDays < 10 ? 1 : 0)} j{s.samples > 1 ? ` · ${s.samples}×` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
       {stats.topConsumed.length > 0 && (
         <Card title="Ce que tu consommes le plus" hint="aliments sortis du stock">
           {stats.topConsumed.map((r) => (
