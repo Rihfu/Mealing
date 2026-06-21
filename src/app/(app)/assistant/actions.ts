@@ -8,6 +8,7 @@ import {
   listConversations,
   createConversation,
   deleteConversation,
+  renameConversation,
   getConversationMessages,
   countConversationMessages,
   ensureConversationTitle,
@@ -109,6 +110,15 @@ export async function deleteConversationAction(conversationId: string): Promise<
   const c = await authCtx();
   if (!c) return;
   await deleteConversation(c.supabase, c.userId, conversationId);
+  revalidatePath('/assistant');
+}
+
+export async function renameConversationAction(conversationId: string, title: string): Promise<void> {
+  const c = await authCtx();
+  if (!c) return;
+  const t = title.trim();
+  if (!t) return;
+  await renameConversation(c.supabase, c.userId, conversationId, t);
   revalidatePath('/assistant');
 }
 

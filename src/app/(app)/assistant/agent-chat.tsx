@@ -7,6 +7,7 @@ import {
   listConversationsAction,
   createConversationAction,
   deleteConversationAction,
+  renameConversationAction,
   getConversationAction,
   startNewConversationWithBriefAction,
 } from './actions';
@@ -60,8 +61,15 @@ export function AgentChat({
   const [pending, setPending] = useState(false);
   const [plan, setPlan] = useState<ProposedAction[] | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  function closeMenu() {
+    setMenuOpen(false);
+    setEditingId(null);
+  }
 
   // Défile vers le dernier message à chaque nouveau message / plan / état d'attente.
   useEffect(() => {
@@ -72,7 +80,7 @@ export function AgentChat({
   useEffect(() => {
     if (!menuOpen) return;
     const onDoc = (e: PointerEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) closeMenu();
     };
     document.addEventListener('pointerdown', onDoc);
     return () => document.removeEventListener('pointerdown', onDoc);
@@ -130,7 +138,7 @@ export function AgentChat({
   }
 
   async function newConversation() {
-    setMenuOpen(false);
+    closeMenu();
     const r = await createConversationAction();
     if (!r) return;
     setConversationId(r.id);
@@ -152,7 +160,7 @@ export function AgentChat({
   }
 
   function switchTo(id: string) {
-    setMenuOpen(false);
+    closeMenu();
     if (id !== conversationId) void loadConversation(id);
   }
 
@@ -170,6 +178,19 @@ export function AgentChat({
       }
     }
     void refreshList();
+  }
+
+  function startRename(c: ConvItem) {
+    setEditingId(c.id);
+    setEditTitle(c.title || '');
+  }
+
+  async function saveRename(id: string) {
+    const t = editTitle.trim();
+    setEditingId(null);
+    if (!t) return;
+    setConversations((cs) => cs.map((c) => (c.id === id ? { ...c, title: t } : c)));
+    await renameConversationAction(id, t);
   }
 
   // #4 : au seuil, ouvre une nouvelle conversation amorcée par un brief de l'ancienne.
@@ -214,8 +235,11 @@ export function AgentChat({
               <button
                 type="button"
                 onClick={() => {
-                  setMenuOpen((o) => !o);
-                  if (!menuOpen) void refreshList();
+                  if (menuOpen) closeMenu();
+                  else {
+                    setMenuOpen(true);
+                    void refreshList();
+                  }
                 }}
                 className="flex items-center gap-1 rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-green-strong hover:text-green-strong"
               >
@@ -241,19 +265,54 @@ export function AgentChat({
                         key={c.id}
                         className={`flex items-center gap-1 rounded-xl ${c.id === conversationId ? 'bg-sage-tint/60' : 'hover:bg-sage-tint/40'}`}
                       >
-                        <button type="button" onClick={() => switchTo(c.id)} className="min-w-0 flex-1 px-2.5 py-2 text-left">
-                          <span className="block truncate text-sm font-medium text-ink">{c.title || 'Conversation'}</span>
-                          <span className="text-xs text-ink-soft">{relDate(c.updatedAt)} · {c.messageCount} msg</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeConversation(c.id)}
-                          aria-label="Supprimer cette conversation"
-                          title="Supprimer cette conversation"
-                          className="mr-1 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-clay-tint/50 text-[#c2774f] hover:bg-clay-tint"
-                        >
-                          <TrashIcon size={14} />
-                        </button>
+                        {editingId === c.id ? (
+                          <>
+                            <input
+                              autoFocus
+                              value={editTitle}
+                              onChange={(e) => setEditTitle(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') void saveRename(c.id);
+                                else if (e.key === 'Escape') setEditingId(null);
+                              }}
+                              className="min-w-0 flex-1 rounded-lg border border-green-strong bg-paper px-2 py-1.5 text-sm focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => saveRename(c.id)}
+                              aria-label="Enregistrer le nom"
+                              title="Enregistrer"
+                              className="mr-1 flex h-7 w-7 flex-none items-center justify-center rounded-full text-green-strong hover:bg-sage-tint"
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button type="button" onClick={() => switchTo(c.id)} className="min-w-0 flex-1 px-2.5 py-2 text-left">
+                              <span className="block truncate text-sm font-medium text-ink">{c.title || 'Conversation'}</span>
+                              <span className="text-xs text-ink-soft">{relDate(c.updatedAt)} · {c.messageCount} msg</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => startRename(c)}
+                              aria-label="Renommer cette conversation"
+                              title="Renommer"
+                              className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-ink-soft hover:bg-sage-tint hover:text-green-strong"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeConversation(c.id)}
+                              aria-label="Supprimer cette conversation"
+                              title="Supprimer cette conversation"
+                              className="mr-1 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-clay-tint/50 text-[#c2774f] hover:bg-clay-tint"
+                            >
+                              <TrashIcon size={14} />
+                            </button>
+                          </>
+                        )}
                       </li>
                     ))}
                   </ul>
