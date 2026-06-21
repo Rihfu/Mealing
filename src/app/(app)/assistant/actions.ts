@@ -27,16 +27,19 @@ async function authCtx() {
 /**
  * Étape 1 : l'agent LIT et PROPOSE (réponse ou plan). N'écrit aucune donnée métier.
  * Persiste l'échange dans la conversation `conversationId` (ou la conversation active si
- * non fourni — compat UI actuelle). Contrat de retour inchangé (`AgentResult`) : le
- * compteur/limite (#4) est exposé séparément par `getConversationAction` pour la future UI.
+ * non fourni). Renvoie le `conversationId` réellement utilisé : le client en a besoin quand
+ * une conversation est créée à la volée (1er message d'un foyer sans conversation).
  */
-export async function askAgentAction(message: string, conversationId?: string): Promise<AgentResult> {
+export async function askAgentAction(
+  message: string,
+  conversationId?: string,
+): Promise<{ result: AgentResult; conversationId: string }> {
   const c = await authCtx();
-  if (!c) return { type: 'reply', message: 'Foyer introuvable.' };
+  if (!c) return { result: { type: 'reply', message: 'Foyer introuvable.' }, conversationId: conversationId ?? '' };
   const trimmed = message.trim();
-  if (!trimmed) return { type: 'reply', message: '…' };
   const { supabase, userId, householdId } = c;
   const convId = conversationId || (await getOrCreateActiveConversation(supabase, userId));
+  if (!trimmed) return { result: { type: 'reply', message: '…' }, conversationId: convId };
 
   // Garde-fou : un throw inattendu (erreur réseau IA transitoire, etc.) ne doit pas
   // remonter en « Une erreur est survenue » côté client + perdre l'échange.
@@ -59,7 +62,7 @@ export async function askAgentAction(message: string, conversationId?: string): 
   ]);
   await ensureConversationTitle(supabase, convId, trimmed);
   await touchConversation(supabase, convId);
-  return result;
+  return { result, conversationId: convId };
 }
 
 /**

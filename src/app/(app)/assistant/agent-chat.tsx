@@ -1,12 +1,28 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { askAgentAction, clearConversationAction, executeAgentAction } from './actions';
+import {
+  askAgentAction,
+  executeAgentAction,
+  listConversationsAction,
+  createConversationAction,
+  deleteConversationAction,
+  getConversationAction,
+  startNewConversationWithBriefAction,
+} from './actions';
 import type { ProposedAction } from '@/lib/ai/agent';
+import { TrashIcon } from '../courses/shopping-list';
 
 interface Msg {
   role: 'user' | 'assistant';
   content: string;
+}
+
+interface ConvItem {
+  id: string;
+  title: string | null;
+  updatedAt: string;
+  messageCount: number;
 }
 
 interface AgentContext {
@@ -16,17 +32,61 @@ interface AgentContext {
   sodium: number;
 }
 
-export function AgentChat({ initial, context }: { initial: Msg[]; context?: AgentContext }) {
+function relDate(iso: string): string {
+  const d = Math.round((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (d <= 0) return "auj.";
+  if (d === 1) return 'hier';
+  if (d < 7) return `${d} j`;
+  return `${Math.round(d / 7)} sem`;
+}
+
+export function AgentChat({
+  initial,
+  conversationId: initialConvId,
+  conversations: initialConvs,
+  limit,
+  context,
+}: {
+  initial: Msg[];
+  conversationId: string;
+  conversations: ConvItem[];
+  limit: number;
+  context?: AgentContext;
+}) {
+  const [conversationId, setConversationId] = useState(initialConvId);
+  const [conversations, setConversations] = useState<ConvItem[]>(initialConvs);
   const [messages, setMessages] = useState<Msg[]>(initial);
   const [input, setInput] = useState('');
   const [pending, setPending] = useState(false);
   const [plan, setPlan] = useState<ProposedAction[] | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // Défile vers le dernier message à chaque nouveau message / plan / état d'attente.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, plan, pending]);
+
+  // Ferme le menu des conversations au clic extérieur.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onDoc);
+    return () => document.removeEventListener('pointerdown', onDoc);
+  }, [menuOpen]);
+
+  const count = messages.length;
+  const ratio = limit > 0 ? count / limit : 0;
+  const limitReached = count >= limit;
+  const current = conversations.find((c) => c.id === conversationId);
+  const currentTitle = current?.title || (conversationId ? 'Conversation' : 'Nouvelle conversation');
+
+  async function refreshList() {
+    setConversations(await listConversationsAction());
+  }
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -37,9 +97,11 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
     setMessages((m) => [...m, { role: 'user', content: text }]);
     setPending(true);
     try {
-      const d = await askAgentAction(text);
-      setMessages((m) => [...m, { role: 'assistant', content: d.message }]);
-      if (d.type === 'plan' && d.actions.length > 0) setPlan(d.actions);
+      const d = await askAgentAction(text, conversationId || undefined);
+      if (d.conversationId && d.conversationId !== conversationId) setConversationId(d.conversationId);
+      setMessages((m) => [...m, { role: 'assistant', content: d.result.message }]);
+      if (d.result.type === 'plan' && d.result.actions.length > 0) setPlan(d.result.actions);
+      void refreshList();
     } catch {
       setMessages((m) => [...m, { role: 'assistant', content: 'Une erreur est survenue.' }]);
     } finally {
@@ -53,7 +115,7 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
     setPlan(null);
     setPending(true);
     try {
-      const r = await executeAgentAction(actions);
+      const r = await executeAgentAction(actions, conversationId || undefined);
       setMessages((m) => [...m, { role: 'assistant', content: `✓ Fait. ${r.messages.join(' ')}` }]);
     } catch {
       setMessages((m) => [...m, { role: 'assistant', content: "Échec de l'exécution." }]);
@@ -67,10 +129,64 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
     setPlan(null);
   }
 
-  async function clearAll() {
-    await clearConversationAction();
+  async function newConversation() {
+    setMenuOpen(false);
+    const r = await createConversationAction();
+    if (!r) return;
+    setConversationId(r.id);
     setMessages([]);
     setPlan(null);
+    void refreshList();
+  }
+
+  async function loadConversation(id: string) {
+    setPending(true);
+    try {
+      const d = await getConversationAction(id);
+      setConversationId(id);
+      setMessages(d.messages);
+      setPlan(null);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function switchTo(id: string) {
+    setMenuOpen(false);
+    if (id !== conversationId) void loadConversation(id);
+  }
+
+  async function removeConversation(id: string) {
+    const remaining = conversations.filter((c) => c.id !== id);
+    setConversations(remaining);
+    await deleteConversationAction(id);
+    if (id === conversationId) {
+      const next = remaining[0];
+      if (next) await loadConversation(next.id);
+      else {
+        setConversationId('');
+        setMessages([]);
+        setPlan(null);
+      }
+    }
+    void refreshList();
+  }
+
+  // #4 : au seuil, ouvre une nouvelle conversation amorcée par un brief de l'ancienne.
+  async function continueInNew() {
+    if (!conversationId || pending) return;
+    setPending(true);
+    try {
+      const r = await startNewConversationWithBriefAction(conversationId);
+      if (r) {
+        setConversationId(r.id);
+        setMessages(r.messages);
+        setPlan(null);
+        void refreshList();
+      }
+    } finally {
+      setPending(false);
+    }
   }
 
   function pick(text: string) {
@@ -80,97 +196,167 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,760px)_280px] lg:items-start lg:justify-center">
       <div className="flex flex-col gap-3">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight">Assistant</h1>
-          <p className="mt-0.5 text-xs text-ink-soft">Contexte : repas de la semaine · stock · macros du jour</p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h1 className="font-display text-2xl font-semibold tracking-tight">Assistant</h1>
+            <p className="mt-0.5 truncate text-xs text-ink-soft">{currentTitle}</p>
+          </div>
+          <div className="flex flex-none items-center gap-2">
+            <span
+              title="Messages de cette conversation — au seuil, l'assistant propose d'en ouvrir une nouvelle (coût maîtrisé)."
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                limitReached ? 'bg-clay-tint text-[#c2774f]' : ratio >= 0.8 ? 'bg-orange/20 text-orange' : 'bg-sage-tint text-green-strong'
+              }`}
+            >
+              {count}/{limit}
+            </span>
+            <div ref={menuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen((o) => !o);
+                  if (!menuOpen) void refreshList();
+                }}
+                className="flex items-center gap-1 rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-green-strong hover:text-green-strong"
+              >
+                Conversations
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-full z-30 mt-1 w-72 rounded-2xl border border-line bg-surface p-1.5 shadow-soft">
+                  <button
+                    type="button"
+                    onClick={newConversation}
+                    className="mb-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm font-semibold text-green-strong hover:bg-sage-tint/50"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                    Nouvelle conversation
+                  </button>
+                  <ul className="max-h-72 overflow-auto">
+                    {conversations.length === 0 && (
+                      <li className="px-2.5 py-2 text-xs text-ink-soft">Aucune conversation pour l’instant.</li>
+                    )}
+                    {conversations.map((c) => (
+                      <li
+                        key={c.id}
+                        className={`flex items-center gap-1 rounded-xl ${c.id === conversationId ? 'bg-sage-tint/60' : 'hover:bg-sage-tint/40'}`}
+                      >
+                        <button type="button" onClick={() => switchTo(c.id)} className="min-w-0 flex-1 px-2.5 py-2 text-left">
+                          <span className="block truncate text-sm font-medium text-ink">{c.title || 'Conversation'}</span>
+                          <span className="text-xs text-ink-soft">{relDate(c.updatedAt)} · {c.messageCount} msg</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeConversation(c.id)}
+                          aria-label="Supprimer cette conversation"
+                          title="Supprimer cette conversation"
+                          className="mr-1 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-clay-tint/50 text-[#c2774f] hover:bg-clay-tint"
+                        >
+                          <TrashIcon size={14} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-        {messages.length > 0 && (
-          <button onClick={clearAll} className="text-xs text-ink-soft hover:underline">
-            Effacer
-          </button>
-        )}
-      </div>
 
-      <div className="flex min-h-[40vh] flex-col gap-3 lg:min-h-[56vh]">
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            className={
-              m.role === 'user'
-                ? 'max-w-[82%] self-end rounded-2xl rounded-br-sm bg-green px-3.5 py-2.5 text-sm text-white'
-                : 'max-w-[84%] self-start rounded-2xl rounded-bl-sm bg-sage-tint px-3.5 py-2.5 text-sm text-ink'
-            }
-          >
-            <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
-          </div>
-        ))}
-
-        {plan && (
-          <div className="w-[88%] self-start rounded-2xl border border-orange bg-[#fdf0e3] p-3.5 shadow-soft">
-            <div className="mb-2 flex items-center gap-1.5 text-orange">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
-                <path d="M12 9v4M12 17h.01" />
-              </svg>
-              <span className="font-display text-sm font-semibold text-ink">
-                {plan.length > 1 ? `Confirmer ces ${plan.length} actions ?` : 'Confirmer cette action ?'}
-              </span>
+        <div className="flex min-h-[40vh] flex-col gap-3 lg:min-h-[56vh]">
+          {messages.map((m, i) => (
+            <div
+              key={i}
+              className={
+                m.role === 'user'
+                  ? 'max-w-[82%] self-end rounded-2xl rounded-br-sm bg-green px-3.5 py-2.5 text-sm text-white'
+                  : 'max-w-[84%] self-start rounded-2xl rounded-bl-sm bg-sage-tint px-3.5 py-2.5 text-sm text-ink'
+              }
+            >
+              <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
             </div>
-            <ul className="mb-3 flex flex-col gap-1.5">
-              {plan.map((a, i) => (
-                <li key={i} className="flex items-start gap-2 rounded-xl border border-line bg-surface p-2.5 text-xs">
-                  <span className="mt-0.5 text-green-strong">•</span>
-                  <span className="font-semibold text-ink">{a.summary}</span>
-                </li>
-              ))}
-            </ul>
-            <div className="flex gap-2">
-              <button onClick={confirm} disabled={pending} className="btn-primary flex-1 py-2.5 disabled:opacity-50">
-                Confirmer
-              </button>
-              <button onClick={cancel} disabled={pending} className="btn-secondary px-4 py-2.5">
-                Annuler
-              </button>
-            </div>
-          </div>
-        )}
-
-        {messages.length === 0 && !plan && (
-          <p className="text-sm text-ink-soft">
-            Pose une question, ou demande une action — tout est confirmé avant d’être appliqué.
-          </p>
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      <div className="sticky bottom-0 z-10 -mx-4 border-t border-line bg-surface px-4 pb-3 pt-2 lg:mx-0 lg:rounded-2xl lg:border lg:shadow-soft">
-        <div className="mb-2 flex gap-2 overflow-x-auto">
-          {['Prépare ma liste de la semaine', 'Reconduis mes dernières courses', 'Prix du saumon ?'].map((s) => (
-            <button key={s} type="button" onClick={() => pick(s)} className="nav-pill bg-sage-tint text-sage-deep">
-              {s}
-            </button>
           ))}
+
+          {plan && (
+            <div className="w-[88%] self-start rounded-2xl border border-orange bg-[#fdf0e3] p-3.5 shadow-soft">
+              <div className="mb-2 flex items-center gap-1.5 text-orange">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+                  <path d="M12 9v4M12 17h.01" />
+                </svg>
+                <span className="font-display text-sm font-semibold text-ink">
+                  {plan.length > 1 ? `Confirmer ces ${plan.length} actions ?` : 'Confirmer cette action ?'}
+                </span>
+              </div>
+              <ul className="mb-3 flex flex-col gap-1.5">
+                {plan.map((a, i) => (
+                  <li key={i} className="flex items-start gap-2 rounded-xl border border-line bg-surface p-2.5 text-xs">
+                    <span className="mt-0.5 text-green-strong">•</span>
+                    <span className="font-semibold text-ink">{a.summary}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="flex gap-2">
+                <button onClick={confirm} disabled={pending} className="btn-primary flex-1 py-2.5 disabled:opacity-50">
+                  Confirmer
+                </button>
+                <button onClick={cancel} disabled={pending} className="btn-secondary px-4 py-2.5">
+                  Annuler
+                </button>
+              </div>
+            </div>
+          )}
+
+          {messages.length === 0 && !plan && (
+            <p className="text-sm text-ink-soft">
+              Pose une question, ou demande une action — tout est confirmé avant d’être appliqué.
+            </p>
+          )}
+          <div ref={bottomRef} />
         </div>
-        <form onSubmit={send} className="flex items-center gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Écris à l’assistant…"
-            className="flex-1 rounded-full border border-line bg-paper px-4 py-2.5 text-sm focus:outline-2 focus:outline-green"
-          />
-          <button
-            type="submit"
-            disabled={pending || !input.trim()}
-            aria-label="Envoyer"
-            className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-green-strong text-white disabled:opacity-50"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z" />
-            </svg>
-          </button>
-        </form>
-      </div>
+
+        <div className="sticky bottom-0 z-10 -mx-4 border-t border-line bg-surface px-4 pb-3 pt-2 lg:mx-0 lg:rounded-2xl lg:border lg:shadow-soft">
+          {limitReached && (
+            <div className="mb-2 flex flex-col gap-2 rounded-xl border border-orange/50 bg-[#fdf0e3] p-3 text-xs sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-ink">
+                Discussion longue ({count}/{limit}). Continue dans une nouvelle conversation pour rester rapide — je garderai le fil.
+              </span>
+              <button
+                type="button"
+                onClick={continueInNew}
+                disabled={pending}
+                className="btn-primary flex-none py-1.5 text-xs disabled:opacity-50"
+              >
+                Nouvelle conversation
+              </button>
+            </div>
+          )}
+          <div className="mb-2 flex gap-2 overflow-x-auto">
+            {['Prépare ma liste de la semaine', 'Reconduis mes dernières courses', 'Prix du saumon ?'].map((s) => (
+              <button key={s} type="button" onClick={() => pick(s)} className="nav-pill bg-sage-tint text-sage-deep">
+                {s}
+              </button>
+            ))}
+          </div>
+          <form onSubmit={send} className="flex items-center gap-2">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Écris à l’assistant…"
+              className="flex-1 rounded-full border border-line bg-paper px-4 py-2.5 text-sm focus:outline-2 focus:outline-green"
+            />
+            <button
+              type="submit"
+              disabled={pending || !input.trim()}
+              aria-label="Envoyer"
+              className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-green-strong text-white disabled:opacity-50"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z" />
+              </svg>
+            </button>
+          </form>
+        </div>
       </div>
 
       <aside className="hidden flex-col gap-4 lg:flex">
