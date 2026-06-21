@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { askAgentAction, clearConversationAction, executeAgentAction } from './actions';
 import type { ProposedAction } from '@/lib/ai/agent';
 
@@ -21,6 +21,12 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
   const [input, setInput] = useState('');
   const [pending, setPending] = useState(false);
   const [plan, setPlan] = useState<ProposedAction[] | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Défile vers le dernier message à chaque nouveau message / plan / état d'attente.
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages, plan, pending]);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -135,9 +141,10 @@ export function AgentChat({ initial, context }: { initial: Msg[]; context?: Agen
             Pose une question, ou demande une action — tout est confirmé avant d’être appliqué.
           </p>
         )}
+        <div ref={bottomRef} />
       </div>
 
-      <div className="sticky bottom-0 -mx-4 border-t border-line bg-surface px-4 pb-3 pt-2 lg:static lg:mx-0 lg:rounded-2xl lg:border lg:shadow-soft">
+      <div className="sticky bottom-0 z-10 -mx-4 border-t border-line bg-surface px-4 pb-3 pt-2 lg:mx-0 lg:rounded-2xl lg:border lg:shadow-soft">
         <div className="mb-2 flex gap-2 overflow-x-auto">
           {['Prépare ma liste de la semaine', 'Reconduis mes dernières courses', 'Prix du saumon ?'].map((s) => (
             <button key={s} type="button" onClick={() => pick(s)} className="nav-pill bg-sage-tint text-sage-deep">
