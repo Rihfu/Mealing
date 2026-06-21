@@ -429,7 +429,7 @@ export function AgentChat({
         </div>
       </div>
 
-      <aside className="hidden flex-col gap-4 lg:flex">
+      <aside className="hidden flex-col gap-4 lg:flex lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
         <div className="text-xs font-extrabold uppercase tracking-wider text-ink-soft">Contexte</div>
         <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
           <h2 className="mb-3 font-display text-base font-semibold">Repas du jour</h2>
