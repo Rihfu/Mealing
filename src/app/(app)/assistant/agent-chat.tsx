@@ -321,7 +321,7 @@ export function AgentChat({
   return (
     <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,760px)_280px] lg:items-start lg:justify-center">
       {/* Mobile : colonne pleine hauteur (chat classique, saisie collée en bas). Desktop : flux normal. */}
-      <div className="flex h-[calc(100dvh-8.5rem)] min-w-0 flex-col gap-2 lg:h-auto lg:gap-3">
+      <div className="flex h-[calc(100dvh-6rem)] min-w-0 flex-col gap-2 lg:h-auto lg:gap-3">
         <div className="min-w-0">
           <h1 className="font-display text-xl font-semibold tracking-tight lg:text-2xl">Assistant</h1>
           <p className="mt-0.5 truncate text-xs text-ink-soft">{currentTitle}</p>
@@ -329,7 +329,7 @@ export function AgentChat({
 
         {/* Zone messages : occupe l'espace + scroll (mobile) ; ancrée en bas (récents près de la saisie). */}
         <div className="min-h-0 flex-1 overflow-y-auto lg:min-h-[56vh] lg:flex-none lg:overflow-visible">
-          <div className="flex min-h-full flex-col justify-end gap-3 lg:min-h-0 lg:justify-start">
+          <div className="flex min-h-full flex-col justify-start gap-3 lg:min-h-0">
           {messages.map((m, i) => (
             <div
               key={i}
