@@ -4,6 +4,7 @@ import { getAuthContext } from '@/lib/auth';
 import { signOut } from '@/app/auth/actions';
 import { NavTabs } from './nav-tabs';
 import { SyncManager } from './sync-manager';
+import { ExpiryBell } from './expiry-bell';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { userId, profile, email } = await getAuthContext();
@@ -26,6 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <NavTabs />
           </div>
           <div className="flex items-center gap-2.5">
+            <ExpiryBell />
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-sage-tint text-xs font-extrabold text-sage-deep">
               {initial}
             </span>
