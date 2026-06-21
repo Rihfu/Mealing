@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen flex-col bg-paper">
-      <header className="sticky top-0 z-20 border-b border-line bg-surface">
+      <header className="sticky top-0 z-20 transform-gpu border-b border-line bg-surface will-change-transform">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 lg:px-8">
           <Link href="/planning" className="flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}

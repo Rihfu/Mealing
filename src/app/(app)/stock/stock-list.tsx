@@ -340,27 +340,31 @@ function RowBody({
 
       <ExpiryPill item={item} />
 
-      {item.trackingMode === 'quantity' ? (
-        <form action={(fd) => start(async () => { await decrementStockAction(fd); setAmount(''); await refresh(); })} className="flex items-center gap-1">
-          <span className="whitespace-nowrap text-sm font-bold">{item.quantity ?? 0} {item.unit ?? ''}</span>
-          <input type="hidden" name="stock_id" value={item.id} />
-          <input name="amount" type="number" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="−" aria-label="Quantité consommée" className="field-input w-14 px-1.5 py-1 text-xs" />
-          <button className="text-xs font-semibold text-green-strong hover:underline">consommer</button>
-        </form>
-      ) : (
-        <button type="button" onClick={() => start(async () => { await toggleStockPresenceAction(item.id, !item.present); await refresh(); })} className={`pill ${item.present ? 'bg-sage-tint text-green-strong' : 'bg-line text-ink-soft'}`}>
-          {item.present ? 'présent' : 'absent'}
-        </button>
-      )}
+      {/* Contrôles : sur mobile ils passent à la LIGNE SUIVANTE (w-full) pour libérer le nom
+          (qui était écrasé à 1 lettre) ; en desktop ils restent inline (lg:w-auto). */}
+      <div className="flex w-full items-center justify-end gap-2 lg:w-auto lg:flex-none">
+        {item.trackingMode === 'quantity' ? (
+          <form action={(fd) => start(async () => { await decrementStockAction(fd); setAmount(''); await refresh(); })} className="flex items-center gap-1">
+            <span className="whitespace-nowrap text-sm font-bold">{item.quantity ?? 0} {item.unit ?? ''}</span>
+            <input type="hidden" name="stock_id" value={item.id} />
+            <input name="amount" type="number" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="−" aria-label="Quantité consommée" className="field-input w-14 px-1.5 py-1 text-xs" />
+            <button className="text-xs font-semibold text-green-strong hover:underline">consommer</button>
+          </form>
+        ) : (
+          <button type="button" onClick={() => start(async () => { await toggleStockPresenceAction(item.id, !item.present); await refresh(); })} className={`pill ${item.present ? 'bg-sage-tint text-green-strong' : 'bg-line text-ink-soft'}`}>
+            {item.present ? 'présent' : 'absent'}
+          </button>
+        )}
 
-      {!selectMode && (
-        <>
-          <DiscardButton onClick={onDiscard} />
-          <span className="hidden lg:flex"><RemoveButton onClick={onRemove} /></span>
-          <RowMenu item={item} locationOptions={locationOptions} onRemove={onRemove} />
-          {handle}
-        </>
-      )}
+        {!selectMode && (
+          <>
+            <DiscardButton onClick={onDiscard} />
+            <span className="hidden lg:flex"><RemoveButton onClick={onRemove} /></span>
+            <RowMenu item={item} locationOptions={locationOptions} onRemove={onRemove} />
+            {handle}
+          </>
+        )}
+      </div>
     </>
   );
 }
