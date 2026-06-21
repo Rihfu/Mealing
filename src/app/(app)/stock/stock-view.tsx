@@ -1,15 +1,66 @@
 'use client';
 
 import Link from 'next/link';
+import { useState, useTransition } from 'react';
 import { useCachedResource } from '@/lib/offline/cache';
 import { FoodLink } from '@/components/food-link';
+import { ProductIcon } from '@/lib/product-assets';
+import type { LowStockItem } from '@/lib/core';
 import { getStockSnapshotAction, type StockPageSnapshot } from './snapshot';
-import { StockRefreshProvider } from './stock-refresh';
+import { StockRefreshProvider, useStockRefresh } from './stock-refresh';
 import { StockList } from './stock-list';
 import { AddStock } from './add-stock';
 import { ManageLocations } from './locations-manager';
 import { MealReconcile } from './meal-reconcile';
+import { addRestockToShoppingAction } from './actions';
 import { UndoToastHost } from '../courses/undo-toast';
+
+/** Section « À racheter (stock bas) » : aliments sous leur seuil de réappro → ajout courses.
+ *  Enfant du StockRefreshProvider (utilise useStockRefresh pour réconcilier après ajout). */
+function RestockSection({ items }: { items: LowStockItem[] }) {
+  const refresh = useStockRefresh();
+  const [pending, start] = useTransition();
+  const [added, setAdded] = useState<Set<string>>(new Set());
+  if (items.length === 0) return null;
+
+  function add(it: LowStockItem) {
+    start(async () => {
+      await addRestockToShoppingAction(it.foodId, it.shortfall, it.unit);
+      setAdded((s) => new Set(s).add(it.foodId));
+      await refresh();
+    });
+  }
+
+  const qty = (n: number, u: string | null) => `${n}${u ? ` ${u}` : ''}`;
+
+  return (
+    <section className="rounded-2xl border border-orange/40 bg-[#fdf0e3] p-3.5">
+      <h2 className="mb-2 font-display text-base font-semibold">À racheter (stock bas)</h2>
+      <div className="grid gap-2 md:grid-cols-2">
+        {items.map((it) => (
+          <div key={it.foodId} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-surface px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sage-tint text-sage-deep">
+                <ProductIcon slug={it.iconSlug} size={18} />
+              </span>
+              <div className="min-w-0">
+                <FoodLink foodId={it.foodId} from="/stock" className="block truncate text-sm font-medium">{it.label}</FoodLink>
+                <span className="text-xs text-ink-soft">{qty(it.current, it.unit)} / seuil {qty(it.threshold, it.unit)}</span>
+              </div>
+            </div>
+            {added.has(it.foodId) ? (
+              <span className="pill flex-none bg-sage-tint text-green-strong">ajouté ✓</span>
+            ) : (
+              <button type="button" onClick={() => add(it)} disabled={pending} className="btn-secondary flex-none px-2.5 py-1.5 text-xs disabled:opacity-60">
+                + Courses
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 /**
  * Stock en CACHE-FIRST (Phase 2 PWA, parité Courses) : affichage instantané depuis
@@ -31,7 +82,7 @@ export function StockView() {
     return <p className="py-16 text-center text-sm text-ink-soft">Stock indisponible.</p>;
   }
 
-  const { groups, priority, locationOptions, orderedLocations } = data;
+  const { groups, priority, lowStock, locationOptions, orderedLocations } = data;
 
   return (
     <StockRefreshProvider value={refresh}>
@@ -76,6 +127,8 @@ export function StockView() {
                 </div>
               </section>
             )}
+
+            <RestockSection items={lowStock} />
 
             <div>
               <ManageLocations ordered={orderedLocations} />

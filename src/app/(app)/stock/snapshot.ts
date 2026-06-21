@@ -7,6 +7,9 @@ import {
   loadLocationOrder,
   findCatalogFoodIdByLabel,
   getOrCreateCatalogFood,
+  computeLowStock,
+  listRestockThresholds,
+  type LowStockItem,
 } from '@/lib/core';
 import { groupByLocation, orderedLocationKeys, locationView } from './locations';
 import type { SGroup, SItem } from './stock-list';
@@ -47,6 +50,7 @@ export interface PriorityItem {
 export interface StockPageSnapshot {
   groups: SGroup[];
   priority: PriorityItem[];
+  lowStock: LowStockItem[];
   locationOptions: { key: string; label: string }[];
   orderedLocations: OrderedLocation[];
 }
@@ -56,7 +60,7 @@ export async function getStockSnapshotAction(): Promise<StockPageSnapshot | null
   if (!userId || !profile?.household_id) return null;
   const householdId = profile.household_id as string;
 
-  const [{ data: stock }, expiries, customLocations, orderMap] = await Promise.all([
+  const [{ data: stock }, expiries, customLocations, orderMap, lowStock, thresholds] = await Promise.all([
     supabase
       .from('stock')
       .select(
@@ -70,7 +74,10 @@ export async function getStockSnapshotAction(): Promise<StockPageSnapshot | null
     getStockWithExpiry(supabase, householdId),
     listStorageLocations(supabase, householdId),
     loadLocationOrder(supabase, householdId),
+    computeLowStock(supabase, householdId),
+    listRestockThresholds(supabase, householdId),
   ]);
+  const thresholdByFood = new Map(thresholds.map((t) => [t.foodId, t]));
 
   // Backfill : TOUT article doit être lié au catalogue → fiche produit disponible (même
   // peu commun). Les articles ajoutés par l'agent IA (ou anciens) arrivaient food_id null
@@ -109,6 +116,8 @@ export async function getStockSnapshotAction(): Promise<StockPageSnapshot | null
       printedExpiry: r.printed_expiry,
       daysRemaining: e?.daysRemaining ?? null,
       expirySource: e?.expirySource ?? null,
+      restockThreshold: r.food_id ? thresholdByFood.get(r.food_id)?.minQuantity ?? null : null,
+      restockUnit: r.food_id ? thresholdByFood.get(r.food_id)?.unit ?? null : null,
     };
   });
 
@@ -128,5 +137,5 @@ export async function getStockSnapshotAction(): Promise<StockPageSnapshot | null
     isCustom: customKeys.has(k),
   }));
 
-  return { groups, priority, locationOptions, orderedLocations };
+  return { groups, priority, lowStock, locationOptions, orderedLocations };
 }

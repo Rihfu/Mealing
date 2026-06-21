@@ -23,6 +23,8 @@ import {
   removeStockItems,
   restoreStockItems,
   reorderStockItems,
+  setRestockThreshold,
+  addRestockToShopping,
   type StockTrackingMode,
   type FoodSuggestion,
   type MealStockSummary,
@@ -338,6 +340,21 @@ export async function toggleStockPresenceAction(stockId: string, present: boolea
   const { supabase } = await requireHousehold();
   await supabase.from('stock').update({ present }).eq('id', stockId);
   revalidatePath('/stock');
+}
+
+/** Réappro : définit le seuil de stock minimal d'un aliment (supprime si <= 0). */
+export async function setRestockThresholdAction(foodId: string, minQuantity: number, unit: string | null): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  await setRestockThreshold(supabase, householdId, foodId, minQuantity, unit);
+  revalidatePath('/stock');
+}
+
+/** Réappro : ajoute le manque d'un aliment à la liste de courses. */
+export async function addRestockToShoppingAction(foodId: string, quantity: number, unit: string | null): Promise<void> {
+  const { supabase, householdId } = await requireHousehold();
+  await addRestockToShopping(supabase, householdId, foodId, quantity, unit);
+  revalidatePath('/stock');
+  revalidatePath('/courses');
 }
 
 /**

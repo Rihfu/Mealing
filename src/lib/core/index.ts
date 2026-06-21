@@ -14,6 +14,7 @@ export * from './shopping-product';
 export * from './conservation';
 export * from './notification';
 export * from './stock';
+export * from './restock';
 export * from './storage';
 export * from './stock-events';
 export * from './stock-stats';

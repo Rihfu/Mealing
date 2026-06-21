@@ -7,6 +7,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useDndSensors } from '@/components/sortable';
 import { ProductIcon } from '@/lib/product-assets';
 import { FoodLink } from '@/components/food-link';
+import { UNIT_OPTIONS } from '@/lib/units';
 import { TrashIcon } from '../courses/shopping-list';
 import { pushUndoToast } from '../courses/undo-toast';
 import { useStockRefresh } from './stock-refresh';
@@ -19,6 +20,7 @@ import {
   setOpenedAction,
   setPrintedExpiryAction,
   setStockLocationAction,
+  setRestockThresholdAction,
   reorderStockAction,
   reorderLocationsAction,
   toggleStockPresenceAction,
@@ -42,6 +44,8 @@ export interface SItem {
   printedExpiry: string | null;
   daysRemaining: number | null;
   expirySource: 'printed' | 'estimate' | 'rule' | null;
+  restockThreshold: number | null; // seuil de réappro (sur l'aliment), null = aucun
+  restockUnit: string | null;
 }
 
 export interface SGroup {
@@ -146,11 +150,12 @@ function DiscardButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      aria-label="Jeter (périmé)"
+      aria-label="Jeter (périmé / gaspillage)"
       title="Jeter (périmé / gaspillage) — compte dans les statistiques"
-      className="flex h-7 w-7 items-center justify-center rounded-full bg-clay-tint/60 text-clay-deep transition-colors hover:bg-clay-tint"
+      className="flex shrink-0 items-center gap-1 rounded-full bg-clay-tint px-2.5 py-1 text-xs font-semibold text-[#c2774f] transition-colors hover:bg-clay"
     >
-      <TrashIcon size={15} />
+      <TrashIcon size={14} />
+      Jeter
     </button>
   );
 }
@@ -162,20 +167,23 @@ function RemoveButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      aria-label="Retirer du stock"
-      title="Retirer du stock (sans gaspillage)"
-      className="flex h-7 w-7 items-center justify-center rounded-full bg-line/60 text-ink-soft transition-colors hover:bg-line"
+      aria-label="Retirer du stock (sans gaspillage)"
+      title="Retirer du stock (sans gaspillage) — correction/doublon, ne compte pas"
+      className="flex shrink-0 items-center gap-1 rounded-full bg-line/60 px-2.5 py-1 text-xs font-semibold text-ink-soft transition-colors hover:bg-line"
     >
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+      Retirer
     </button>
   );
 }
 
-/** Menu « ⋯ » : actions secondaires (DLC, marquer ouvert, ranger lieu, jeter). */
+/** Menu « ⋯ » : actions secondaires (DLC, marquer ouvert, ranger lieu, retirer). */
 function RowMenu({ item, locationOptions, onRemove }: { item: SItem; locationOptions: LocOption[]; onRemove: () => void }) {
   const [open, setOpen] = useState(false);
-  const [sub, setSub] = useState<'none' | 'ranger' | 'dlc'>('none');
+  const [sub, setSub] = useState<'none' | 'ranger' | 'dlc' | 'restock'>('none');
   const [date, setDate] = useState(item.printedExpiry ?? '');
+  const [thr, setThr] = useState(item.restockThreshold != null ? String(item.restockThreshold) : '');
+  const [thrUnit, setThrUnit] = useState(item.restockUnit ?? item.unit ?? '');
   const [, start] = useTransition();
   const refresh = useStockRefresh();
   const ref = useRef<HTMLDivElement>(null);
@@ -225,6 +233,12 @@ function RowMenu({ item, locationOptions, onRemove }: { item: SItem; locationOpt
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" /><path d="M10 12h4" /></svg>
                 Ranger dans un lieu
               </button>
+              {item.foodId && (
+                <button type="button" className={it} onClick={() => setSub('restock')}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3v18h18" /><path d="M7 14l3-3 3 3 5-5" /></svg>
+                  {item.restockThreshold != null ? 'Modifier le seuil de réappro' : 'Seuil de réappro'}
+                </button>
+              )}
               <button type="button" className={`${it} text-ink-soft`} onClick={() => { close(); onRemove(); }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
                 Retirer du stock <span className="text-ink-soft/70">(sans gaspillage)</span>
@@ -238,6 +252,24 @@ function RowMenu({ item, locationOptions, onRemove }: { item: SItem; locationOpt
               <div className="mt-2 flex gap-2">
                 <button type="button" className="btn-primary flex-1 py-1.5 text-xs" onClick={() => start(async () => { await setPrintedExpiryAction(item.id, date || null); close(); await refresh(); })}>Enregistrer</button>
                 {item.printedExpiry && <button type="button" className="btn-secondary py-1.5 text-xs" onClick={() => start(async () => { await setPrintedExpiryAction(item.id, null); close(); await refresh(); })}>Effacer</button>}
+              </div>
+            </div>
+          )}
+          {sub === 'restock' && (
+            <div className="p-1.5">
+              <p className="mb-1 text-xs font-semibold text-ink-soft">Toujours en avoir au moins…</p>
+              <div className="flex gap-1.5">
+                <input type="number" step="any" min="0" value={thr} onChange={(e) => setThr(e.target.value)} placeholder="Qté" className="field-input w-20 text-sm" />
+                <select value={thrUnit} onChange={(e) => setThrUnit(e.target.value)} className="field-input min-w-0 flex-1 text-sm" aria-label="Unité">
+                  {UNIT_OPTIONS.map((u) => (
+                    <option key={u.code} value={u.code}>{u.label}</option>
+                  ))}
+                </select>
+              </div>
+              <p className="mt-1 text-[11px] leading-snug text-ink-soft">Sous ce seuil, l’article apparaît dans « À racheter » → ajout aux courses en 1 clic.</p>
+              <div className="mt-2 flex gap-2">
+                <button type="button" className="btn-primary flex-1 py-1.5 text-xs" onClick={() => start(async () => { await setRestockThresholdAction(item.foodId!, Number(thr) || 0, thrUnit || null); close(); await refresh(); })}>Enregistrer</button>
+                {item.restockThreshold != null && <button type="button" className="btn-secondary py-1.5 text-xs" onClick={() => start(async () => { await setRestockThresholdAction(item.foodId!, 0, null); close(); await refresh(); })}>Retirer</button>}
               </div>
             </div>
           )}
@@ -313,7 +345,7 @@ function RowBody({
           <span className="whitespace-nowrap text-sm font-bold">{item.quantity ?? 0} {item.unit ?? ''}</span>
           <input type="hidden" name="stock_id" value={item.id} />
           <input name="amount" type="number" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="−" aria-label="Quantité consommée" className="field-input w-14 px-1.5 py-1 text-xs" />
-          <button className="text-xs font-semibold text-green-strong hover:underline">retirer</button>
+          <button className="text-xs font-semibold text-green-strong hover:underline">consommer</button>
         </form>
       ) : (
         <button type="button" onClick={() => start(async () => { await toggleStockPresenceAction(item.id, !item.present); await refresh(); })} className={`pill ${item.present ? 'bg-sage-tint text-green-strong' : 'bg-line text-ink-soft'}`}>
@@ -404,7 +436,7 @@ function ClearLocation({ label, onConfirm }: { label: string; onConfirm: () => v
   }, [open]);
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-label={`Vider ${label}`} title="Retirer tous les articles de ce lieu" className="flex h-8 w-8 items-center justify-center rounded-full bg-clay-tint/50 text-clay-deep transition-colors hover:bg-clay-tint">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-label={`Vider ${label}`} title="Retirer tous les articles de ce lieu" className="flex h-8 w-8 items-center justify-center rounded-full bg-clay-tint/50 text-[#c2774f] transition-colors hover:bg-clay-tint">
         <TrashIcon size={16} />
       </button>
       {open && (

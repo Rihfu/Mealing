@@ -1022,6 +1022,45 @@ export type Database = {
           },
         ]
       }
+      restock_threshold: {
+        Row: {
+          food_id: string
+          household_id: string
+          min_quantity: number
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          food_id: string
+          household_id: string
+          min_quantity: number
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          food_id?: string
+          household_id?: string
+          min_quantity?: number
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restock_threshold_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: false
+            referencedRelation: "food"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "restock_threshold_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shopping_category: {
         Row: {
           created_at: string
