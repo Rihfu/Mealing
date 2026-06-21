@@ -46,6 +46,7 @@ export type Database = {
       conversation_ia: {
         Row: {
           content: string
+          conversation_id: string | null
           created_at: string
           id: string
           profile_id: string
@@ -53,6 +54,7 @@ export type Database = {
         }
         Insert: {
           content: string
+          conversation_id?: string | null
           created_at?: string
           id?: string
           profile_id: string
@@ -60,12 +62,20 @@ export type Database = {
         }
         Update: {
           content?: string
+          conversation_id?: string | null
           created_at?: string
           id?: string
           profile_id?: string
           role?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "conversation_ia_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ia_conversation"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "conversation_ia_profile_id_fkey"
             columns: ["profile_id"]
@@ -432,6 +442,79 @@ export type Database = {
           },
         ]
       }
+      ia_conversation: {
+        Row: {
+          created_at: string
+          id: string
+          profile_id: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          profile_id: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          profile_id?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ia_conversation_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_pref: {
+        Row: {
+          created_at: string
+          digest_hour: number
+          expiry_threshold_days: number
+          household_id: string
+          last_digest_sent_on: string | null
+          push_enabled: boolean
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          digest_hour?: number
+          expiry_threshold_days?: number
+          household_id: string
+          last_digest_sent_on?: string | null
+          push_enabled?: boolean
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          digest_hour?: number
+          expiry_threshold_days?: number
+          household_id?: string
+          last_digest_sent_on?: string | null
+          push_enabled?: boolean
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_pref_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: true
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nutrient_type: {
         Row: {
           category: string
@@ -720,6 +803,50 @@ export type Database = {
           },
           {
             foreignKeyName: "profile_nutrient_tracking_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_subscription: {
+        Row: {
+          auth: string
+          created_at: string
+          enabled: boolean
+          endpoint: string
+          id: string
+          label: string | null
+          last_seen_at: string
+          p256dh: string
+          profile_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          enabled?: boolean
+          endpoint: string
+          id?: string
+          label?: string | null
+          last_seen_at?: string
+          p256dh: string
+          profile_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          enabled?: boolean
+          endpoint?: string
+          id?: string
+          label?: string | null
+          last_seen_at?: string
+          p256dh?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscription_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profile"

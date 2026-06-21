@@ -331,20 +331,21 @@ Date du jour : ${isoDate(new Date())}.`;
 /** Produit une réponse OU un plan d'actions à confirmer. N'écrit rien. */
 export async function runAgent(
   db: DB,
-  params: { householdId: string; profileId: string; message: string },
+  params: { householdId: string; profileId: string; conversationId: string; message: string },
 ): Promise<AgentResult> {
   const provider = getAIProvider();
   if (!provider.chatWithTools) return { type: 'reply', message: "L'agent à outils n'est pas disponible." };
   const ctx: Ctx = { db, householdId: params.householdId };
 
+  // Historique SCOPÉ à la conversation courante (#3) : l'agent ne mélange plus toutes les
+  // conversations du profil. Borné par la limite de messages de la conversation (#4).
   const { data: history } = await db
     .from('conversation_ia')
     .select('role, content')
-    .eq('profile_id', params.profileId)
+    .eq('conversation_id', params.conversationId)
     .in('role', ['user', 'assistant'])
-    .order('created_at', { ascending: false })
-    .limit(6);
-  history?.reverse(); // remis dans l'ordre chronologique (on a pris les 6 plus récents)
+    .order('created_at', { ascending: true })
+    .limit(60);
 
   const messages: ToolChatMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT },
