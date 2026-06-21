@@ -319,14 +319,17 @@ export function AgentChat({
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,760px)_280px] lg:items-start lg:justify-center">
-      <div className="flex flex-col gap-3">
+    <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,760px)_280px] lg:items-start lg:justify-center">
+      {/* Mobile : colonne pleine hauteur (chat classique, saisie collée en bas). Desktop : flux normal. */}
+      <div className="flex h-[calc(100dvh-8.5rem)] min-w-0 flex-col gap-2 lg:h-auto lg:gap-3">
         <div className="min-w-0">
-          <h1 className="font-display text-2xl font-semibold tracking-tight">Assistant</h1>
+          <h1 className="font-display text-xl font-semibold tracking-tight lg:text-2xl">Assistant</h1>
           <p className="mt-0.5 truncate text-xs text-ink-soft">{currentTitle}</p>
         </div>
 
-        <div className="flex min-h-[40vh] flex-col gap-3 lg:min-h-[56vh]">
+        {/* Zone messages : occupe l'espace + scroll (mobile) ; ancrée en bas (récents près de la saisie). */}
+        <div className="min-h-0 flex-1 overflow-y-auto lg:min-h-[56vh] lg:flex-none lg:overflow-visible">
+          <div className="flex min-h-full flex-col justify-end gap-3 lg:min-h-0 lg:justify-start">
           {messages.map((m, i) => (
             <div
               key={i}
@@ -376,9 +379,10 @@ export function AgentChat({
             </p>
           )}
           <div ref={bottomRef} />
+          </div>
         </div>
 
-        <div className="sticky bottom-0 z-10 -mx-4 border-t border-line bg-surface px-4 pb-3 pt-2 lg:mx-0 lg:rounded-2xl lg:border lg:shadow-soft">
+        <div className="-mx-4 border-t border-line bg-surface px-4 pb-3 pt-2 lg:sticky lg:bottom-0 lg:z-10 lg:mx-0 lg:rounded-2xl lg:border lg:shadow-soft">
           {limitReached && (
             <div className="mb-2 flex flex-col gap-2 rounded-xl border border-orange/50 bg-[#fdf0e3] p-3 text-xs sm:flex-row sm:items-center sm:justify-between">
               <span className="text-ink">

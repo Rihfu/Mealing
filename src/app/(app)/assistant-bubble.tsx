@@ -104,32 +104,26 @@ export function AssistantBubble() {
     if (open) bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [messages, plan, pending, open]);
 
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      // On enregistre TOUJOURS le départ (même mobile) → sinon onPointerUp ne peut pas
-      // distinguer un tap et l'ouverture ne se déclenche jamais. Le déplacement, lui, est
-      // désactivé sur mobile (la fenêtre s'ouvre en feuille du bas, le lanceur reste fixe).
-      dragRef.current = { sx: e.clientX, sy: e.clientY, ox: posRef.current.x, oy: posRef.current.y, moved: false };
-      if (!isMobile) (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    },
-    [isMobile],
-  );
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    // Départ toujours enregistré (tap → ouverture, glisser → déplacement). Le pointer capture
+    // garde les events même si le doigt sort de la bulle (drag fluide, desktop ET mobile).
+    dragRef.current = { sx: e.clientX, sy: e.clientY, ox: posRef.current.x, oy: posRef.current.y, moved: false };
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  }, []);
 
-  const onPointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      const d = dragRef.current;
-      if (!d || isMobile) return; // pas de glisser sur mobile
-      const dx = e.clientX - d.sx;
-      const dy = e.clientY - d.sy;
-      if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true;
-      if (d.moved) {
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-        setPos({ x: clamp(d.ox + dx, 8, vw - BUBBLE - 8), y: clamp(d.oy + dy, topSafeRef.current, vh - BUBBLE - 8) });
-      }
-    },
-    [isMobile],
-  );
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const dx = e.clientX - d.sx;
+    const dy = e.clientY - d.sy;
+    // Seuil un peu plus haut (tactile = plus de tremblement) pour bien distinguer tap/glisser.
+    if (Math.abs(dx) + Math.abs(dy) > 6) d.moved = true;
+    if (d.moved) {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      setPos({ x: clamp(d.ox + dx, 8, vw - BUBBLE - 8), y: clamp(d.oy + dy, topSafeRef.current, vh - BUBBLE - 8) });
+    }
+  }, []);
 
   const onPointerUp = useCallback(() => {
     const d = dragRef.current;
