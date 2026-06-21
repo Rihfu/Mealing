@@ -13,6 +13,11 @@ const serverSchema = z.object({
   USDA_API_KEY: z.string().min(1, 'USDA_API_KEY manquant'),
   // Nécessaire seulement pour les opérations admin/serveur (contourne le RLS).
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+  // Notifications push (Web Push / VAPID) — OPTIONNELLES : sans elles, le push est
+  // simplement indisponible (l'app fonctionne normalement). Publique = aussi côté client.
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().optional(),
 });
 
 export const serverEnv = serverSchema.parse({
@@ -20,4 +25,7 @@ export const serverEnv = serverSchema.parse({
   GROQ_API_KEY: process.env.GROQ_API_KEY,
   USDA_API_KEY: process.env.USDA_API_KEY,
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
+  VAPID_SUBJECT: process.env.VAPID_SUBJECT,
 });
