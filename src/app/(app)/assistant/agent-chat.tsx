@@ -35,7 +35,7 @@ interface AgentContext {
 
 function relDate(iso: string): string {
   const d = Math.round((Date.now() - new Date(iso).getTime()) / 86_400_000);
-  if (d <= 0) return "auj.";
+  if (d <= 0) return 'auj.';
   if (d === 1) return 'hier';
   if (d < 7) return `${d} j`;
   return `${Math.round(d / 7)} sem`;
@@ -214,112 +214,116 @@ export function AgentChat({
     setInput(text);
   }
 
+  // Liste déroulante des conversations (réutilisée dans la barre d'outils, ouverte vers le haut).
+  const conversationMenu = (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => {
+          if (menuOpen) closeMenu();
+          else {
+            setMenuOpen(true);
+            void refreshList();
+          }
+        }}
+        className="flex items-center gap-1 rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-green-strong hover:text-green-strong"
+      >
+        Conversations
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      {menuOpen && (
+        <div className="absolute bottom-full left-0 z-30 mb-1 w-72 rounded-2xl border border-line bg-surface p-1.5 shadow-soft">
+          <button
+            type="button"
+            onClick={newConversation}
+            className="mb-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm font-semibold text-green-strong hover:bg-sage-tint/50"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            Nouvelle conversation
+          </button>
+          <ul className="max-h-72 overflow-auto">
+            {conversations.length === 0 && (
+              <li className="px-2.5 py-2 text-xs text-ink-soft">Aucune conversation pour l’instant.</li>
+            )}
+            {conversations.map((c) => (
+              <li
+                key={c.id}
+                className={`flex items-center gap-1 rounded-xl ${c.id === conversationId ? 'bg-sage-tint/60' : 'hover:bg-sage-tint/40'}`}
+              >
+                {editingId === c.id ? (
+                  <>
+                    <input
+                      autoFocus
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void saveRename(c.id);
+                        else if (e.key === 'Escape') setEditingId(null);
+                      }}
+                      className="min-w-0 flex-1 rounded-lg border border-green-strong bg-paper px-2 py-1.5 text-sm focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => saveRename(c.id)}
+                      aria-label="Enregistrer le nom"
+                      title="Enregistrer"
+                      className="mr-1 flex h-7 w-7 flex-none items-center justify-center rounded-full text-green-strong hover:bg-sage-tint"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => switchTo(c.id)} className="min-w-0 flex-1 px-2.5 py-2 text-left">
+                      <span className="block truncate text-sm font-medium text-ink">{c.title || 'Conversation'}</span>
+                      <span className="text-xs text-ink-soft">{relDate(c.updatedAt)} · {c.messageCount} msg</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startRename(c)}
+                      aria-label="Renommer cette conversation"
+                      title="Renommer"
+                      className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-ink-soft hover:bg-sage-tint hover:text-green-strong"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeConversation(c.id)}
+                      aria-label="Supprimer cette conversation"
+                      title="Supprimer cette conversation"
+                      className="mr-1 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-clay-tint/50 text-[#c2774f] hover:bg-clay-tint"
+                    >
+                      <TrashIcon size={14} />
+                    </button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+
+  // Jauge de limite : verte → orange (≥ 80 %) → terracotta (au seuil).
+  const limitGauge = (
+    <span
+      title="Messages de cette conversation — au seuil, l'assistant propose d'en ouvrir une nouvelle (coût maîtrisé)."
+      className={`flex-none rounded-full px-2.5 py-1 text-xs font-semibold ${
+        limitReached ? 'bg-clay-tint text-[#c2774f]' : ratio >= 0.8 ? 'bg-orange/20 text-orange' : 'bg-sage-tint text-green-strong'
+      }`}
+    >
+      {count}/{limit}
+    </span>
+  );
+
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,760px)_280px] lg:items-start lg:justify-center">
       <div className="flex flex-col gap-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h1 className="font-display text-2xl font-semibold tracking-tight">Assistant</h1>
-            <p className="mt-0.5 truncate text-xs text-ink-soft">{currentTitle}</p>
-          </div>
-          <div className="flex flex-none items-center gap-2">
-            <span
-              title="Messages de cette conversation — au seuil, l'assistant propose d'en ouvrir une nouvelle (coût maîtrisé)."
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                limitReached ? 'bg-clay-tint text-[#c2774f]' : ratio >= 0.8 ? 'bg-orange/20 text-orange' : 'bg-sage-tint text-green-strong'
-              }`}
-            >
-              {count}/{limit}
-            </span>
-            <div ref={menuRef} className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  if (menuOpen) closeMenu();
-                  else {
-                    setMenuOpen(true);
-                    void refreshList();
-                  }
-                }}
-                className="flex items-center gap-1 rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-ink-soft hover:border-green-strong hover:text-green-strong"
-              >
-                Conversations
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
-              </button>
-              {menuOpen && (
-                <div className="absolute right-0 top-full z-30 mt-1 w-72 rounded-2xl border border-line bg-surface p-1.5 shadow-soft">
-                  <button
-                    type="button"
-                    onClick={newConversation}
-                    className="mb-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm font-semibold text-green-strong hover:bg-sage-tint/50"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-                    Nouvelle conversation
-                  </button>
-                  <ul className="max-h-72 overflow-auto">
-                    {conversations.length === 0 && (
-                      <li className="px-2.5 py-2 text-xs text-ink-soft">Aucune conversation pour l’instant.</li>
-                    )}
-                    {conversations.map((c) => (
-                      <li
-                        key={c.id}
-                        className={`flex items-center gap-1 rounded-xl ${c.id === conversationId ? 'bg-sage-tint/60' : 'hover:bg-sage-tint/40'}`}
-                      >
-                        {editingId === c.id ? (
-                          <>
-                            <input
-                              autoFocus
-                              value={editTitle}
-                              onChange={(e) => setEditTitle(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') void saveRename(c.id);
-                                else if (e.key === 'Escape') setEditingId(null);
-                              }}
-                              className="min-w-0 flex-1 rounded-lg border border-green-strong bg-paper px-2 py-1.5 text-sm focus:outline-none"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => saveRename(c.id)}
-                              aria-label="Enregistrer le nom"
-                              title="Enregistrer"
-                              className="mr-1 flex h-7 w-7 flex-none items-center justify-center rounded-full text-green-strong hover:bg-sage-tint"
-                            >
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button type="button" onClick={() => switchTo(c.id)} className="min-w-0 flex-1 px-2.5 py-2 text-left">
-                              <span className="block truncate text-sm font-medium text-ink">{c.title || 'Conversation'}</span>
-                              <span className="text-xs text-ink-soft">{relDate(c.updatedAt)} · {c.messageCount} msg</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => startRename(c)}
-                              aria-label="Renommer cette conversation"
-                              title="Renommer"
-                              className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-ink-soft hover:bg-sage-tint hover:text-green-strong"
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => removeConversation(c.id)}
-                              aria-label="Supprimer cette conversation"
-                              title="Supprimer cette conversation"
-                              className="mr-1 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-clay-tint/50 text-[#c2774f] hover:bg-clay-tint"
-                            >
-                              <TrashIcon size={14} />
-                            </button>
-                          </>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
+        <div className="min-w-0">
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Assistant</h1>
+          <p className="mt-0.5 truncate text-xs text-ink-soft">{currentTitle}</p>
         </div>
 
         <div className="flex min-h-[40vh] flex-col gap-3 lg:min-h-[56vh]">
@@ -390,6 +394,13 @@ export function AgentChat({
               </button>
             </div>
           )}
+
+          {/* Barre d'outils — sélecteur de conversation + jauge de limite, collés à la saisie (toujours visibles). */}
+          <div className="mb-2 flex items-center justify-between gap-2">
+            {conversationMenu}
+            {limitGauge}
+          </div>
+
           <div className="mb-2 flex gap-2 overflow-x-auto">
             {['Prépare ma liste de la semaine', 'Reconduis mes dernières courses', 'Prix du saumon ?'].map((s) => (
               <button key={s} type="button" onClick={() => pick(s)} className="nav-pill bg-sage-tint text-sage-deep">

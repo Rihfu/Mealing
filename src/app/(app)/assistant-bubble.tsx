@@ -34,6 +34,9 @@ export function AssistantBubble() {
   const [isMobile, setIsMobile] = useState(false);
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [open, setOpen] = useState(false);
+  // Marge haute = hauteur de l'en-tête sticky (+8) → la bulle ET la fenêtre ne passent
+  // jamais SOUS la bande de navigation (sinon inaccessibles / coupées).
+  const [topSafe, setTopSafe] = useState(72);
 
   const [conversationId, setConversationId] = useState('');
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -42,6 +45,7 @@ export function AssistantBubble() {
   const [plan, setPlan] = useState<ProposedAction[] | null>(null);
 
   const posRef = useRef(pos);
+  const topSafeRef = useRef(72);
   const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -49,12 +53,21 @@ export function AssistantBubble() {
     posRef.current = pos;
   }, [pos]);
 
+  /** Hauteur de l'en-tête sticky + petite marge (recalculée au montage et au resize). */
+  function headerSafe(): number {
+    const h = document.querySelector('header')?.getBoundingClientRect().height ?? 64;
+    return Math.round(h) + 8;
+  }
+
   // Init position + détection mobile (lecture de `window` → uniquement après montage).
   // Déféré via rAF : le setState n'est pas dans le corps synchrone de l'effet (cascading renders).
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
+      const top = headerSafe();
+      topSafeRef.current = top;
+      setTopSafe(top);
       setIsMobile(vw < 640);
       let p = { x: vw - BUBBLE - 20, y: vh - BUBBLE - 24 };
       try {
@@ -66,7 +79,7 @@ export function AssistantBubble() {
       } catch {
         /* ignore */
       }
-      setPos({ x: clamp(p.x, 8, vw - BUBBLE - 8), y: clamp(p.y, 8, vh - BUBBLE - 8) });
+      setPos({ x: clamp(p.x, 8, vw - BUBBLE - 8), y: clamp(p.y, top, vh - BUBBLE - 8) });
       setMounted(true);
     });
     return () => cancelAnimationFrame(raf);
@@ -77,8 +90,11 @@ export function AssistantBubble() {
     const onResize = () => {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
+      const top = headerSafe();
+      topSafeRef.current = top;
+      setTopSafe(top);
       setIsMobile(vw < 640);
-      setPos((p) => ({ x: clamp(p.x, 8, vw - BUBBLE - 8), y: clamp(p.y, 8, vh - BUBBLE - 8) }));
+      setPos((p) => ({ x: clamp(p.x, 8, vw - BUBBLE - 8), y: clamp(p.y, top, vh - BUBBLE - 8) }));
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
@@ -106,7 +122,7 @@ export function AssistantBubble() {
     if (d.moved) {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
-      setPos({ x: clamp(d.ox + dx, 8, vw - BUBBLE - 8), y: clamp(d.oy + dy, 8, vh - BUBBLE - 8) });
+      setPos({ x: clamp(d.ox + dx, 8, vw - BUBBLE - 8), y: clamp(d.oy + dy, topSafeRef.current, vh - BUBBLE - 8) });
     }
   }, []);
 
@@ -181,12 +197,14 @@ export function AssistantBubble() {
 
   if (!mounted || pathname === '/assistant') return null;
 
-  // Position du panneau desktop : ancré au-dessus de la bulle (ou en dessous si pas la place).
+  // Position du panneau desktop : ancré au-dessus de la bulle (ou en dessous si pas la place),
+  // jamais plus haut que `topSafe` (sous l'en-tête) ni hors de l'écran.
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const panelLeft = clamp(pos.x + BUBBLE - PANEL_W, 8, Math.max(8, vw - PANEL_W - 8));
   let panelTop = pos.y - PANEL_H - 12;
-  if (panelTop < 8) panelTop = clamp(pos.y + BUBBLE + 12, 8, Math.max(8, vh - PANEL_H - 8));
+  if (panelTop < topSafe) panelTop = pos.y + BUBBLE + 12; // pas la place au-dessus → en dessous
+  panelTop = clamp(panelTop, topSafe, Math.max(topSafe, vh - PANEL_H - 8));
 
   return (
     <>
