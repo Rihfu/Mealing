@@ -7,6 +7,10 @@
 
 [build.environment]
   NODE_VERSION = "20.19.0"
+  # Le scanner de secrets Netlify ignore ces clés PUBLIQUES `NEXT_PUBLIC_*` (inlinées
+  # volontairement dans le bundle client). Ne JAMAIS y mettre de secret (ex. VAPID_PRIVATE_KEY
+  # reste scannée). Versionné ici pour qu'un déploiement n'échoue pas dessus.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_VAPID_PUBLIC_KEY"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
