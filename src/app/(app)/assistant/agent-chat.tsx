@@ -13,6 +13,8 @@ import {
 } from './actions';
 import type { ProposedAction } from '@/lib/ai/agent';
 import { TrashIcon } from '../courses/shopping-list';
+import { transcribeTextAction } from '../voice-actions';
+import { useAudioRecorder, audioExt } from '@/components/use-audio-recorder';
 
 interface Msg {
   role: 'user' | 'assistant';
@@ -63,6 +65,8 @@ export function AgentChat({
   const [menuOpen, setMenuOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const [autoSend, setAutoSend] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -86,6 +90,13 @@ export function AgentChat({
     return () => document.removeEventListener('pointerdown', onDoc);
   }, [menuOpen]);
 
+  // Préférence « envoi auto après dictée » mémorisée localement (par appareil). Lue APRÈS
+  // montage (pas en init) pour éviter une divergence d'hydratation (localStorage absent en SSR).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync d'un état client persistant (localStorage), hydration-safe
+    setAutoSend(localStorage.getItem('assistant:autoSend') === '1');
+  }, []);
+
   const count = messages.length;
   const ratio = limit > 0 ? count / limit : 0;
   const limitReached = count >= limit;
@@ -96,9 +107,8 @@ export function AgentChat({
     setConversations(await listConversationsAction());
   }
 
-  async function send(e: React.FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
+  async function sendText(raw: string) {
+    const text = raw.trim();
     if (!text || pending) return;
     setInput('');
     setPlan(null);
@@ -116,6 +126,31 @@ export function AgentChat({
       setPending(false);
     }
   }
+
+  function send(e: React.FormEvent) {
+    e.preventDefault();
+    void sendText(input);
+  }
+
+  // Dictée vocale (gpt-4o-transcribe) : au stop, on transcrit puis — selon le switch
+  // « Envoi auto » — on envoie directement, sinon on remplit la zone de saisie (révision).
+  async function onAudio(blob: Blob, mime: string) {
+    setTranscribing(true);
+    try {
+      const fd = new FormData();
+      fd.append('audio', new File([blob], `dictee.${audioExt(mime)}`, { type: mime }));
+      const { text } = await transcribeTextAction(fd);
+      const t = text.trim();
+      if (!t) return;
+      if (autoSend) void sendText(t);
+      else setInput((prev) => (prev ? `${prev} ${t}` : t));
+    } catch {
+      // Silencieux : l'utilisateur peut réessayer (l'erreur micro est gérée par le hook).
+    } finally {
+      setTranscribing(false);
+    }
+  }
+  const recorder = useAudioRecorder(onAudio);
 
   async function confirm() {
     if (!plan || pending) return;
@@ -402,7 +437,28 @@ export function AgentChat({
           {/* Barre d'outils — sélecteur de conversation + jauge de limite, collés à la saisie (toujours visibles). */}
           <div className="mb-2 flex items-center justify-between gap-2">
             {conversationMenu}
-            {limitGauge}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoSend}
+                onClick={() =>
+                  setAutoSend((s) => {
+                    const next = !s;
+                    localStorage.setItem('assistant:autoSend', next ? '1' : '0');
+                    return next;
+                  })
+                }
+                title="Après une dictée : envoyer directement, ou seulement remplir la zone de saisie"
+                className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1.5 text-xs font-semibold text-ink-soft"
+              >
+                <span className={`flex h-4 w-7 shrink-0 items-center rounded-full p-0.5 transition-colors ${autoSend ? 'bg-green-strong' : 'bg-line-strong'}`}>
+                  <span className={`block h-3 w-3 rounded-full bg-white transition-transform ${autoSend ? 'translate-x-3' : ''}`} />
+                </span>
+                Envoi auto
+              </button>
+              {limitGauge}
+            </div>
           </div>
 
           <div className="mb-2 flex gap-2 overflow-x-auto">
@@ -412,13 +468,35 @@ export function AgentChat({
               </button>
             ))}
           </div>
+          {recorder.error && <p className="mb-1.5 text-xs text-clay">{recorder.error}</p>}
           <form onSubmit={send} className="flex items-center gap-2">
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Écris à l’assistant…"
+              placeholder={recorder.recording ? 'Enregistrement…' : transcribing ? 'Transcription…' : 'Écris à l’assistant…'}
               className="flex-1 rounded-full border border-line bg-paper px-4 py-2.5 text-sm focus:outline-2 focus:outline-green"
             />
+            <button
+              type="button"
+              onClick={recorder.recording ? recorder.stop : recorder.start}
+              disabled={pending || transcribing}
+              aria-label={recorder.recording ? 'Arrêter la dictée' : 'Dicter'}
+              title="Dicter (voix)"
+              className={`flex h-10 w-10 flex-none items-center justify-center rounded-full disabled:opacity-50 ${
+                recorder.recording ? 'bg-red text-white' : 'border border-line text-ink-soft hover:text-green-strong'
+              }`}
+            >
+              {transcribing ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              ) : recorder.recording ? (
+                <span className="h-3.5 w-3.5 rounded-sm bg-white" />
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="9" y="2" width="6" height="12" rx="3" />
+                  <path d="M5 10a7 7 0 0 0 14 0M12 19v3" />
+                </svg>
+              )}
+            </button>
             <button
               type="submit"
               disabled={pending || !input.trim()}

@@ -23,3 +23,18 @@ export async function transcribeDictationAction(
   const items = await parseStockDictation(text);
   return { transcript: text, items };
 }
+
+/**
+ * Transcription SEULE (audio → texte), sans découpe : pour la saisie vocale de
+ * l'assistant (on veut le message brut, pas une liste d'articles). Garde-fou auth.
+ */
+export async function transcribeTextAction(formData: FormData): Promise<{ text: string }> {
+  const { userId, profile } = await getAuthContext();
+  if (!userId || !profile?.household_id) throw new Error('Contexte foyer manquant.');
+  const file = formData.get('audio');
+  if (!(file instanceof Blob) || file.size === 0) return { text: '' };
+  const ai = getAIProvider();
+  if (!ai.transcribe) return { text: '' };
+  const { text } = await ai.transcribe(file, { language: 'fr' });
+  return { text };
+}
