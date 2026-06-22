@@ -1,0 +1,369 @@
+'use client';
+
+import { useRef, useState, useTransition } from 'react';
+import { UNIT_OPTIONS } from '@/lib/units';
+import { useStockRefresh } from './stock-refresh';
+import { transcribeStockAction, addStockBulkAction, type BulkStockItem } from './voice-actions';
+
+type Phase = 'idle' | 'recording' | 'transcribing' | 'review' | 'done';
+
+interface ReviewRow {
+  id: string;
+  name: string;
+  quantity: string;
+  unit: string;
+  location: string;
+}
+
+function extFromMime(m: string): string {
+  if (m.includes('webm')) return 'webm';
+  if (m.includes('mp4')) return 'mp4';
+  if (m.includes('ogg')) return 'ogg';
+  if (m.includes('mpeg')) return 'mp3';
+  if (m.includes('wav')) return 'wav';
+  return 'webm';
+}
+
+function MicIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="9" y="2" width="6" height="12" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0M12 19v3" />
+    </svg>
+  );
+}
+
+/**
+ * Recensement vocal du stock : l'utilisateur ÉNONCE sa liste, on transcrit
+ * (gpt-4o-transcribe), on découpe en articles (nature + qté + unité + lieu), il
+ * VALIDE/CORRIGE, puis ajout en lot. Pensé pour le 1ᵉʳ remplissage (étape la plus
+ * abandonnée) + les gros réassorts. `variant` : « hero » (empty-state) ou « inline » (bouton).
+ */
+export function VoiceStockCapture({
+  locationOptions,
+  variant = 'inline',
+}: {
+  locationOptions: { key: string; label: string }[];
+  variant?: 'inline' | 'hero';
+}) {
+  const refresh = useStockRefresh();
+  const [open, setOpen] = useState(false);
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [error, setError] = useState<string | null>(null);
+  const [rows, setRows] = useState<ReviewRow[]>([]);
+  const [defaultLocation, setDefaultLocation] = useState('');
+  const [addedCount, setAddedCount] = useState(0);
+  const [submitting, start] = useTransition();
+
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  function close() {
+    // Coupe un enregistrement en cours, le cas échéant.
+    if (recRef.current && recRef.current.state !== 'inactive') {
+      recRef.current.stream.getTracks().forEach((t) => t.stop());
+      recRef.current = null;
+    }
+    setOpen(false);
+    setPhase('idle');
+    setError(null);
+    setRows([]);
+    setDefaultLocation('');
+    setAddedCount(0);
+  }
+
+  async function startRecording() {
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunksRef.current = [];
+      const rec = new MediaRecorder(stream);
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      rec.onstop = () => {
+        const type = rec.mimeType || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type });
+        stream.getTracks().forEach((t) => t.stop());
+        void transcribe(blob, type);
+      };
+      recRef.current = rec;
+      rec.start();
+      setPhase('recording');
+    } catch {
+      setError("Micro indisponible — autorise l'accès au microphone pour dicter ta liste.");
+      setPhase('idle');
+    }
+  }
+
+  function stopRecording() {
+    recRef.current?.stop();
+    recRef.current = null;
+    setPhase('transcribing');
+  }
+
+  async function transcribe(blob: Blob, type: string) {
+    try {
+      const fd = new FormData();
+      fd.append('audio', new File([blob], `dictee.${extFromMime(type)}`, { type }));
+      const { items } = await transcribeStockAction(fd);
+      if (items.length === 0) {
+        setError("Je n'ai rien compris — réessaie en parlant distinctement.");
+        setPhase('idle');
+        return;
+      }
+      setRows(
+        items.map((it, i) => ({
+          id: `r${i}`,
+          name: it.name,
+          quantity: it.quantity != null ? String(it.quantity) : '',
+          unit: it.unit ?? '',
+          location: it.location ?? '',
+        })),
+      );
+      setPhase('review');
+    } catch {
+      setError('La transcription a échoué — réessaie dans un instant.');
+      setPhase('idle');
+    }
+  }
+
+  function updateRow(id: string, patch: Partial<ReviewRow>) {
+    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+  function removeRow(id: string) {
+    setRows((rs) => rs.filter((r) => r.id !== id));
+  }
+  function addRow() {
+    setRows((rs) => [...rs, { id: `r${Date.now()}`, name: '', quantity: '', unit: '', location: '' }]);
+  }
+
+  function submit() {
+    const payload: BulkStockItem[] = rows
+      .map((r) => {
+        const q = r.quantity.trim() !== '' ? Number(r.quantity.replace(',', '.')) : NaN;
+        return {
+          label: r.name.trim(),
+          quantity: !Number.isNaN(q) && q > 0 ? q : null,
+          unit: r.unit || null,
+          location: r.location || defaultLocation || null,
+        };
+      })
+      .filter((r) => r.label.length > 0);
+    if (payload.length === 0) return;
+    start(async () => {
+      const { added } = await addStockBulkAction(payload);
+      await refresh();
+      setAddedCount(added);
+      setPhase('done');
+    });
+  }
+
+  const trigger =
+    variant === 'hero' ? (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center justify-center gap-3 rounded-2xl border border-green-strong bg-sage-tint px-4 py-4 font-display text-base font-semibold text-green-strong"
+      >
+        <MicIcon size={22} />
+        Remplis ton stock en parlant
+      </button>
+    ) : (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="btn-secondary mt-2 flex w-full items-center justify-center gap-2 py-2.5 text-sm"
+      >
+        <MicIcon size={18} />
+        Dicter ma liste
+      </button>
+    );
+
+  return (
+    <>
+      {trigger}
+
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
+          style={{ background: 'rgba(40,38,34,0.32)' }}
+          onClick={close}
+        >
+          <div
+            className="flex max-h-[92vh] w-full max-w-md flex-col rounded-t-2xl border border-line bg-surface p-5 shadow-soft sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-xl font-semibold">Dicter mon stock</h3>
+              <button type="button" onClick={close} className="text-ink-soft hover:text-ink" aria-label="Fermer">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Phase : enregistrement / prêt */}
+            {(phase === 'idle' || phase === 'recording') && (
+              <div className="flex flex-col items-center gap-4 py-8">
+                <p className="text-center text-sm text-ink-soft">
+                  Cite ce que tu as chez toi — « lait, six œufs, deux kilos de farine, des pommes au frigo… ». On le rangera après.
+                </p>
+                {phase === 'recording' ? (
+                  <button
+                    type="button"
+                    onClick={stopRecording}
+                    className="flex h-20 w-20 items-center justify-center rounded-full bg-red text-white shadow-soft"
+                    aria-label="Arrêter l'enregistrement"
+                  >
+                    <span className="h-6 w-6 rounded-sm bg-white" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startRecording}
+                    className="flex h-20 w-20 items-center justify-center rounded-full bg-green-strong text-white shadow-soft"
+                    aria-label="Démarrer l'enregistrement"
+                  >
+                    <MicIcon size={30} />
+                  </button>
+                )}
+                <span className="text-xs font-semibold text-ink-soft">
+                  {phase === 'recording' ? 'Enregistrement… appuie pour arrêter' : 'Appuie pour parler'}
+                </span>
+                {error && <p className="text-center text-sm text-clay">{error}</p>}
+              </div>
+            )}
+
+            {/* Phase : transcription en cours */}
+            {phase === 'transcribing' && (
+              <div className="flex flex-col items-center gap-3 py-12">
+                <span className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-green-strong" />
+                <p className="text-sm text-ink-soft">Transcription en cours…</p>
+              </div>
+            )}
+
+            {/* Phase : revue / correction */}
+            {phase === 'review' && (
+              <>
+                <p className="mt-1 text-xs text-ink-soft">Vérifie et corrige avant d&apos;ajouter. Le lieu peut rester vide.</p>
+                <div className="mt-2 flex items-center gap-2 text-sm">
+                  <label htmlFor="default-loc" className="shrink-0 text-xs font-semibold text-ink-soft">
+                    Lieu par défaut
+                  </label>
+                  <select
+                    id="default-loc"
+                    value={defaultLocation}
+                    onChange={(e) => setDefaultLocation(e.target.value)}
+                    className="field-input flex-1 px-2 py-1 text-sm"
+                  >
+                    <option value="">— aucun</option>
+                    {locationOptions.map((l) => (
+                      <option key={l.key} value={l.key}>
+                        {l.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <ul className="my-3 flex-1 divide-y divide-line overflow-auto rounded-xl border border-line">
+                  {rows.map((r) => (
+                    <li key={r.id} className="flex flex-col gap-2 p-2.5">
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={r.name}
+                          onChange={(e) => updateRow(r.id, { name: e.target.value })}
+                          placeholder="Aliment"
+                          aria-label="Aliment"
+                          className="field-input min-w-0 flex-1 px-2 py-1 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeRow(r.id)}
+                          className="shrink-0 text-ink-soft hover:text-clay"
+                          aria-label={`Retirer ${r.name || 'cet article'}`}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M18 6 6 18M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          value={r.quantity}
+                          onChange={(e) => updateRow(r.id, { quantity: e.target.value })}
+                          type="number"
+                          step="any"
+                          inputMode="decimal"
+                          placeholder="Qté"
+                          aria-label="Quantité"
+                          className="field-input w-16 px-2 py-1 text-sm"
+                        />
+                        <select
+                          value={r.unit}
+                          onChange={(e) => updateRow(r.id, { unit: e.target.value })}
+                          aria-label="Unité"
+                          className="field-input w-24 px-2 py-1 text-sm"
+                        >
+                          <option value="">—</option>
+                          {UNIT_OPTIONS.map((u) => (
+                            <option key={u.code} value={u.code}>
+                              {u.label}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={r.location}
+                          onChange={(e) => updateRow(r.id, { location: e.target.value })}
+                          aria-label="Lieu"
+                          className="field-input ml-auto w-32 px-2 py-1 text-sm"
+                        >
+                          <option value="">Lieu : défaut</option>
+                          {locationOptions.map((l) => (
+                            <option key={l.key} value={l.key}>
+                              {l.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+
+                <button type="button" onClick={addRow} className="mb-3 self-start text-sm font-semibold text-green-strong">
+                  + Ajouter une ligne
+                </button>
+
+                <div className="flex gap-2">
+                  <button type="button" onClick={submit} disabled={submitting} className="btn-primary flex-1 py-2.5 disabled:opacity-60">
+                    {submitting ? 'Ajout…' : `Ajouter au stock (${rows.filter((r) => r.name.trim()).length})`}
+                  </button>
+                  <button type="button" onClick={() => setPhase('idle')} disabled={submitting} className="btn-secondary py-2.5">
+                    Recommencer
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Phase : terminé */}
+            {phase === 'done' && (
+              <div className="flex flex-col items-center gap-4 py-10">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-sage-tint text-green-strong">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                </span>
+                <p className="text-center text-sm font-semibold">
+                  {addedCount} article{addedCount > 1 ? 's' : ''} ajouté{addedCount > 1 ? 's' : ''} au stock.
+                </p>
+                <button type="button" onClick={close} className="btn-primary px-6 py-2.5">
+                  Terminé
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

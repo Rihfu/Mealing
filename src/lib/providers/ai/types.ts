@@ -78,4 +78,10 @@ export interface AIProvider {
     tools: ToolDefinition[],
     options?: ChatOptions,
   ): Promise<ToolChatResult>;
+  /**
+   * Transcription audio → texte (speech-to-text). Optionnel selon le fournisseur.
+   * Garde-fou n°3 inchangé : la transcription structure du langage naturel, elle ne
+   * produit jamais une donnée nutritionnelle (la nutrition vient toujours d'USDA/OFF).
+   */
+  transcribe?(audio: Blob, options?: { language?: string; model?: string }): Promise<{ text: string }>;
 }

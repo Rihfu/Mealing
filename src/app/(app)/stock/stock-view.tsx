@@ -10,6 +10,7 @@ import { getStockSnapshotAction, type StockPageSnapshot } from './snapshot';
 import { StockRefreshProvider, useStockRefresh } from './stock-refresh';
 import { StockList } from './stock-list';
 import { AddStock } from './add-stock';
+import { VoiceStockCapture } from './voice-stock-capture';
 import { ManageLocations } from './locations-manager';
 import { MealReconcile } from './meal-reconcile';
 import { addRestockToShoppingAction } from './actions';
@@ -83,6 +84,7 @@ export function StockView() {
   }
 
   const { groups, priority, lowStock, locationOptions, orderedLocations } = data;
+  const itemCount = groups.reduce((n, g) => n + g.items.length, 0);
 
   return (
     <StockRefreshProvider value={refresh}>
@@ -108,6 +110,15 @@ export function StockView() {
           {/* Colonne gauche : priorité + liste, empilées serré (un seul cellule de grille
               → ne s'étire plus à la hauteur du panneau d'ajout). */}
           <div className="flex flex-col gap-5">
+            {itemCount === 0 && (
+              <section className="rounded-2xl border border-green-strong/40 bg-sage-tint/40 p-4">
+                <h2 className="font-display text-base font-semibold">Ton stock est vide</h2>
+                <p className="mb-3 mt-0.5 text-sm text-ink-soft">
+                  Le plus rapide pour démarrer : énumère ce que tu as à voix haute, on s’occupe du rangement.
+                </p>
+                <VoiceStockCapture locationOptions={locationOptions} variant="hero" />
+              </section>
+            )}
             {priority.length > 0 && (
               <section className="rounded-2xl border border-clay bg-clay-tint p-3.5">
                 <h2 className="mb-2 font-display text-base font-semibold">À consommer en priorité</h2>
@@ -142,6 +153,7 @@ export function StockView() {
           <section className="rounded-2xl border border-line bg-surface p-3.5 shadow-soft lg:sticky lg:top-24">
             <h2 className="mb-3 font-display text-base font-semibold">Ajouter un article</h2>
             <AddStock locationOptions={locationOptions} />
+            <VoiceStockCapture locationOptions={locationOptions} />
           </section>
         </div>
 

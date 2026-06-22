@@ -23,7 +23,10 @@ import type {
  *   classif/JSON/traduction + agent CRUD), ce qui réduit coût et latence.
  */
 const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_TRANSCRIBE_URL = 'https://api.openai.com/v1/audio/transcriptions';
 const DEFAULT_MODEL = 'gpt-5-mini';
+/** STT : successeur de Whisper (meilleure WER au même prix). Cf. mémoire/recherche juin 2026. */
+const TRANSCRIBE_MODEL = 'gpt-4o-transcribe';
 const REASONING_EFFORT = 'low';
 /** Plancher de tokens de sortie : un modèle de raisonnement consomme des tokens de
  *  raisonnement AVANT la réponse → un plafond trop bas renverrait un contenu vide. */
@@ -136,5 +139,25 @@ export const openaiProvider: AIProvider = {
       toolCalls,
       model: data.model ?? model,
     };
+  },
+
+  async transcribe(audio: Blob, options?: { language?: string; model?: string }): Promise<{ text: string }> {
+    // Multipart (≠ JSON) : on laisse fetch poser le Content-Type/boundary lui-même.
+    const form = new FormData();
+    const filename = (audio as File).name || 'audio.webm';
+    form.append('file', audio, filename);
+    form.append('model', options?.model ?? TRANSCRIBE_MODEL);
+    if (options?.language) form.append('language', options.language);
+    form.append('response_format', 'json');
+    const res = await fetch(OPENAI_TRANSCRIBE_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${serverEnv.OPENAI_API_KEY}` },
+      body: form,
+    });
+    const data = (await res.json()) as { text?: string; error?: { message?: string } };
+    if (!res.ok) {
+      throw new Error(`OpenAI transcription a répondu ${res.status} : ${data.error?.message ?? res.statusText}`);
+    }
+    return { text: data.text ?? '' };
   },
 };
