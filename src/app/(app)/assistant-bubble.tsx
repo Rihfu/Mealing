@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { askAgentAction, executeAgentAction, createConversationAction } from './assistant/actions';
+import { transcribeTextAction } from './voice-actions';
+import { useAudioRecorder, audioExt } from '@/components/use-audio-recorder';
 import type { ProposedAction } from '@/lib/ai/agent';
 
 interface Msg {
@@ -43,6 +45,8 @@ export function AssistantBubble() {
   const [input, setInput] = useState('');
   const [pending, setPending] = useState(false);
   const [plan, setPlan] = useState<ProposedAction[] | null>(null);
+  const [autoSend, setAutoSend] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
 
   const posRef = useRef(pos);
   const topSafeRef = useRef(72);
@@ -69,6 +73,7 @@ export function AssistantBubble() {
       topSafeRef.current = top;
       setTopSafe(top);
       setIsMobile(vw < 640);
+      setAutoSend(localStorage.getItem('assistant:autoSend') === '1');
       let p = { x: vw - BUBBLE - 20, y: vh - BUBBLE - 24 };
       try {
         const raw = localStorage.getItem(POS_KEY);
@@ -140,9 +145,8 @@ export function AssistantBubble() {
     }
   }, []);
 
-  async function send(e: React.FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
+  async function sendText(raw: string) {
+    const text = raw.trim();
     if (!text || pending) return;
     setInput('');
     setPlan(null);
@@ -166,6 +170,30 @@ export function AssistantBubble() {
       setPending(false);
     }
   }
+
+  function send(e: React.FormEvent) {
+    e.preventDefault();
+    void sendText(input);
+  }
+
+  // Dictée vocale : transcrit puis — selon le switch « Envoi auto » — envoie ou remplit le champ.
+  async function onAudio(blob: Blob, mime: string) {
+    setTranscribing(true);
+    try {
+      const fd = new FormData();
+      fd.append('audio', new File([blob], `dictee.${audioExt(mime)}`, { type: mime }));
+      const { text } = await transcribeTextAction(fd);
+      const t = text.trim();
+      if (!t) return;
+      if (autoSend) void sendText(t);
+      else setInput((prev) => (prev ? `${prev} ${t}` : t));
+    } catch {
+      /* silencieux : réessayer (erreur micro gérée par le hook) */
+    } finally {
+      setTranscribing(false);
+    }
+  }
+  const recorder = useAudioRecorder(onAudio);
 
   async function confirm() {
     if (!plan || pending) return;
@@ -342,25 +370,70 @@ export function AssistantBubble() {
           </div>
 
           {/* Saisie */}
-          <form onSubmit={send} className="flex items-center gap-2 border-t border-line px-3 py-2.5">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Écris à l’assistant…"
-              enterKeyHint="send"
-              className="flex-1 rounded-full border border-line bg-paper px-3.5 py-2 text-sm focus:outline-2 focus:outline-green"
-            />
-            <button
-              type="submit"
-              disabled={pending || !input.trim()}
-              aria-label="Envoyer"
-              className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-green-strong text-white disabled:opacity-50"
-            >
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z" />
-              </svg>
-            </button>
-          </form>
+          <div className="border-t border-line">
+            <div className="flex items-center justify-between gap-2 px-3 pt-2">
+              {recorder.error ? <span className="truncate text-xs text-clay">{recorder.error}</span> : <span />}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoSend}
+                onClick={() =>
+                  setAutoSend((s) => {
+                    const next = !s;
+                    localStorage.setItem('assistant:autoSend', next ? '1' : '0');
+                    return next;
+                  })
+                }
+                title="Après une dictée : envoyer directement, ou seulement remplir la zone de saisie"
+                className="flex flex-none items-center gap-1.5 rounded-full border border-line px-2 py-1 text-[11px] font-semibold text-ink-soft"
+              >
+                <span className={`flex h-3.5 w-6 shrink-0 items-center rounded-full p-0.5 transition-colors ${autoSend ? 'bg-green-strong' : 'bg-line-strong'}`}>
+                  <span className={`block h-2.5 w-2.5 rounded-full bg-white transition-transform ${autoSend ? 'translate-x-2.5' : ''}`} />
+                </span>
+                Envoi auto
+              </button>
+            </div>
+            <form onSubmit={send} className="flex items-center gap-2 px-3 pb-2.5 pt-1.5">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={recorder.recording ? 'Enregistrement…' : transcribing ? 'Transcription…' : 'Écris à l’assistant…'}
+                enterKeyHint="send"
+                className="flex-1 rounded-full border border-line bg-paper px-3.5 py-2 text-sm focus:outline-2 focus:outline-green"
+              />
+              <button
+                type="button"
+                onClick={recorder.recording ? recorder.stop : recorder.start}
+                disabled={pending || transcribing}
+                aria-label={recorder.recording ? 'Arrêter la dictée' : 'Dicter'}
+                title="Dicter (voix)"
+                className={`flex h-9 w-9 flex-none items-center justify-center rounded-full disabled:opacity-50 ${
+                  recorder.recording ? 'bg-red text-white' : 'border border-line text-ink-soft hover:text-green-strong'
+                }`}
+              >
+                {transcribing ? (
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : recorder.recording ? (
+                  <span className="h-3 w-3 rounded-sm bg-white" />
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="9" y="2" width="6" height="12" rx="3" />
+                    <path d="M5 10a7 7 0 0 0 14 0M12 19v3" />
+                  </svg>
+                )}
+              </button>
+              <button
+                type="submit"
+                disabled={pending || !input.trim()}
+                aria-label="Envoyer"
+                className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-green-strong text-white disabled:opacity-50"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                </svg>
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </>
