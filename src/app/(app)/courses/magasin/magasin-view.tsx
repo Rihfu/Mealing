@@ -17,7 +17,6 @@ export function MagasinView() {
     getMagasinSnapshotAction,
   );
   const groups = data?.groups ?? [];
-  const total = data?.total ?? 0;
 
   return (
     <div className="mx-auto w-full max-w-md pb-28">
@@ -44,13 +43,6 @@ export function MagasinView() {
 
       {loading && !data ? (
         <p className="mt-10 text-center text-sm text-ink-soft">Chargement de ta liste…</p>
-      ) : total === 0 ? (
-        <p className="mt-10 text-center text-sm text-ink-soft">
-          Rien à acheter pour l’instant.{' '}
-          <Link href="/courses" className="font-semibold text-green-strong">
-            Retour à la liste
-          </Link>
-        </p>
       ) : (
         <StoreList groups={groups} refresh={refresh} />
       )}

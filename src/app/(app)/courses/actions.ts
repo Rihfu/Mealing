@@ -22,6 +22,7 @@ import {
   type FoodSuggestion,
 } from '@/lib/core';
 import type { NutritionSource } from '@/lib/providers/nutrition';
+import type { CheckoutExtra } from '@/lib/offline/queue';
 import { normalizeLabel } from '@/lib/text';
 import { orderRayonKeys } from './rayons';
 
@@ -49,11 +50,16 @@ export async function toggleCheckAction(formData: FormData): Promise<void> {
 }
 
 /** « J'ai fait mes courses » : les articles cochés entrent dans le stock (chantier E).
- *  `prices` (optionnel) = prix saisis au checkout, par clé de ligne → archivés au relevé. */
-export async function checkoutToStockAction(prices?: Record<string, number>): Promise<void> {
+ *  `prices` (optionnel) = prix saisis au checkout, par clé de ligne → archivés au relevé.
+ *  `extras` (optionnel) = articles « ajout express » du mode magasin, absents de la liste :
+ *  ils sont rangés au stock + archivés au relevé (cf. checkoutPurchasedToStock). */
+export async function checkoutToStockAction(
+  prices?: Record<string, number>,
+  extras?: CheckoutExtra[],
+): Promise<void> {
   const { supabase, householdId } = await requireHousehold();
   const { from, to } = await getShoppingWindow(supabase, householdId);
-  await checkoutPurchasedToStock(supabase, { householdId, from, to, prices });
+  await checkoutPurchasedToStock(supabase, { householdId, from, to, prices, extras });
   revalidatePath('/courses');
   revalidatePath('/stock');
 }
@@ -83,6 +89,28 @@ export async function clearCheckedAction(): Promise<void> {
 export async function searchCatalogAction(query: string): Promise<FoodSuggestion[]> {
   const { supabase } = await requireHousehold();
   return searchFoodCatalog(supabase, query, { limit: 8 });
+}
+
+/**
+ * Garantit une fiche produit pour un libellé libre : rapprochement catalogue, sinon
+ * création (nom générique FR + rayon via l'IA, best-effort ; nutrition NON touchée —
+ * garde-fou n°3). Sert au « ⓘ » de l'ajout express en magasin (consulter une fiche
+ * avant de décider d'acheter). @returns le food_id, ou null si libellé inexploitable.
+ */
+export async function ensureCatalogFoodAction(label: string): Promise<string | null> {
+  const { supabase } = await requireHousehold();
+  const clean = label.trim();
+  if (clean.length < 2) return null;
+  const existing = await findCatalogFoodIdByLabel(supabase, clean);
+  if (existing) return existing;
+  let cls: { name: string; category: string | null } | null = null;
+  try {
+    const { classifyImportedFood } = await import('@/lib/ai/categorize-food');
+    cls = await classifyImportedFood(clean);
+  } catch {
+    cls = null;
+  }
+  return getOrCreateCatalogFood(supabase, { label: clean, name: cls?.name ?? null, category: cls?.category ?? null });
 }
 
 /** Résout un aliment vers un food_id (import paresseux d'un externe) pour ouvrir sa fiche. */

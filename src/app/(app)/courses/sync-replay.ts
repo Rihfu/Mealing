@@ -15,6 +15,9 @@ export async function replayOp(op: QueuedOp): Promise<void> {
     fd.set('checked', String(op.checked));
     await toggleCheckAction(fd);
   } else {
-    await checkoutToStockAction(Object.keys(op.prices).length > 0 ? op.prices : undefined);
+    await checkoutToStockAction(
+      Object.keys(op.prices).length > 0 ? op.prices : undefined,
+      op.extras && op.extras.length > 0 ? op.extras : undefined,
+    );
   }
 }

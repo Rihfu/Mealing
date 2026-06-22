@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { checkoutToStockAction } from './actions';
-import { enqueueOp } from '@/lib/offline/queue';
+import { enqueueOp, type CheckoutExtra } from '@/lib/offline/queue';
 
 export interface CheckoutItem {
   key: string; // clé d'identité de la ligne (pour rattacher le prix au relevé)
@@ -12,6 +12,22 @@ export interface CheckoutItem {
   suggestedPrice?: number | null; // dernier prix payé connu → pré-rempli (modifiable)
 }
 
+/** Article « ajout express » (mode magasin) à ranger au stock sans passer par la liste.
+ *  `key` = clé locale (prix contrôlé via la map `prices`) ; le serveur le généralise. */
+export interface ExtraDraft {
+  key: string;
+  label: string;
+  quantity: number | null;
+  unit: string | null;
+}
+
+/** Parse un prix saisi (« 1,99 ») → nombre > 0, sinon null. */
+function parsePrice(raw: string | undefined): number | null {
+  if (raw == null || raw.trim() === '') return null;
+  const v = Number(raw.replace(',', '.'));
+  return !Number.isNaN(v) && v > 0 ? v : null;
+}
+
 /**
  * « J'ai fait mes courses » (chantier E) : confirme puis range les articles cochés
  * dans le stock (datés du jour). Saisie de prix OPTIONNELLE par article → archivée
@@ -19,12 +35,15 @@ export interface CheckoutItem {
  */
 export function PurchaseCheckout({
   items,
+  extras = [],
   fullWidth = false,
   prices: ctrlPrices,
   onPriceChange,
   onDone,
 }: {
   items: CheckoutItem[];
+  /** Articles « ajout express » du mode magasin (rangés au stock + relevé, hors liste). */
+  extras?: ExtraDraft[];
   fullWidth?: boolean;
   /** Prix CONTRÔLÉS par le parent (mode magasin : saisis en rayon, partagés avec la modale). */
   prices?: Record<string, string>;
@@ -45,7 +64,7 @@ export function PurchaseCheckout({
   );
   const prices = ctrlPrices ?? internalPrices;
   const hasSuggested = items.some((it) => it.suggestedPrice != null);
-  const n = items.length;
+  const n = items.length + extras.length;
   const s = n > 1 ? 's' : '';
 
   function setPrice(key: string, v: string) {
@@ -57,15 +76,23 @@ export function PurchaseCheckout({
     // Prix valides (> 0) uniquement, indexés par clé de ligne.
     const map: Record<string, number> = {};
     for (const it of items) {
-      const raw = prices[it.key];
-      const v = raw != null && raw.trim() !== '' ? Number(raw.replace(',', '.')) : NaN;
-      if (!Number.isNaN(v) && v > 0) map[it.key] = v;
+      const v = parsePrice(prices[it.key]);
+      if (v != null) map[it.key] = v;
     }
+    // Articles « ajout express » : ils portent leur propre prix → le serveur les range
+    // au stock + relevé sous leur identité catalogue généralisée (nom FR + rayon).
+    const extrasPayload: CheckoutExtra[] = extras.map((ex) => ({
+      label: ex.label,
+      quantity: ex.quantity,
+      unit: ex.unit,
+      price: parsePrice(prices[ex.key]),
+    }));
+    const extrasArg = extrasPayload.length > 0 ? extrasPayload : undefined;
     // Hors-ligne (ou si l'appel échoue) → on met le passage en caisse EN FILE : il sera
     // rejoué au retour du réseau, APRÈS les coches (ordre FIFO), rangeant les achats au
     // stock. On NE déclenche PAS onDone (qui, en magasin, viderait la file).
     const queue = async () => {
-      await enqueueOp({ kind: 'checkout', prices: map });
+      await enqueueOp({ kind: 'checkout', prices: map, extras: extrasArg });
       setOpen(false);
       setQueuedOffline(true);
     };
@@ -76,7 +103,7 @@ export function PurchaseCheckout({
     }
     startTransition(async () => {
       try {
-        await checkoutToStockAction(Object.keys(map).length > 0 ? map : undefined);
+        await checkoutToStockAction(Object.keys(map).length > 0 ? map : undefined, extrasArg);
         setOpen(false);
         onDone?.();
       } catch {
@@ -157,6 +184,38 @@ export function PurchaseCheckout({
                   </span>
                 </li>
               ))}
+              {extras.map((ex) => {
+                const qty = ex.quantity != null ? `${ex.quantity} ${ex.unit ?? ''}`.trim() : '';
+                return (
+                  <li key={ex.key} className="flex items-center gap-2 py-2 text-sm">
+                    <span className="min-w-0 flex-1 font-semibold">
+                      <span className="block truncate">
+                        {ex.label}
+                        <span
+                          className="ml-1.5 align-middle rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                          style={{ background: 'var(--color-sage-tint)', color: 'var(--color-sage-deep)' }}
+                        >
+                          ajouté
+                        </span>
+                      </span>
+                      {qty && <span className="text-xs font-normal text-ink-soft">{qty}</span>}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1">
+                      <input
+                        type="number"
+                        step="any"
+                        inputMode="decimal"
+                        value={prices[ex.key] ?? ''}
+                        onChange={(e) => setPrice(ex.key, e.target.value)}
+                        placeholder="—"
+                        aria-label={`Prix de ${ex.label}`}
+                        className="field-input w-20 px-2 py-1 text-right text-sm"
+                      />
+                      <span className="text-ink-soft">€</span>
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
 
             <p className="mb-4 text-xs text-ink-soft">

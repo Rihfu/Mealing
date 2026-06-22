@@ -1,6 +1,7 @@
 import type { DB } from './types';
 import { unwrap } from './types';
-import { loadCatalogIndex, matchCatalog } from './foods';
+import { loadCatalogIndex, matchCatalog, findCatalogFoodIdByLabel, getOrCreateCatalogFood } from './foods';
+import type { CheckoutExtra } from '@/lib/offline/queue';
 import { loadFoodPrefs, setFoodPref } from './categories';
 import { recordShoppingTrip } from './shopping-history';
 import { type Quantity, type Dim, toBase, fromBase, normalizeUnit } from '@/lib/units';
@@ -426,15 +427,65 @@ function finalizeQty(acc: QtyAcc): { quantity?: number; unit?: string } {
  */
 export async function checkoutPurchasedToStock(
   db: DB,
-  params: { householdId: string; from: string; to: string; prices?: Record<string, number> },
+  params: { householdId: string; from: string; to: string; prices?: Record<string, number>; extras?: CheckoutExtra[] },
 ): Promise<{ added: number }> {
-  const lines = (await generateShoppingList(db, params)).filter((l) => l.checked);
+  const checkedLines = (await generateShoppingList(db, params)).filter((l) => l.checked);
+
+  // Articles « ajout express » du mode magasin : absents de la liste, ils voyagent
+  // avec le checkout. On les résout en lignes synthétiques (identité catalogue
+  // généralisée — nom FR sans marque + rayon via l'IA, best-effort ; nutrition NON
+  // touchée, garde-fou n°3), prix fusionné par clé canonique. Cf. addManualAction.
+  const extraLines: ShoppingLine[] = [];
+  const extraPrices: Record<string, number> = {};
+  for (const ex of params.extras ?? []) {
+    const label = ex.label.trim();
+    if (!label) continue;
+    let foodId = await findCatalogFoodIdByLabel(db, label);
+    if (!foodId) {
+      let cls: { name: string; category: string | null } | null = null;
+      try {
+        const { classifyImportedFood } = await import('@/lib/ai/categorize-food');
+        cls = await classifyImportedFood(label);
+      } catch {
+        cls = null;
+      }
+      foodId = await getOrCreateCatalogFood(db, { label, name: cls?.name ?? null, category: cls?.category ?? null });
+    }
+    let name = label;
+    let category: string | null = null;
+    let iconSlug: string | null = null;
+    if (foodId) {
+      const { data: f } = await db.from('food').select('name, category, external_id').eq('id', foodId).maybeSingle();
+      if (f) {
+        const row = f as { name: string | null; category: string | null; external_id: string | null };
+        name = row.name?.trim() || label;
+        category = row.category ?? null;
+        iconSlug = row.external_id ?? null;
+      }
+    }
+    const key = foodId ? `cf:${foodId}` : `cl:${normalizeLabel(name)}`;
+    extraLines.push({
+      key,
+      name,
+      quantity: ex.quantity ?? undefined,
+      unit: ex.unit ?? undefined,
+      checked: true,
+      source: 'manual',
+      sources: ['manual'],
+      foodId: foodId ?? null,
+      category,
+      iconSlug,
+    });
+    if (ex.price != null && ex.price > 0) extraPrices[key] = ex.price;
+  }
+
+  const lines = [...checkedLines, ...extraLines];
   if (lines.length === 0) return { added: 0 };
 
   // Historique des courses : on archive un relevé daté de ce qui part de la liste
   // (suivi des achats passés, sans lien avec le stock — cf. shopping-history).
   // Les prix éventuels saisis au checkout sont indexés par clé de ligne.
-  await recordShoppingTrip(db, params.householdId, lines, params.prices);
+  await recordShoppingTrip(db, params.householdId, lines, { ...(params.prices ?? {}), ...extraPrices });
 
   const stock = (unwrap(
     await db

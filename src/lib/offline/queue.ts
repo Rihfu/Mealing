@@ -1,6 +1,19 @@
 import { idbGet, idbSet } from './idb';
 
 /**
+ * Article ajouté en magasin (« ajout express ») qui n'est PAS sur la liste de courses :
+ * il voyage avec le passage en caisse → stock + relevé d'historique. Format sérialisable
+ * (file offline + payload d'action serveur). La généralisation du nom (« nature » sans
+ * marque) + rayon est faite côté serveur au checkout — ici on ne porte que la saisie.
+ */
+export interface CheckoutExtra {
+  label: string;
+  quantity: number | null;
+  unit: string | null;
+  price: number | null;
+}
+
+/**
  * File d'attente (IndexedDB) des mutations faites HORS-LIGNE, rejouées au retour du
  * réseau : coches du mode magasin ET passage en caisse (« J'ai fait mes courses »).
  * Ordre préservé (FIFO) → les coches sont rejouées AVANT le checkout, donc l'état
@@ -8,7 +21,7 @@ import { idbGet, idbSet } from './idb';
  */
 export type QueuedOp =
   | { kind: 'toggle'; key: string; checked: boolean }
-  | { kind: 'checkout'; prices: Record<string, number> };
+  | { kind: 'checkout'; prices: Record<string, number>; extras?: CheckoutExtra[] };
 
 const KEY = 'sync:magasin-queue';
 
