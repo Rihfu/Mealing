@@ -6,7 +6,16 @@ import { useCachedResource } from '@/lib/offline/cache';
 import { getCoursesSnapshotAction, type CoursesSnapshot } from './snapshot';
 import { CoursesRefreshProvider } from './courses-refresh';
 import { AddArticle } from './add-article';
+import { VoiceCapture } from '@/components/voice-capture';
+import { transcribeDictationAction } from '../voice-actions';
+import { addManualBulkAction } from './voice-actions';
 import { PurchaseCheckout } from './purchase-checkout';
+
+const COURSES_VOICE_TEXTS = {
+  trigger: 'Dicter mes courses',
+  title: 'Dicter mes courses',
+  intro: 'Cite ce que tu veux acheter — « du lait, des œufs, un paquet de pâtes, des tomates… ».',
+};
 import { ManageAislesButton } from './category-controls';
 import { PrepareOffline } from './prepare-offline';
 import { EssentialsManager } from './essentials-manager';
@@ -101,6 +110,12 @@ export function CoursesView() {
           <section className="order-1 rounded-2xl border border-line bg-surface p-4 shadow-soft lg:order-none lg:col-start-2 lg:row-start-1 lg:sticky lg:top-24">
             <h2 className="mb-3 font-display text-lg font-semibold">Ajouter un article</h2>
             <AddArticle onList={onListRefs} inStock={inStockRefs} />
+            <VoiceCapture
+              transcribe={transcribeDictationAction}
+              onAdd={addManualBulkAction}
+              refresh={refresh}
+              texts={COURSES_VOICE_TEXTS}
+            />
           </section>
 
           <div className="order-2 flex flex-col gap-4 lg:order-none lg:col-start-1 lg:row-start-1 lg:row-span-2">

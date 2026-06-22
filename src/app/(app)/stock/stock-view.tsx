@@ -10,8 +10,17 @@ import { getStockSnapshotAction, type StockPageSnapshot } from './snapshot';
 import { StockRefreshProvider, useStockRefresh } from './stock-refresh';
 import { StockList } from './stock-list';
 import { AddStock } from './add-stock';
-import { VoiceStockCapture } from './voice-stock-capture';
+import { VoiceCapture } from '@/components/voice-capture';
+import { transcribeDictationAction } from '../voice-actions';
+import { addStockBulkAction } from './voice-actions';
 import { ManageLocations } from './locations-manager';
+
+const STOCK_VOICE_TEXTS = {
+  trigger: 'Dicter ma liste',
+  hero: 'Remplis ton stock en parlant',
+  title: 'Dicter mon stock',
+  intro: 'Cite ce que tu as chez toi — « lait, six œufs, deux kilos de farine, des pommes au frigo… ». On le rangera après.',
+};
 import { MealReconcile } from './meal-reconcile';
 import { addRestockToShoppingAction } from './actions';
 import { UndoToastHost } from '../courses/undo-toast';
@@ -116,7 +125,15 @@ export function StockView() {
                 <p className="mb-3 mt-0.5 text-sm text-ink-soft">
                   Le plus rapide pour démarrer : énumère ce que tu as à voix haute, on s’occupe du rangement.
                 </p>
-                <VoiceStockCapture locationOptions={locationOptions} variant="hero" />
+                <VoiceCapture
+                  transcribe={transcribeDictationAction}
+                  onAdd={addStockBulkAction}
+                  refresh={refresh}
+                  texts={STOCK_VOICE_TEXTS}
+                  withLocation
+                  locationOptions={locationOptions}
+                  variant="hero"
+                />
               </section>
             )}
             {priority.length > 0 && (
@@ -153,7 +170,14 @@ export function StockView() {
           <section className="rounded-2xl border border-line bg-surface p-3.5 shadow-soft lg:sticky lg:top-24">
             <h2 className="mb-3 font-display text-base font-semibold">Ajouter un article</h2>
             <AddStock locationOptions={locationOptions} />
-            <VoiceStockCapture locationOptions={locationOptions} />
+            <VoiceCapture
+              transcribe={transcribeDictationAction}
+              onAdd={addStockBulkAction}
+              refresh={refresh}
+              texts={STOCK_VOICE_TEXTS}
+              withLocation
+              locationOptions={locationOptions}
+            />
           </section>
         </div>
 

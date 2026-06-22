@@ -2,8 +2,22 @@
 
 import { useRef, useState, useTransition } from 'react';
 import { UNIT_OPTIONS } from '@/lib/units';
-import { useStockRefresh } from './stock-refresh';
-import { transcribeStockAction, addStockBulkAction, type BulkStockItem } from './voice-actions';
+import type { DictatedItem } from '@/lib/ai/parse-stock-dictation';
+
+/** Article ajouté en lot par dictée (cible : stock OU liste de courses). */
+export interface BulkVoiceItem {
+  label: string;
+  quantity: number | null;
+  unit: string | null;
+  location: string | null;
+}
+
+export interface VoiceCaptureTexts {
+  trigger: string; // libellé du bouton (variant inline)
+  hero?: string; // libellé du bouton (variant hero) — défaut : `trigger`
+  title: string; // titre de la modale
+  intro: string; // phrase d'explication
+}
 
 type Phase = 'idle' | 'recording' | 'transcribing' | 'review' | 'done';
 
@@ -34,19 +48,29 @@ function MicIcon({ size = 20 }: { size?: number }) {
 }
 
 /**
- * Recensement vocal du stock : l'utilisateur ÉNONCE sa liste, on transcrit
- * (gpt-4o-transcribe), on découpe en articles (nature + qté + unité + lieu), il
- * VALIDE/CORRIGE, puis ajout en lot. Pensé pour le 1ᵉʳ remplissage (étape la plus
- * abandonnée) + les gros réassorts. `variant` : « hero » (empty-state) ou « inline » (bouton).
+ * Saisie par DICTÉE (speech-to-text), réutilisable Stock ↔ Courses : l'utilisateur
+ * énonce sa liste, on transcrit (gpt-4o-transcribe via l'action `transcribe`), on
+ * découpe en articles, il VALIDE/CORRIGE, puis ajout en lot (`onAdd`). Le sélecteur de
+ * lieu n'apparaît que si `withLocation` (Stock = oui, Courses = non). Garde-fou n°3 :
+ * la voix donne nature + quantité ; la nutrition vient toujours d'USDA/OFF.
  */
-export function VoiceStockCapture({
-  locationOptions,
+export function VoiceCapture({
+  transcribe,
+  onAdd,
+  refresh,
+  texts,
+  withLocation = false,
+  locationOptions = [],
   variant = 'inline',
 }: {
-  locationOptions: { key: string; label: string }[];
+  transcribe: (formData: FormData) => Promise<{ transcript: string; items: DictatedItem[] }>;
+  onAdd: (items: BulkVoiceItem[]) => Promise<{ added: number }>;
+  refresh: () => void | Promise<void>;
+  texts: VoiceCaptureTexts;
+  withLocation?: boolean;
+  locationOptions?: { key: string; label: string }[];
   variant?: 'inline' | 'hero';
 }) {
-  const refresh = useStockRefresh();
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +83,6 @@ export function VoiceStockCapture({
   const chunksRef = useRef<Blob[]>([]);
 
   function close() {
-    // Coupe un enregistrement en cours, le cas échéant.
     if (recRef.current && recRef.current.state !== 'inactive') {
       recRef.current.stream.getTracks().forEach((t) => t.stop());
       recRef.current = null;
@@ -85,7 +108,7 @@ export function VoiceStockCapture({
         const type = rec.mimeType || 'audio/webm';
         const blob = new Blob(chunksRef.current, { type });
         stream.getTracks().forEach((t) => t.stop());
-        void transcribe(blob, type);
+        void runTranscription(blob, type);
       };
       recRef.current = rec;
       rec.start();
@@ -102,11 +125,11 @@ export function VoiceStockCapture({
     setPhase('transcribing');
   }
 
-  async function transcribe(blob: Blob, type: string) {
+  async function runTranscription(blob: Blob, type: string) {
     try {
       const fd = new FormData();
       fd.append('audio', new File([blob], `dictee.${extFromMime(type)}`, { type }));
-      const { items } = await transcribeStockAction(fd);
+      const { items } = await transcribe(fd);
       if (items.length === 0) {
         setError("Je n'ai rien compris — réessaie en parlant distinctement.");
         setPhase('idle');
@@ -118,7 +141,7 @@ export function VoiceStockCapture({
           name: it.name,
           quantity: it.quantity != null ? String(it.quantity) : '',
           unit: it.unit ?? '',
-          location: it.location ?? '',
+          location: withLocation ? (it.location ?? '') : '',
         })),
       );
       setPhase('review');
@@ -139,20 +162,20 @@ export function VoiceStockCapture({
   }
 
   function submit() {
-    const payload: BulkStockItem[] = rows
+    const payload: BulkVoiceItem[] = rows
       .map((r) => {
         const q = r.quantity.trim() !== '' ? Number(r.quantity.replace(',', '.')) : NaN;
         return {
           label: r.name.trim(),
           quantity: !Number.isNaN(q) && q > 0 ? q : null,
           unit: r.unit || null,
-          location: r.location || defaultLocation || null,
+          location: withLocation ? r.location || defaultLocation || null : null,
         };
       })
       .filter((r) => r.label.length > 0);
     if (payload.length === 0) return;
     start(async () => {
-      const { added } = await addStockBulkAction(payload);
+      const { added } = await onAdd(payload);
       await refresh();
       setAddedCount(added);
       setPhase('done');
@@ -167,7 +190,7 @@ export function VoiceStockCapture({
         className="flex w-full items-center justify-center gap-3 rounded-2xl border border-green-strong bg-sage-tint px-4 py-4 font-display text-base font-semibold text-green-strong"
       >
         <MicIcon size={22} />
-        Remplis ton stock en parlant
+        {texts.hero ?? texts.trigger}
       </button>
     ) : (
       <button
@@ -176,7 +199,7 @@ export function VoiceStockCapture({
         className="btn-secondary mt-2 flex w-full items-center justify-center gap-2 py-2.5 text-sm"
       >
         <MicIcon size={18} />
-        Dicter ma liste
+        {texts.trigger}
       </button>
     );
 
@@ -195,7 +218,7 @@ export function VoiceStockCapture({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="font-display text-xl font-semibold">Dicter mon stock</h3>
+              <h3 className="font-display text-xl font-semibold">{texts.title}</h3>
               <button type="button" onClick={close} className="text-ink-soft hover:text-ink" aria-label="Fermer">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M18 6 6 18M6 6l12 12" />
@@ -203,12 +226,9 @@ export function VoiceStockCapture({
               </button>
             </div>
 
-            {/* Phase : enregistrement / prêt */}
             {(phase === 'idle' || phase === 'recording') && (
               <div className="flex flex-col items-center gap-4 py-8">
-                <p className="text-center text-sm text-ink-soft">
-                  Cite ce que tu as chez toi — « lait, six œufs, deux kilos de farine, des pommes au frigo… ». On le rangera après.
-                </p>
+                <p className="text-center text-sm text-ink-soft">{texts.intro}</p>
                 {phase === 'recording' ? (
                   <button
                     type="button"
@@ -235,7 +255,6 @@ export function VoiceStockCapture({
               </div>
             )}
 
-            {/* Phase : transcription en cours */}
             {phase === 'transcribing' && (
               <div className="flex flex-col items-center gap-3 py-12">
                 <span className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-green-strong" />
@@ -243,28 +262,29 @@ export function VoiceStockCapture({
               </div>
             )}
 
-            {/* Phase : revue / correction */}
             {phase === 'review' && (
               <>
-                <p className="mt-1 text-xs text-ink-soft">Vérifie et corrige avant d&apos;ajouter. Le lieu peut rester vide.</p>
-                <div className="mt-2 flex items-center gap-2 text-sm">
-                  <label htmlFor="default-loc" className="shrink-0 text-xs font-semibold text-ink-soft">
-                    Lieu par défaut
-                  </label>
-                  <select
-                    id="default-loc"
-                    value={defaultLocation}
-                    onChange={(e) => setDefaultLocation(e.target.value)}
-                    className="field-input flex-1 px-2 py-1 text-sm"
-                  >
-                    <option value="">— aucun</option>
-                    {locationOptions.map((l) => (
-                      <option key={l.key} value={l.key}>
-                        {l.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <p className="mt-1 text-xs text-ink-soft">Vérifie et corrige avant d&apos;ajouter.</p>
+                {withLocation && (
+                  <div className="mt-2 flex items-center gap-2 text-sm">
+                    <label htmlFor="default-loc" className="shrink-0 text-xs font-semibold text-ink-soft">
+                      Lieu par défaut
+                    </label>
+                    <select
+                      id="default-loc"
+                      value={defaultLocation}
+                      onChange={(e) => setDefaultLocation(e.target.value)}
+                      className="field-input flex-1 px-2 py-1 text-sm"
+                    >
+                      <option value="">— aucun</option>
+                      {locationOptions.map((l) => (
+                        <option key={l.key} value={l.key}>
+                          {l.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <ul className="my-3 flex-1 divide-y divide-line overflow-auto rounded-xl border border-line">
                   {rows.map((r) => (
@@ -312,19 +332,21 @@ export function VoiceStockCapture({
                             </option>
                           ))}
                         </select>
-                        <select
-                          value={r.location}
-                          onChange={(e) => updateRow(r.id, { location: e.target.value })}
-                          aria-label="Lieu"
-                          className="field-input ml-auto w-32 px-2 py-1 text-sm"
-                        >
-                          <option value="">Lieu : défaut</option>
-                          {locationOptions.map((l) => (
-                            <option key={l.key} value={l.key}>
-                              {l.label}
-                            </option>
-                          ))}
-                        </select>
+                        {withLocation && (
+                          <select
+                            value={r.location}
+                            onChange={(e) => updateRow(r.id, { location: e.target.value })}
+                            aria-label="Lieu"
+                            className="field-input ml-auto w-32 px-2 py-1 text-sm"
+                          >
+                            <option value="">Lieu : défaut</option>
+                            {locationOptions.map((l) => (
+                              <option key={l.key} value={l.key}>
+                                {l.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </div>
                     </li>
                   ))}
@@ -336,7 +358,7 @@ export function VoiceStockCapture({
 
                 <div className="flex gap-2">
                   <button type="button" onClick={submit} disabled={submitting} className="btn-primary flex-1 py-2.5 disabled:opacity-60">
-                    {submitting ? 'Ajout…' : `Ajouter au stock (${rows.filter((r) => r.name.trim()).length})`}
+                    {submitting ? 'Ajout…' : `Ajouter (${rows.filter((r) => r.name.trim()).length})`}
                   </button>
                   <button type="button" onClick={() => setPhase('idle')} disabled={submitting} className="btn-secondary py-2.5">
                     Recommencer
@@ -345,7 +367,6 @@ export function VoiceStockCapture({
               </>
             )}
 
-            {/* Phase : terminé */}
             {phase === 'done' && (
               <div className="flex flex-col items-center gap-4 py-10">
                 <span className="flex h-14 w-14 items-center justify-center rounded-full bg-sage-tint text-green-strong">
@@ -354,7 +375,7 @@ export function VoiceStockCapture({
                   </svg>
                 </span>
                 <p className="text-center text-sm font-semibold">
-                  {addedCount} article{addedCount > 1 ? 's' : ''} ajouté{addedCount > 1 ? 's' : ''} au stock.
+                  {addedCount} article{addedCount > 1 ? 's' : ''} ajouté{addedCount > 1 ? 's' : ''}.
                 </p>
                 <button type="button" onClick={close} className="btn-primary px-6 py-2.5">
                   Terminé
