@@ -141,6 +141,26 @@ export async function updateRecipe(db: DB, recipeId: string, input: CreateRecipe
 }
 
 /**
+ * Met à jour SEULEMENT les métadonnées fournies d'une recette (nom, description,
+ * portions, temps) sans toucher aux ingrédients/tags. Pratique pour l'agent IA
+ * (« renomme… », « passe à 4 portions »). RLS : créateur.
+ */
+export async function updateRecipeFields(
+  db: DB,
+  recipeId: string,
+  fields: { name?: string; description?: string | null; servings?: number; prepTimeMin?: number | null; cookTimeMin?: number | null },
+): Promise<void> {
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (fields.name !== undefined) patch.name = fields.name;
+  if (fields.description !== undefined) patch.description = fields.description;
+  if (fields.servings !== undefined) patch.servings = fields.servings;
+  if (fields.prepTimeMin !== undefined) patch.prep_time_min = fields.prepTimeMin;
+  if (fields.cookTimeMin !== undefined) patch.cook_time_min = fields.cookTimeMin;
+  const { error } = await db.from('recipe').update(patch).eq('id', recipeId);
+  if (error) throw new Error(error.message);
+}
+
+/**
  * Supprime une recette. Les ingrédients/tags partent en cascade ; `planned_meal`
  * garde ses repas (recipe_id passe à NULL — `on delete set null`). RLS : créateur.
  */

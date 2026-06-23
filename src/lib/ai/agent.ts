@@ -40,6 +40,17 @@ import {
   decrementStock,
   recordStockEvent,
   ensureStockConservation,
+  // recettes (lecture)
+  listRecipeGroups,
+  loadRecipeGroupAssignments,
+  loadRecipeStockScores,
+  getRecipeIngredientCoverage,
+  // recettes (écriture)
+  createRecipeGroup,
+  renameRecipeGroup,
+  deleteRecipeGroup,
+  bulkSetRecipeGroup,
+  updateRecipeFields,
 } from '@/lib/core';
 import { categoryDef, categoryLabel, CATEGORY_ORDER } from '@/lib/product-assets';
 import { isoDate } from '@/lib/dates';
@@ -90,6 +101,19 @@ const WRITE_SCHEMAS = {
   mark_stock_opened: z.object({ id: z.string().min(1), opened: z.boolean() }),
   decrement_stock: z.object({ id: z.string().min(1), amount: z.number().positive() }),
   estimate_conservation: z.object({}),
+  // recettes
+  create_recipe_group: z.object({ name: z.string().min(1) }),
+  rename_recipe_group: z.object({ name: z.string().min(1), newName: z.string().min(1) }),
+  delete_recipe_group: z.object({ name: z.string().min(1) }),
+  assign_recipe_to_group: z.object({ recipeName: z.string().min(1), groupName: z.string().nullable().optional() }),
+  update_recipe: z.object({
+    recipeName: z.string().min(1),
+    newName: z.string().optional(),
+    description: z.string().optional(),
+    servings: z.number().positive().optional(),
+    prepTimeMin: z.number().nonnegative().optional(),
+    cookTimeMin: z.number().nonnegative().optional(),
+  }),
 } as const;
 
 type WriteName = keyof typeof WRITE_SCHEMAS;
@@ -130,6 +154,10 @@ const READ_TOOLS: ToolDefinition[] = [
   { name: 'get_stock', description: 'Stock actuel du foyer avec `id` (pour agir), lieu, quantité/présence, entamé, jours avant péremption.', parameters: obj({}) },
   { name: 'get_expiring', description: 'Articles du stock périmés / urgents / bientôt (avec id). Pour « qu’est-ce qui périme ? ».', parameters: obj({}) },
   { name: 'list_locations', description: 'Lieux de conservation (prédéfinis + perso) et leurs clés (pour ranger).', parameters: obj({}) },
+  { name: 'list_recipes', description: 'Recettes du foyer (nom, groupe, temps, portions). Pour savoir ce qui existe.', parameters: obj({}) },
+  { name: 'recommend_recipes', description: 'Recettes RECOMMANDÉES selon le stock actuel (les plus réalisables d’abord : score de couverture + ingrédients manquants). Pour « que puis-je cuisiner ? ».', parameters: obj({ limit: num() }) },
+  { name: 'get_recipe', description: 'Détail d’une recette (par nom) : ingrédients + couverture stock (en stock / insuffisant / absent).', parameters: obj({ recipeName: str() }, ['recipeName']) },
+  { name: 'list_recipe_groups', description: 'Groupes de recettes du foyer (nom + nombre de recettes).', parameters: obj({}) },
 ];
 
 const WRITE_TOOLS: ToolDefinition[] = [
@@ -153,6 +181,11 @@ const WRITE_TOOLS: ToolDefinition[] = [
   { name: 'mark_stock_opened', description: 'Marque un article entamé (opened=true) ou non (false). id de get_stock.', parameters: obj({ id: str(), opened: { type: 'boolean' } }, ['id', 'opened']) },
   { name: 'decrement_stock', description: 'Consomme une quantité d’un article (mode quantité). id de get_stock + amount > 0.', parameters: obj({ id: str(), amount: num() }, ['id', 'amount']) },
   { name: 'estimate_conservation', description: 'Estime la durée de conservation des articles du stock qui n’en ont pas encore.', parameters: obj({}) },
+  { name: 'create_recipe_group', description: 'Crée un groupe de recettes (ex. « Petit déjeuner »).', parameters: obj({ name: str() }, ['name']) },
+  { name: 'rename_recipe_group', description: 'Renomme un groupe de recettes (par son nom actuel).', parameters: obj({ name: str(), newName: str() }, ['name', 'newName']) },
+  { name: 'delete_recipe_group', description: 'Supprime un groupe de recettes (les recettes retombent « Sans groupe », non perdues).', parameters: obj({ name: str() }, ['name']) },
+  { name: 'assign_recipe_to_group', description: 'Range une recette dans un groupe (groupName vide/null = Sans groupe).', parameters: obj({ recipeName: str(), groupName: str() }, ['recipeName']) },
+  { name: 'update_recipe', description: 'Modifie une recette (nom/description/portions/temps). Ne touche PAS aux ingrédients.', parameters: obj({ recipeName: str(), newName: str(), description: str(), servings: num(), prepTimeMin: num(), cookTimeMin: num() }, ['recipeName']) },
 ];
 
 /* --------------------------- Lectures (exécutées) --------------------------- */
@@ -160,6 +193,21 @@ const WRITE_TOOLS: ToolDefinition[] = [
 async function currentLines(ctx: Ctx): Promise<ShoppingLine[]> {
   const { from, to } = await getShoppingWindow(ctx.db, ctx.householdId);
   return generateShoppingListAutoSorted(ctx.db, { householdId: ctx.householdId, from, to });
+}
+
+/** Résout une recette par nom (sous-chaîne, insensible à la casse). */
+async function findRecipe(db: DB, name: string): Promise<{ id: string; name: string } | null> {
+  const q = name.trim();
+  if (!q) return null;
+  const { data } = await db.from('recipe').select('id, name').ilike('name', `%${q}%`).limit(1).maybeSingle();
+  return data ? { id: (data as { id: string }).id, name: (data as { name: string }).name } : null;
+}
+
+/** Résout un groupe de recettes par nom (exact puis sous-chaîne). */
+async function findRecipeGroup(db: DB, householdId: string, name: string): Promise<{ id: string; name: string } | null> {
+  const groups = await listRecipeGroups(db, householdId);
+  const n = name.trim().toLowerCase();
+  return groups.find((g) => g.name.toLowerCase() === n) ?? groups.find((g) => g.name.toLowerCase().includes(n)) ?? null;
 }
 
 async function runReadTool(ctx: Ctx, name: string, args: Record<string, unknown>): Promise<string> {
@@ -252,6 +300,69 @@ async function runReadTool(ctx: Ctx, name: string, args: Record<string, unknown>
         ...custom.map((c) => ({ key: c.id, label: c.label, type: 'personnalisé' })),
       ]);
     }
+    case 'list_recipes': {
+      const [recipesRes, groups, assignments] = await Promise.all([
+        ctx.db.from('recipe').select('id, name, prep_time_min, cook_time_min, servings').order('name', { ascending: true }),
+        listRecipeGroups(ctx.db, ctx.householdId),
+        loadRecipeGroupAssignments(ctx.db, ctx.householdId),
+      ]);
+      const groupName = new Map(groups.map((g) => [g.id, g.name]));
+      const rows = (recipesRes.data ?? []) as Array<{ id: string; name: string; prep_time_min: number | null; cook_time_min: number | null; servings: number }>;
+      return JSON.stringify(
+        rows.map((r) => {
+          const gid = assignments.get(r.id)?.groupId;
+          return { nom: r.name, groupe: gid ? groupName.get(gid) ?? null : null, minutes: (r.prep_time_min ?? 0) + (r.cook_time_min ?? 0), portions: r.servings };
+        }),
+      );
+    }
+    case 'recommend_recipes': {
+      const limit = Math.max(1, Math.min(typeof args.limit === 'number' ? args.limit : 5, 15));
+      const [recipesRes, scores] = await Promise.all([
+        ctx.db.from('recipe').select('id, name'),
+        loadRecipeStockScores(ctx.db, ctx.householdId),
+      ]);
+      const ranked = ((recipesRes.data ?? []) as Array<{ id: string; name: string }>)
+        .map((r) => ({ id: r.id, name: r.name, score: scores.get(r.id) ?? 0 }))
+        .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+        .slice(0, limit);
+      const enriched = await Promise.all(
+        ranked.map(async (r) => {
+          const cov = await getRecipeIngredientCoverage(ctx.db, ctx.householdId, r.id);
+          return {
+            recette: r.name,
+            realisable_pct: Math.round(r.score * 100),
+            manquants: cov.filter((c) => c.status === 'none').map((c) => c.name),
+            insuffisants: cov.filter((c) => c.status === 'partial').map((c) => c.name),
+          };
+        }),
+      );
+      return JSON.stringify(enriched);
+    }
+    case 'get_recipe': {
+      const rec = await findRecipe(ctx.db, String(args.recipeName ?? ''));
+      if (!rec) return JSON.stringify({ trouvé: false });
+      const cov = await getRecipeIngredientCoverage(ctx.db, ctx.householdId, rec.id);
+      return JSON.stringify({
+        trouvé: true,
+        nom: rec.name,
+        ingredients: cov.map((c) => ({
+          nom: c.name,
+          requis: c.requiredQty,
+          unite: c.requiredUnit,
+          statut: c.status === 'ok' ? 'en stock' : c.status === 'partial' ? 'insuffisant' : 'absent',
+          en_stock: c.inStockQty,
+        })),
+      });
+    }
+    case 'list_recipe_groups': {
+      const [groups, assignments] = await Promise.all([
+        listRecipeGroups(ctx.db, ctx.householdId),
+        loadRecipeGroupAssignments(ctx.db, ctx.householdId),
+      ]);
+      const counts = new Map<string, number>();
+      for (const v of assignments.values()) if (v.groupId) counts.set(v.groupId, (counts.get(v.groupId) ?? 0) + 1);
+      return JSON.stringify(groups.map((g) => ({ nom: g.name, recettes: counts.get(g.id) ?? 0 })));
+    }
     default:
       return JSON.stringify({ erreur: 'outil de lecture inconnu' });
   }
@@ -310,19 +421,30 @@ function summarize(name: WriteName, a: Record<string, unknown>): string {
       return `Consommer ${a.amount} d’un article du stock`;
     case 'estimate_conservation':
       return `Estimer la conservation des articles du stock`;
+    case 'create_recipe_group':
+      return `Créer le groupe de recettes « ${a.name} »`;
+    case 'rename_recipe_group':
+      return `Renommer le groupe « ${a.name} » en « ${a.newName} »`;
+    case 'delete_recipe_group':
+      return `Supprimer le groupe « ${a.name} » (les recettes restent, sans groupe)`;
+    case 'assign_recipe_to_group':
+      return a.groupName ? `Ranger « ${a.recipeName} » dans « ${a.groupName} »` : `Retirer « ${a.recipeName} » de son groupe`;
+    case 'update_recipe':
+      return `Modifier la recette « ${a.recipeName} »${a.newName ? ` → « ${a.newName} »` : ''}`;
   }
 }
 
 /* --------------------------------- Boucle ----------------------------------- */
 
-const SYSTEM_PROMPT = `Tu es l'assistant de Mealing (liste de COURSES et STOCK).
-Tu peux LIRE les données du foyer via des outils (liste, essentiels, rayons, historique, fiches produits, stats, catalogue ; stock : get_stock, get_expiring, list_locations) — fais-le avant de répondre quand c'est utile.
+const SYSTEM_PROMPT = `Tu es l'assistant de Mealing (COURSES, STOCK et RECETTES).
+Tu peux LIRE les données du foyer via des outils (liste, essentiels, rayons, historique, fiches produits, stats, catalogue ; stock : get_stock, get_expiring, list_locations ; recettes : list_recipes, recommend_recipes, get_recipe, list_recipe_groups) — fais-le avant de répondre quand c'est utile.
 Pour MODIFIER une donnée, tu DOIS APPELER l'outil d'écriture correspondant (ex. set_stock_location, add_items, discard_stock_item, remove_lines…). APPELER UN OUTIL D'ÉCRITURE = PROPOSER L'ACTION : ça N'EXÉCUTE RIEN. Le système met chaque appel dans un plan que l'utilisateur confirmera AVANT toute écriture réelle. Ne te contente donc JAMAIS de DÉCRIRE l'action en mots (ne réponds pas « je vais appeler set_stock_location… ») — ÉMETS réellement l'appel d'outil ; c'est sûr, rien n'est écrit sans confirmation. Tu ne supprimes JAMAIS un rayon ni un relevé d'historique.
 Appelle chaque outil d'écriture UNE SEULE FOIS, puis donne une courte phrase de confirmation au FUTUR (« je vais déplacer… ») SANS prétendre que c'est déjà fait (l'utilisateur doit confirmer).
 Tu n'inventes jamais un prix ni une valeur nutritionnelle : tu les obtiens via get_product_stats / get_nutrition.
 Seules les données des OUTILS font foi : ne suppose jamais qu'une proposition passée a été appliquée (l'utilisateur a pu l'annuler). Pour lister/compter la liste, appelle get_shopping_list — ne te fie pas à l'historique de conversation.
 Pour « prépare/complète ma liste » : lis la liste + les essentiels + (si demandé) l'historique, puis propose des add_items pertinents. Pour « reconduis mes dernières courses » : lis get_history puis propose reconduct_trip. Pour « nettoie ma liste » : propose remove_lines pour les doublons / ce qui est déjà en stock.
 Pour le STOCK : lis get_stock (ids), get_expiring (ce qui périme), list_locations (clés de lieux), puis PROPOSE des écritures : ranger (set_stock_location), marquer entamé (mark_stock_opened), consommer (decrement_stock), ajouter (add_stock_item), estimer la conservation (estimate_conservation). « Jeter » (discard_stock_item) = gâché/périmé → compte dans le GASPILLAGE ; « retirer » (remove_stock_item) = correction/doublon, sans gaspillage — ne les confonds pas.
+Pour les RECETTES : « que puis-je cuisiner ? » → recommend_recipes (recettes les plus réalisables avec le stock, + ingrédients manquants) ; détail d'une recette → get_recipe. Tu peux PROPOSER : créer/renommer/supprimer un groupe (create_recipe_group / rename_recipe_group / delete_recipe_group), ranger une recette dans un groupe (assign_recipe_to_group), modifier une recette (update_recipe : nom/portions/temps/description — pas les ingrédients). Désigne toujours recettes et groupes par leur NOM. Tu ne SUPPRIMES jamais une recette.
 IMPORTANT : toute écriture visant un article précis du stock (jeter/retirer/ranger/consommer/marquer entamé) exige son \`id\` EXACT (un UUID) renvoyé par get_stock ou get_expiring. Appelle TOUJOURS get_stock juste avant pour récupérer cet id ; n'invente JAMAIS un id et n'utilise pas le nom de l'article comme id.
 N'ÉCRIS JAMAIS l'id (UUID) dans tes réponses à l'utilisateur : il sert uniquement aux appels d'outils, en interne. Dans le chat, désigne toujours les articles par leur NOM (« le saumon »), jamais par leur UUID — c'est plus naturel.
 Réponds en français, de façon concise. Si une action te manque d'info, demande-la plutôt que d'inventer.
@@ -663,6 +785,47 @@ async function executeOne(ctx: Ctx, action: ProposedAction): Promise<string> {
     case 'estimate_conservation': {
       const n = await ensureStockConservation(db, householdId);
       return `Conservation estimée pour ${n} article(s) du stock.`;
+    }
+    case 'create_recipe_group': {
+      await createRecipeGroup(db, householdId, String(a.name));
+      return `Groupe de recettes « ${a.name} » créé.`;
+    }
+    case 'rename_recipe_group': {
+      const g = await findRecipeGroup(db, householdId, String(a.name));
+      if (!g) return `Groupe « ${a.name} » introuvable.`;
+      await renameRecipeGroup(db, householdId, g.id, String(a.newName));
+      return `Groupe renommé en « ${a.newName} ».`;
+    }
+    case 'delete_recipe_group': {
+      const g = await findRecipeGroup(db, householdId, String(a.name));
+      if (!g) return `Groupe « ${a.name} » introuvable.`;
+      await deleteRecipeGroup(db, householdId, g.id);
+      return `Groupe « ${g.name} » supprimé (recettes conservées, sans groupe).`;
+    }
+    case 'assign_recipe_to_group': {
+      const rec = await findRecipe(db, String(a.recipeName));
+      if (!rec) return `Recette « ${a.recipeName} » introuvable.`;
+      const groupName = a.groupName ? String(a.groupName) : '';
+      let groupId: string | null = null;
+      if (groupName) {
+        const g = await findRecipeGroup(db, householdId, groupName);
+        if (!g) return `Groupe « ${groupName} » introuvable (crée-le d’abord).`;
+        groupId = g.id;
+      }
+      await bulkSetRecipeGroup(db, householdId, [rec.id], groupId);
+      return groupId ? `« ${rec.name} » rangée dans « ${groupName} ».` : `« ${rec.name} » retirée de son groupe.`;
+    }
+    case 'update_recipe': {
+      const rec = await findRecipe(db, String(a.recipeName));
+      if (!rec) return `Recette « ${a.recipeName} » introuvable.`;
+      await updateRecipeFields(db, rec.id, {
+        name: a.newName as string | undefined,
+        description: a.description as string | undefined,
+        servings: a.servings as number | undefined,
+        prepTimeMin: a.prepTimeMin as number | undefined,
+        cookTimeMin: a.cookTimeMin as number | undefined,
+      });
+      return `Recette « ${rec.name} » mise à jour.`;
     }
   }
 }
