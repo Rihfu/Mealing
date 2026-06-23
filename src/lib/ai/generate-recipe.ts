@@ -161,8 +161,9 @@ export function draftToCreateInput(draft: RecipeDraft): CreateRecipeInput {
     prepTimeMin: draft.prepTimeMin,
     cookTimeMin: draft.cookTimeMin,
     servings: draft.servings ?? 1,
-    // Ingrédients en texte libre : l'utilisateur pourra les lier à des aliments
-    // pour activer le calcul nutritionnel (principe n°3).
+    // Ingrédients passés en libellé : `createRecipe` les relie automatiquement au
+    // catalogue (food_id) → calcul nutritionnel activé. La nutrition reste calculée
+    // depuis la base, jamais générée par l'IA (principe n°3).
     ingredients: draft.ingredients.map((i) => ({
       freeText: i.name,
       quantity: i.quantity,

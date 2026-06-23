@@ -136,8 +136,8 @@ export function GenerateForm() {
             )}
 
             <p className="rounded-xl border border-butter bg-butter-tint p-3 text-xs leading-relaxed text-ink-soft">
-              Les ingrédients sont enregistrés en texte libre. Lie-les à des aliments importés pour activer le calcul
-              nutritionnel et le calcul automatique fin des courses.
+              Les ingrédients sont reliés automatiquement au catalogue à l’enregistrement (calcul nutritionnel + suivi
+              du stock). Tu pourras ajuster les liens en modifiant la recette.
             </p>
 
             <form action={saveGeneratedRecipeAction}>

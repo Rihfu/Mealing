@@ -5,8 +5,7 @@ import { getAuthContext } from '@/lib/auth';
 import {
   searchFoodCatalog,
   importFoodByRef,
-  findCatalogFoodIdByLabel,
-  getOrCreateCatalogFood,
+  resolveOrCreateFoodId,
   checkoutPurchasedToStock,
   getShoppingWindow,
   setFoodPref,
@@ -101,16 +100,8 @@ export async function ensureCatalogFoodAction(label: string): Promise<string | n
   const { supabase } = await requireHousehold();
   const clean = label.trim();
   if (clean.length < 2) return null;
-  const existing = await findCatalogFoodIdByLabel(supabase, clean);
-  if (existing) return existing;
-  let cls: { name: string; category: string | null } | null = null;
-  try {
-    const { classifyImportedFood } = await import('@/lib/ai/categorize-food');
-    cls = await classifyImportedFood(clean);
-  } catch {
-    cls = null;
-  }
-  return getOrCreateCatalogFood(supabase, { label: clean, name: cls?.name ?? null, category: cls?.category ?? null });
+  // Rapprochement catalogue puis création (étapes 3-4 du résolveur partagé).
+  return resolveOrCreateFoodId(supabase, { label: clean });
 }
 
 /** Résout un aliment vers un food_id (import paresseux d'un externe) pour ouvrir sa fiche. */
@@ -132,32 +123,14 @@ export async function addManualAction(formData: FormData): Promise<void> {
   const label = String(formData.get('label') ?? '').trim();
   if (!label) return;
 
-  // Identité produit (D) : food_id direct, ou import paresseux d'une suggestion externe.
-  let foodId = String(formData.get('food_id') ?? '') || null;
-  const source = String(formData.get('source') ?? '') as NutritionSource | '';
-  const externalId = String(formData.get('external_id') ?? '');
-  if (!foodId && (source === 'usda' || source === 'openfoodfacts') && externalId) {
-    foodId = await importFoodByRef(supabase, source, externalId);
-  }
-  // Texte libre non lié : rapprochement automatique du catalogue par libellé normalisé
-  // → identité produit (rayon + icône) sans clic de suggestion (cf. findCatalogFoodIdByLabel).
-  if (!foodId) {
-    foodId = await findCatalogFoodIdByLabel(supabase, label);
-  }
-
-  // Toujours pas d'identité ? On en CRÉE une (catalogue) : nom générique + rayon via
-  // l'IA (best-effort, liste fermée), nutrition NON touchée (garde-fou n°3). Ainsi
-  // tout article ajouté a une fiche produit cliquable (corrige Morue/Truffe & co.).
-  if (!foodId) {
-    let cls: { name: string; category: string | null } | null = null;
-    try {
-      const { classifyImportedFood } = await import('@/lib/ai/categorize-food');
-      cls = await classifyImportedFood(label);
-    } catch {
-      cls = null;
-    }
-    foodId = await getOrCreateCatalogFood(supabase, { label, name: cls?.name ?? null, category: cls?.category ?? null });
-  }
+  // Identité produit (D) : résolveur unique partagé (food_id direct → import externe
+  // → rapprochement catalogue → création de fiche). Voir resolveOrCreateFoodId (core).
+  const foodId = await resolveOrCreateFoodId(supabase, {
+    label,
+    foodId: String(formData.get('food_id') ?? '') || null,
+    source: String(formData.get('source') ?? '') || null,
+    externalId: String(formData.get('external_id') ?? '') || null,
+  });
 
   // Si l'article est lié à un aliment, on affiche son nom (générique FR / curé)
   // plutôt que la saisie brute (ex. nom USDA verbeux) — l'app reste générale.

@@ -310,6 +310,52 @@ export async function getOrCreateCatalogFood(
 }
 
 /**
+ * Résout (ou crée) l'identité catalogue d'un libellé à partir d'indices optionnels
+ * de suggestion. Stratégie en 4 étapes — SOURCE UNIQUE réutilisée par Courses,
+ * Recettes, etc. (principe n°4) :
+ *   1. `foodId` fourni (suggestion locale choisie) ;
+ *   2. import paresseux d'une suggestion externe (`source` + `externalId`) ;
+ *   3. rapprochement du catalogue curé par libellé normalisé ;
+ *   4. création d'une fiche catalogue (nom générique FR + rayon via l'IA,
+ *      best-effort ; nutrition NON touchée — garde-fou n°3).
+ * @returns l'id du food, ou null si rien n'est résoluble (libellé vide…).
+ */
+export async function resolveOrCreateFoodId(
+  db: DB,
+  input: { label: string; foodId?: string | null; source?: string | null; externalId?: string | null },
+): Promise<string | null> {
+  const label = input.label.trim();
+  let foodId = input.foodId || null;
+
+  // 2. Suggestion externe (USDA / OFF) → import paresseux.
+  const source = (input.source ?? '') as NutritionSource | '';
+  const externalId = input.externalId ?? '';
+  if (!foodId && (source === 'usda' || source === 'openfoodfacts') && externalId) {
+    foodId = await importFoodByRef(db, source, externalId);
+  }
+
+  // 3. Texte libre non lié → rapprochement automatique du catalogue par libellé normalisé.
+  if (!foodId && label) {
+    foodId = await findCatalogFoodIdByLabel(db, label);
+  }
+
+  // 4. Toujours pas d'identité → on en CRÉE une (catalogue) : nom générique + rayon
+  // via l'IA (best-effort, liste fermée), nutrition NON touchée (garde-fou n°3).
+  if (!foodId && label) {
+    let cls: { name: string; category: string | null } | null = null;
+    try {
+      const { classifyImportedFood } = await import('@/lib/ai/categorize-food');
+      cls = await classifyImportedFood(label);
+    } catch {
+      cls = null;
+    }
+    foodId = await getOrCreateCatalogFood(db, { label, name: cls?.name ?? null, category: cls?.category ?? null });
+  }
+
+  return foodId;
+}
+
+/**
  * Importe un aliment externe (suggestion sans `foodId`) dans le catalogue local
  * et renvoie son id — à appeler quand l'utilisateur sélectionne une suggestion
  * externe. Réutilise `importFood` (valeurs nutritionnelles depuis le fournisseur).

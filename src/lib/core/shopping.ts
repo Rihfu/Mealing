@@ -871,3 +871,194 @@ export async function recipeMissingIngredients(
 
   return missing;
 }
+
+/** Disponibilité d'un ingrédient au regard du stock du foyer (pour la fiche recette). */
+export type IngredientCoverageStatus = 'ok' | 'partial' | 'none';
+export interface RecipeIngredientCoverage {
+  name: string;
+  foodId: string | null;
+  requiredQty: number | null;
+  requiredUnit: string | null;
+  /** Quantité en stock à AFFICHER (dans l'unité du besoin si comparable, sinon celle du stock). */
+  inStockQty: number | null;
+  inStockUnit: string | null;
+  present: boolean;
+  status: IngredientCoverageStatus;
+}
+
+/**
+ * Couverture stock de CHAQUE ingrédient d'une recette (fiche recette → code couleur +
+ * « en stock : X »). Réutilise la même agrégation que `recipeMissingIngredients`
+ * (`loadStockCoverage`), avec en plus une comparaison MÊME UNITÉ pour les unités non
+ * convertibles en base (ex. « pièce » : « ai-je assez d'œufs ? »). Lecture seule.
+ * - `ok` : présent et quantité suffisante (ou non chiffrable → on suppose couvert) ;
+ * - `partial` : présent mais manque PROUVÉ en unités comparables ;
+ * - `none` : absent du stock.
+ */
+export async function getRecipeIngredientCoverage(
+  db: DB,
+  householdId: string,
+  recipeId: string,
+): Promise<RecipeIngredientCoverage[]> {
+  const ingredients = (unwrap(
+    await db
+      .from('recipe_ingredient')
+      .select('food_id, free_text, quantity, unit, position, food:food_id(name)')
+      .eq('recipe_id', recipeId)
+      .order('position', { ascending: true }),
+  ) ?? []) as Array<{
+    food_id: string | null;
+    free_text: string | null;
+    quantity: number | null;
+    unit: string | null;
+    food: { name: string } | { name: string }[] | null;
+  }>;
+
+  const cov = await loadStockCoverage(db, householdId);
+
+  // Agrégat de stock par aliment : somme par dimension de base (g/ml) ET par unité brute
+  // (pour comparer « pièce » à « pièce »), + présence.
+  const aggByFood = new Map<string, { baseByDim: Map<string, number>; byUnit: Map<string, number>; present: boolean }>();
+  for (const s of cov.stock) {
+    if (!s.food_id) continue;
+    const agg = aggByFood.get(s.food_id) ?? { baseByDim: new Map(), byUnit: new Map(), present: false };
+    if (s.present || (s.quantity ?? 0) > 0) agg.present = true;
+    if (s.tracking_mode === 'quantity' && s.quantity != null) {
+      const base = toBase(s.quantity, s.unit ?? undefined);
+      if (base) agg.baseByDim.set(base.dim, (agg.baseByDim.get(base.dim) ?? 0) + base.value);
+      const u = (s.unit ?? '').trim();
+      if (u) agg.byUnit.set(u, (agg.byUnit.get(u) ?? 0) + s.quantity);
+    }
+    aggByFood.set(s.food_id, agg);
+  }
+
+  return ingredients.map((ing) => {
+    const foodName = (Array.isArray(ing.food) ? ing.food[0] : ing.food)?.name ?? null;
+    const name = foodName ?? ing.free_text ?? '';
+    const req = ing.quantity;
+    const reqUnit = ing.unit ?? null;
+
+    // Calcule présence + quantité disponible comparable au besoin.
+    let present = false;
+    let inStockQty: number | null = null;
+    let inStockUnit: string | null = null;
+    let shortfall: number | null = null; // >0 = manque prouvé
+
+    const settle = (available: number | null, unit: string | null, presence: boolean) => {
+      present = presence;
+      if (available != null) {
+        inStockQty = roundQty(available);
+        inStockUnit = unit;
+        if (req != null && available + 1e-9 < req) shortfall = req - available;
+      }
+    };
+
+    if (ing.food_id) {
+      const agg = aggByFood.get(ing.food_id);
+      if (agg) {
+        const reqBase = reqUnit ? toBase(req ?? 0, reqUnit) : null;
+        if (reqBase && agg.baseByDim.has(reqBase.dim)) {
+          // Unité de base (g/ml) : convertit le total de stock dans l'unité du besoin.
+          const totalBase = agg.baseByDim.get(reqBase.dim)!;
+          settle(fromBase(totalBase, reqUnit ?? undefined) ?? totalBase, reqUnit, agg.present);
+        } else if (reqUnit && agg.byUnit.has(reqUnit)) {
+          settle(agg.byUnit.get(reqUnit)!, reqUnit, agg.present);
+        } else if (agg.byUnit.size === 1) {
+          // Pas comparable au besoin, mais une seule unité en stock → on l'affiche tel quel.
+          const [u, v] = [...agg.byUnit.entries()][0];
+          settle(v, u, agg.present);
+          shortfall = null; // non comparable → pas de manque prouvé
+        } else {
+          present = agg.present;
+        }
+      }
+    } else {
+      const label = ing.free_text?.trim();
+      const s = label ? cov.stockByLabel.get(normalizeLabel(label)) : undefined;
+      if (s) {
+        if (s.qty != null) settle(s.qty, s.unit ?? null, s.present);
+        else present = s.present;
+      }
+    }
+
+    const hasStock = present || inStockQty != null;
+    const status: IngredientCoverageStatus = !hasStock ? 'none' : shortfall != null && shortfall > 0 ? 'partial' : 'ok';
+
+    return { name, foodId: ing.food_id, requiredQty: req, requiredUnit: reqUnit, inStockQty, inStockUnit, present, status };
+  });
+}
+
+/**
+ * Score de « réalisabilité avec le stock » par recette (pour le tri Recettes
+ * « Réalisable (stock) »). Score = (#ok + 0.5·#partiels) / #ingrédients ; 0 si aucun
+ * ingrédient. Même logique de couverture par ingrédient que `getRecipeIngredientCoverage`
+ * (présence + comparaison en unité de base OU même unité), mais batché sur TOUTES les
+ * recettes en une fois (1 requête ingrédients + 1 `loadStockCoverage`). Lecture seule.
+ */
+export async function loadRecipeStockScores(db: DB, householdId: string): Promise<Map<string, number>> {
+  const ingredients = (unwrap(
+    await db.from('recipe_ingredient').select('recipe_id, food_id, free_text, quantity, unit'),
+  ) ?? []) as Array<{
+    recipe_id: string;
+    food_id: string | null;
+    free_text: string | null;
+    quantity: number | null;
+    unit: string | null;
+  }>;
+
+  const cov = await loadStockCoverage(db, householdId);
+  const aggByFood = new Map<string, { baseByDim: Map<string, number>; byUnit: Map<string, number>; present: boolean }>();
+  for (const s of cov.stock) {
+    if (!s.food_id) continue;
+    const agg = aggByFood.get(s.food_id) ?? { baseByDim: new Map(), byUnit: new Map(), present: false };
+    if (s.present || (s.quantity ?? 0) > 0) agg.present = true;
+    if (s.tracking_mode === 'quantity' && s.quantity != null) {
+      const base = toBase(s.quantity, s.unit ?? undefined);
+      if (base) agg.baseByDim.set(base.dim, (agg.baseByDim.get(base.dim) ?? 0) + base.value);
+      const u = (s.unit ?? '').trim();
+      if (u) agg.byUnit.set(u, (agg.byUnit.get(u) ?? 0) + s.quantity);
+    }
+    aggByFood.set(s.food_id, agg);
+  }
+
+  const statusOf = (ing: { food_id: string | null; free_text: string | null; quantity: number | null; unit: string | null }): IngredientCoverageStatus => {
+    const req = ing.quantity;
+    const reqUnit = ing.unit ?? undefined;
+    let present = false;
+    let available: number | null = null;
+    if (ing.food_id) {
+      const agg = aggByFood.get(ing.food_id);
+      if (agg) {
+        present = agg.present;
+        const reqBase = reqUnit ? toBase(req ?? 0, reqUnit) : null;
+        if (reqBase && agg.baseByDim.has(reqBase.dim)) available = fromBase(agg.baseByDim.get(reqBase.dim)!, reqUnit) ?? null;
+        else if (reqUnit && agg.byUnit.has(reqUnit)) available = agg.byUnit.get(reqUnit)!;
+      }
+    } else {
+      const label = ing.free_text?.trim();
+      const s = label ? cov.stockByLabel.get(normalizeLabel(label)) : undefined;
+      if (s) {
+        present = s.present;
+        if (s.qty != null) available = s.qty;
+      }
+    }
+    const shortfall = available != null && req != null && available + 1e-9 < req;
+    const hasStock = present || available != null;
+    return !hasStock ? 'none' : shortfall ? 'partial' : 'ok';
+  };
+
+  const byRecipe = new Map<string, IngredientCoverageStatus[]>();
+  for (const ing of ingredients) {
+    (byRecipe.get(ing.recipe_id) ?? byRecipe.set(ing.recipe_id, []).get(ing.recipe_id)!).push(statusOf(ing));
+  }
+  const scores = new Map<string, number>();
+  for (const [recipeId, statuses] of byRecipe) {
+    if (statuses.length === 0) {
+      scores.set(recipeId, 0);
+      continue;
+    }
+    const s = statuses.reduce((acc, st) => acc + (st === 'ok' ? 1 : st === 'partial' ? 0.5 : 0), 0);
+    scores.set(recipeId, s / statuses.length);
+  }
+  return scores;
+}

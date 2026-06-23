@@ -1,8 +1,3 @@
-// Types générés depuis le schéma Supabase (Phase 0).
-// Régénérer après toute migration :
-//   npx supabase gen types typescript --project-id wbnyngsngppwlsggkorm > src/lib/supabase/database.types.ts
-// (ou via le connecteur Supabase / le dashboard).
-
 export type Json =
   | string
   | number
@@ -953,6 +948,120 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      recipe_group: {
+        Row: {
+          created_at: string
+          household_id: string
+          id: string
+          name: string
+          position: number
+        }
+        Insert: {
+          created_at?: string
+          household_id: string
+          id?: string
+          name: string
+          position?: number
+        }
+        Update: {
+          created_at?: string
+          household_id?: string
+          id?: string
+          name?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_group_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipe_group_item: {
+        Row: {
+          group_id: string | null
+          household_id: string
+          recipe_id: string
+          sort_index: number
+          updated_at: string
+        }
+        Insert: {
+          group_id?: string | null
+          household_id: string
+          recipe_id: string
+          sort_index?: number
+          updated_at?: string
+        }
+        Update: {
+          group_id?: string | null
+          household_id?: string
+          recipe_id?: string
+          sort_index?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_group_item_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_group"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_group_item_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_group_item_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipe_image: {
+        Row: {
+          household_id: string
+          path: string
+          recipe_id: string
+          updated_at: string
+        }
+        Insert: {
+          household_id: string
+          path: string
+          recipe_id: string
+          updated_at?: string
+        }
+        Update: {
+          household_id?: string
+          path?: string
+          recipe_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_image_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_image_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       recipe_ingredient: {
         Row: {

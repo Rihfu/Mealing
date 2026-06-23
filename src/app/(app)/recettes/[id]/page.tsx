@@ -1,9 +1,16 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { computeRecipeNutrition } from '@/lib/core';
-import { FoodLink } from '@/components/food-link';
+import {
+  computeRecipeNutrition,
+  getRecipeIngredientCoverage,
+  loadRecipeImagePaths,
+  signRecipeImageUrls,
+} from '@/lib/core';
 import { AddMissingToShopping } from './add-missing-to-shopping';
+import { RecipeOwnerActions } from './recipe-actions';
+import { IngredientCoverageList } from './ingredient-coverage';
+import { RecipeImageManager } from './recipe-image';
 
 export default async function RecetteDetailPage({
   params,
@@ -11,21 +18,24 @@ export default async function RecetteDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { supabase } = await getAuthContext();
+  const { supabase, userId, profile } = await getAuthContext();
+  const householdId = profile?.household_id as string | undefined;
 
   const { data: recipe } = await supabase
     .from('recipe')
-    .select('id, name, description, instructions, prep_time_min, cook_time_min, servings')
+    .select('id, name, description, instructions, prep_time_min, cook_time_min, servings, created_by')
     .eq('id', id)
     .maybeSingle();
 
   if (!recipe) notFound();
+  const isOwner = !!userId && recipe.created_by === userId;
 
-  const { data: ingredients } = await supabase
-    .from('recipe_ingredient')
-    .select('id, free_text, quantity, unit, food_id, food:food_id(name)')
-    .eq('recipe_id', id)
-    .order('position', { ascending: true });
+  // Couverture stock par ingrédient (code couleur + « en stock : X » sur la fiche).
+  const coverage = householdId ? await getRecipeIngredientCoverage(supabase, householdId, id) : [];
+
+  // Photo de la recette (bucket privé → URL signée).
+  const imagePath = householdId ? (await loadRecipeImagePaths(supabase, householdId)).get(id) ?? null : null;
+  const imageUrl = imagePath ? (await signRecipeImageUrls(supabase, [imagePath])).get(imagePath) ?? null : null;
 
   const nutrition = await computeRecipeNutrition(supabase, id);
   const { data: nutrientTypes } = await supabase
@@ -38,9 +48,12 @@ export default async function RecetteDetailPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <Link href="/recettes" className="w-fit text-sm font-bold text-sage-deep hover:underline">
-        Retour aux recettes
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link href="/recettes" className="text-sm font-bold text-sage-deep hover:underline">
+          Retour aux recettes
+        </Link>
+        {isOwner && <RecipeOwnerActions recipeId={recipe.id} />}
+      </div>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <div className="min-w-0">
@@ -49,23 +62,23 @@ export default async function RecetteDetailPage({
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-soft">{recipe.description}</p>
           )}
 
+          {imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element -- URL signée éphémère (bucket privé)
+            <img
+              src={imageUrl}
+              alt={recipe.name}
+              className="mt-5 aspect-video w-full max-w-2xl rounded-2xl border border-line object-cover shadow-soft"
+            />
+          )}
+          {householdId && (
+            <div className="mt-3">
+              <RecipeImageManager recipeId={recipe.id} householdId={householdId} hasImage={!!imageUrl} />
+            </div>
+          )}
+
           <section className="mt-7">
             <h2 className="mb-3 font-display text-xl font-semibold">Ingrédients</h2>
-            <ul className="overflow-hidden rounded-2xl border border-line bg-surface px-4 shadow-soft">
-              {(ingredients ?? []).map((ing) => {
-                const food = Array.isArray(ing.food) ? ing.food[0] : ing.food;
-                return (
-                  <li key={ing.id} className="flex items-center justify-between gap-4 border-b border-line py-3 last:border-b-0">
-                    <FoodLink foodId={ing.food_id} from={`/recettes/${id}`} className="text-sm font-medium">
-                      {food?.name ?? ing.free_text}
-                    </FoodLink>
-                    <span className="whitespace-nowrap text-sm font-bold">
-                      {ing.quantity ?? ''} {ing.unit ?? ''}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
+            <IngredientCoverageList items={coverage} recipeId={id} />
             <AddMissingToShopping recipeId={recipe.id} />
           </section>
 

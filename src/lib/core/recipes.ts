@@ -1,11 +1,56 @@
 import type { DB } from './types';
 import { unwrap } from './types';
+import { resolveOrCreateFoodId } from './foods';
 
 export interface RecipeIngredientInput {
   foodId?: string;
   freeText?: string;
   quantity?: number;
   unit?: string;
+  /** Indices de suggestion externe (USDA / OFF) à importer si aucun foodId direct. */
+  source?: string;
+  externalId?: string;
+}
+
+/**
+ * Construit les lignes `recipe_ingredient` en RÉSOLVANT l'identité catalogue de
+ * chaque ingrédient (food_id direct → import externe → rapprochement → création de
+ * fiche, via `resolveOrCreateFoodId`). C'est ce qui débloque la nutrition de
+ * recette et la boucle conso→stock (qui ne lisent que les ingrédients liés). Le
+ * libellé saisi reste dans `free_text` (affichage de repli). Garde-fou n°3 : aucune
+ * valeur nutritionnelle n'est générée ici.
+ */
+async function buildIngredientRows(
+  db: DB,
+  recipeId: string,
+  ingredients: RecipeIngredientInput[],
+) {
+  const rows: Array<{
+    recipe_id: string;
+    food_id: string | null;
+    free_text: string | null;
+    quantity: number | null;
+    unit: string | null;
+    position: number;
+  }> = [];
+  let position = 0;
+  for (const ing of ingredients) {
+    const foodId = await resolveOrCreateFoodId(db, {
+      label: (ing.freeText ?? '').trim(),
+      foodId: ing.foodId ?? null,
+      source: ing.source ?? null,
+      externalId: ing.externalId ?? null,
+    });
+    rows.push({
+      recipe_id: recipeId,
+      food_id: foodId,
+      free_text: ing.freeText ?? null,
+      quantity: ing.quantity ?? null,
+      unit: ing.unit ?? null,
+      position: position++,
+    });
+  }
+  return rows;
 }
 
 export interface CreateRecipeInput {
@@ -42,14 +87,7 @@ export async function createRecipe(db: DB, input: CreateRecipeInput): Promise<st
   ) as { id: string };
 
   if (input.ingredients.length > 0) {
-    const rows = input.ingredients.map((ing, position) => ({
-      recipe_id: recipe.id,
-      food_id: ing.foodId ?? null,
-      free_text: ing.freeText ?? null,
-      quantity: ing.quantity ?? null,
-      unit: ing.unit ?? null,
-      position,
-    }));
+    const rows = await buildIngredientRows(db, recipe.id, input.ingredients);
     const { error } = await db.from('recipe_ingredient').insert(rows);
     if (error) throw new Error(error.message);
   }
@@ -61,6 +99,80 @@ export async function createRecipe(db: DB, input: CreateRecipeInput): Promise<st
   }
 
   return recipe.id;
+}
+
+/**
+ * Met à jour une recette : champs de base, puis REMPLACE intégralement les
+ * ingrédients (avec résolution catalogue) et les tags (delete + reinsert). Sous
+ * RLS, seul le créateur peut mettre à jour (`created_by = auth.uid()`).
+ */
+export async function updateRecipe(db: DB, recipeId: string, input: CreateRecipeInput): Promise<void> {
+  const upd = await db
+    .from('recipe')
+    .update({
+      name: input.name,
+      description: input.description ?? null,
+      instructions: input.instructions ?? null,
+      prep_time_min: input.prepTimeMin ?? null,
+      cook_time_min: input.cookTimeMin ?? null,
+      servings: input.servings ?? 1,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', recipeId);
+  if (upd.error) throw new Error(upd.error.message);
+
+  // Ingrédients : remplacement complet (résolution catalogue incluse).
+  const delIng = await db.from('recipe_ingredient').delete().eq('recipe_id', recipeId);
+  if (delIng.error) throw new Error(delIng.error.message);
+  if (input.ingredients.length > 0) {
+    const rows = await buildIngredientRows(db, recipeId, input.ingredients);
+    const { error } = await db.from('recipe_ingredient').insert(rows);
+    if (error) throw new Error(error.message);
+  }
+
+  // Tags : remplacement complet.
+  const delTag = await db.from('recipe_tag').delete().eq('recipe_id', recipeId);
+  if (delTag.error) throw new Error(delTag.error.message);
+  if (input.tags && input.tags.length > 0) {
+    const tagRows = input.tags.map((tag) => ({ recipe_id: recipeId, tag }));
+    const { error } = await db.from('recipe_tag').insert(tagRows);
+    if (error) throw new Error(error.message);
+  }
+}
+
+/**
+ * Supprime une recette. Les ingrédients/tags partent en cascade ; `planned_meal`
+ * garde ses repas (recipe_id passe à NULL — `on delete set null`). RLS : créateur.
+ */
+export async function deleteRecipe(db: DB, recipeId: string): Promise<void> {
+  const { error } = await db.from('recipe').delete().eq('id', recipeId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Backfill : relie au catalogue les ingrédients existants laissés en `free_text`
+ * (food_id null). Best-effort, idempotent — ne touche que les recettes visibles en
+ * écriture (RLS = créées par l'utilisateur courant). @returns le nombre de liaisons.
+ */
+export async function backfillRecipeIngredientLinks(db: DB): Promise<number> {
+  const rows = (unwrap(
+    await db
+      .from('recipe_ingredient')
+      .select('id, free_text')
+      .is('food_id', null)
+      .not('free_text', 'is', null),
+  ) ?? []) as Array<{ id: string; free_text: string | null }>;
+
+  let linked = 0;
+  for (const r of rows) {
+    const label = (r.free_text ?? '').trim();
+    if (!label) continue;
+    const foodId = await resolveOrCreateFoodId(db, { label });
+    if (!foodId) continue;
+    const { error } = await db.from('recipe_ingredient').update({ food_id: foodId }).eq('id', r.id);
+    if (!error) linked += 1;
+  }
+  return linked;
 }
 
 export interface RecipeNutrition {
