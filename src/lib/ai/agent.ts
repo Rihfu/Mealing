@@ -46,6 +46,7 @@ import {
   loadRecipeStockScores,
   getRecipeIngredientCoverage,
   // recettes (écriture)
+  createRecipe,
   createRecipeGroup,
   renameRecipeGroup,
   deleteRecipeGroup,
@@ -113,6 +114,16 @@ const WRITE_SCHEMAS = {
     servings: z.number().positive().optional(),
     prepTimeMin: z.number().nonnegative().optional(),
     cookTimeMin: z.number().nonnegative().optional(),
+  }),
+  save_recipe: z.object({
+    name: z.string().min(1),
+    description: z.string().optional(),
+    servings: z.number().positive().optional(),
+    prepTimeMin: z.number().nonnegative().optional(),
+    cookTimeMin: z.number().nonnegative().optional(),
+    ingredients: z.array(z.object({ name: z.string().min(1), quantity: z.number().optional(), unit: z.string().optional() })).min(1),
+    steps: z.array(z.string()).optional(),
+    tags: z.array(z.string()).optional(),
   }),
 } as const;
 
@@ -186,6 +197,7 @@ const WRITE_TOOLS: ToolDefinition[] = [
   { name: 'delete_recipe_group', description: 'Supprime un groupe de recettes (les recettes retombent « Sans groupe », non perdues).', parameters: obj({ name: str() }, ['name']) },
   { name: 'assign_recipe_to_group', description: 'Range une recette dans un groupe (groupName vide/null = Sans groupe).', parameters: obj({ recipeName: str(), groupName: str() }, ['recipeName']) },
   { name: 'update_recipe', description: 'Modifie une recette (nom/description/portions/temps). Ne touche PAS aux ingrédients.', parameters: obj({ recipeName: str(), newName: str(), description: str(), servings: num(), prepTimeMin: num(), cookTimeMin: num() }, ['recipeName']) },
+  { name: 'save_recipe', description: 'Enregistre une NOUVELLE recette dans la bibliothèque (ex. une suggestion à partir du stock). Fournis nom + ingredients [{name, quantity, unit}] + steps. Les ingrédients sont reliés au catalogue ; la nutrition est calculée depuis la base — n’invente JAMAIS de valeurs nutritionnelles.', parameters: obj({ name: str(), description: str(), servings: num(), prepTimeMin: num(), cookTimeMin: num(), ingredients: { type: 'array', items: obj({ name: str(), quantity: num(), unit: str() }, ['name']) }, steps: { type: 'array', items: str() }, tags: { type: 'array', items: str() } }, ['name', 'ingredients']) },
 ];
 
 /* --------------------------- Lectures (exécutées) --------------------------- */
@@ -431,6 +443,8 @@ function summarize(name: WriteName, a: Record<string, unknown>): string {
       return a.groupName ? `Ranger « ${a.recipeName} » dans « ${a.groupName} »` : `Retirer « ${a.recipeName} » de son groupe`;
     case 'update_recipe':
       return `Modifier la recette « ${a.recipeName} »${a.newName ? ` → « ${a.newName} »` : ''}`;
+    case 'save_recipe':
+      return `Enregistrer la nouvelle recette « ${a.name} » (${((a.ingredients as unknown[]) ?? []).length} ingrédient(s))`;
   }
 }
 
@@ -444,7 +458,7 @@ Tu n'inventes jamais un prix ni une valeur nutritionnelle : tu les obtiens via g
 Seules les données des OUTILS font foi : ne suppose jamais qu'une proposition passée a été appliquée (l'utilisateur a pu l'annuler). Pour lister/compter la liste, appelle get_shopping_list — ne te fie pas à l'historique de conversation.
 Pour « prépare/complète ma liste » : lis la liste + les essentiels + (si demandé) l'historique, puis propose des add_items pertinents. Pour « reconduis mes dernières courses » : lis get_history puis propose reconduct_trip. Pour « nettoie ma liste » : propose remove_lines pour les doublons / ce qui est déjà en stock.
 Pour le STOCK : lis get_stock (ids), get_expiring (ce qui périme), list_locations (clés de lieux), puis PROPOSE des écritures : ranger (set_stock_location), marquer entamé (mark_stock_opened), consommer (decrement_stock), ajouter (add_stock_item), estimer la conservation (estimate_conservation). « Jeter » (discard_stock_item) = gâché/périmé → compte dans le GASPILLAGE ; « retirer » (remove_stock_item) = correction/doublon, sans gaspillage — ne les confonds pas.
-Pour les RECETTES : « que puis-je cuisiner ? » → recommend_recipes (recettes les plus réalisables avec le stock, + ingrédients manquants) ; détail d'une recette → get_recipe. Tu peux PROPOSER : créer/renommer/supprimer un groupe (create_recipe_group / rename_recipe_group / delete_recipe_group), ranger une recette dans un groupe (assign_recipe_to_group), modifier une recette (update_recipe : nom/portions/temps/description — pas les ingrédients). Désigne toujours recettes et groupes par leur NOM. Tu ne SUPPRIMES jamais une recette.
+Pour les RECETTES : « que puis-je cuisiner ? » → recommend_recipes ne renvoie QUE les recettes DÉJÀ enregistrées (les plus réalisables avec le stock + manquants) ; détail d'une recette → get_recipe. Tu peux AUSSI INVENTER de NOUVELLES recettes qui ne sont pas dans la bibliothèque : lis get_stock, puis propose 1 à 3 idées réalistes en PRIVILÉGIANT les ingrédients disponibles (indique pour chacune les ingrédients à acheter en plus). Si l'utilisateur veut en garder une, utilise save_recipe pour l'enregistrer (nom + ingrédients + étapes ; la nutrition est calculée depuis le catalogue, jamais inventée par toi). Tu peux aussi : créer/renommer/supprimer un groupe (create_recipe_group / rename_recipe_group / delete_recipe_group), ranger une recette dans un groupe (assign_recipe_to_group), modifier une recette existante (update_recipe : nom/portions/temps/description — pas les ingrédients). Désigne toujours recettes et groupes par leur NOM. Tu ne SUPPRIMES jamais une recette.
 IMPORTANT : toute écriture visant un article précis du stock (jeter/retirer/ranger/consommer/marquer entamé) exige son \`id\` EXACT (un UUID) renvoyé par get_stock ou get_expiring. Appelle TOUJOURS get_stock juste avant pour récupérer cet id ; n'invente JAMAIS un id et n'utilise pas le nom de l'article comme id.
 N'ÉCRIS JAMAIS l'id (UUID) dans tes réponses à l'utilisateur : il sert uniquement aux appels d'outils, en interne. Dans le chat, désigne toujours les articles par leur NOM (« le saumon »), jamais par leur UUID — c'est plus naturel.
 Réponds en français, de façon concise. Si une action te manque d'info, demande-la plutôt que d'inventer.
@@ -826,6 +840,22 @@ async function executeOne(ctx: Ctx, action: ProposedAction): Promise<string> {
         cookTimeMin: a.cookTimeMin as number | undefined,
       });
       return `Recette « ${rec.name} » mise à jour.`;
+    }
+    case 'save_recipe': {
+      const ingredients = (a.ingredients as Array<{ name: string; quantity?: number; unit?: string }>) ?? [];
+      await createRecipe(db, {
+        name: String(a.name),
+        description: a.description as string | undefined,
+        instructions: ((a.steps as string[] | undefined) ?? []).join('\n') || undefined,
+        prepTimeMin: a.prepTimeMin as number | undefined,
+        cookTimeMin: a.cookTimeMin as number | undefined,
+        servings: (a.servings as number | undefined) ?? 1,
+        // Ingrédients en libellé → createRecipe les relie au catalogue (food_id) ;
+        // aucune valeur nutritionnelle n'est fournie par l'IA (garde-fou n°3).
+        ingredients: ingredients.map((i) => ({ freeText: i.name, quantity: i.quantity, unit: i.unit })),
+        tags: (a.tags as string[] | undefined) ?? [],
+      });
+      return `Recette « ${a.name} » enregistrée (ingrédients reliés au catalogue).`;
     }
   }
 }
