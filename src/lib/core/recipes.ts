@@ -1,6 +1,7 @@
 import type { DB } from './types';
 import { unwrap } from './types';
 import { resolveOrCreateFoodId } from './foods';
+import { normalizeLabel } from '@/lib/text';
 
 export interface RecipeIngredientInput {
   foodId?: string;
@@ -158,6 +159,82 @@ export async function updateRecipeFields(
   if (fields.cookTimeMin !== undefined) patch.cook_time_min = fields.cookTimeMin;
   const { error } = await db.from('recipe').update(patch).eq('id', recipeId);
   if (error) throw new Error(error.message);
+}
+
+/** Édits granulaires des ingrédients d'une recette (pour l'agent IA). */
+export interface RecipeIngredientEdits {
+  add?: Array<{ name: string; quantity?: number; unit?: string }>;
+  /** Noms des ingrédients à retirer (match sur le libellé OU l'aliment lié). */
+  remove?: string[];
+  update?: Array<{ name: string; quantity?: number; unit?: string; newName?: string }>;
+}
+
+/**
+ * Modifie les ingrédients d'une recette EXISTANTE sans tout remplacer : ajoute,
+ * retire et/ou met à jour des ingrédients ciblés par leur nom. Les ajouts/renommages
+ * sont reliés au catalogue (`resolveOrCreateFoodId`) ; aucune nutrition générée (n°3).
+ * Bumpe `updated_at`. RLS : créateur. @returns le décompte des changements.
+ */
+export async function editRecipeIngredients(
+  db: DB,
+  recipeId: string,
+  edits: RecipeIngredientEdits,
+): Promise<{ added: number; removed: number; updated: number }> {
+  const rows = (unwrap(
+    await db.from('recipe_ingredient').select('id, free_text, position, food:food_id(name)').eq('recipe_id', recipeId),
+  ) ?? []) as Array<{ id: string; free_text: string | null; position: number; food: { name: string } | { name: string }[] | null }>;
+  const nameOf = (r: (typeof rows)[number]) => {
+    const f = Array.isArray(r.food) ? r.food[0] : r.food;
+    return normalizeLabel(f?.name ?? r.free_text ?? '');
+  };
+  const matches = (r: (typeof rows)[number], name: string) => nameOf(r) === normalizeLabel(name);
+
+  let removed = 0;
+  for (const name of edits.remove ?? []) {
+    const ids = rows.filter((r) => matches(r, name)).map((r) => r.id);
+    if (ids.length > 0) {
+      const { error } = await db.from('recipe_ingredient').delete().in('id', ids);
+      if (error) throw new Error(error.message);
+      removed += ids.length;
+    }
+  }
+
+  let updated = 0;
+  for (const u of edits.update ?? []) {
+    const target = rows.find((r) => matches(r, u.name));
+    if (!target) continue;
+    const patch: Record<string, unknown> = {};
+    if (u.quantity !== undefined) patch.quantity = u.quantity;
+    if (u.unit !== undefined) patch.unit = u.unit;
+    if (u.newName !== undefined) {
+      patch.free_text = u.newName;
+      patch.food_id = await resolveOrCreateFoodId(db, { label: u.newName });
+    }
+    if (Object.keys(patch).length > 0) {
+      const { error } = await db.from('recipe_ingredient').update(patch).eq('id', target.id);
+      if (error) throw new Error(error.message);
+      updated += 1;
+    }
+  }
+
+  let nextPos = rows.reduce((m, r) => Math.max(m, r.position), -1) + 1;
+  let added = 0;
+  for (const ing of edits.add ?? []) {
+    const foodId = await resolveOrCreateFoodId(db, { label: ing.name });
+    const { error } = await db.from('recipe_ingredient').insert({
+      recipe_id: recipeId,
+      food_id: foodId,
+      free_text: ing.name,
+      quantity: ing.quantity ?? null,
+      unit: ing.unit ?? null,
+      position: nextPos++,
+    });
+    if (error) throw new Error(error.message);
+    added += 1;
+  }
+
+  await db.from('recipe').update({ updated_at: new Date().toISOString() }).eq('id', recipeId);
+  return { added, removed, updated };
 }
 
 /**

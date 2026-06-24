@@ -52,6 +52,7 @@ import {
   deleteRecipeGroup,
   bulkSetRecipeGroup,
   updateRecipeFields,
+  editRecipeIngredients,
 } from '@/lib/core';
 import { categoryDef, categoryLabel, CATEGORY_ORDER } from '@/lib/product-assets';
 import { isoDate } from '@/lib/dates';
@@ -124,6 +125,12 @@ const WRITE_SCHEMAS = {
     ingredients: z.array(z.object({ name: z.string().min(1), quantity: z.number().optional(), unit: z.string().optional() })).min(1),
     steps: z.array(z.string()).optional(),
     tags: z.array(z.string()).optional(),
+  }),
+  edit_recipe_ingredients: z.object({
+    recipeName: z.string().min(1),
+    add: z.array(z.object({ name: z.string().min(1), quantity: z.number().optional(), unit: z.string().optional() })).optional(),
+    remove: z.array(z.string().min(1)).optional(),
+    update: z.array(z.object({ name: z.string().min(1), quantity: z.number().optional(), unit: z.string().optional(), newName: z.string().optional() })).optional(),
   }),
 } as const;
 
@@ -198,6 +205,7 @@ const WRITE_TOOLS: ToolDefinition[] = [
   { name: 'assign_recipe_to_group', description: 'Range une recette dans un groupe (groupName vide/null = Sans groupe).', parameters: obj({ recipeName: str(), groupName: str() }, ['recipeName']) },
   { name: 'update_recipe', description: 'Modifie une recette (nom/description/portions/temps). Ne touche PAS aux ingrédients.', parameters: obj({ recipeName: str(), newName: str(), description: str(), servings: num(), prepTimeMin: num(), cookTimeMin: num() }, ['recipeName']) },
   { name: 'save_recipe', description: 'Enregistre une NOUVELLE recette dans la bibliothèque (ex. une suggestion à partir du stock). Fournis nom + ingredients [{name, quantity, unit}] + steps. Les ingrédients sont reliés au catalogue ; la nutrition est calculée depuis la base — n’invente JAMAIS de valeurs nutritionnelles.', parameters: obj({ name: str(), description: str(), servings: num(), prepTimeMin: num(), cookTimeMin: num(), ingredients: { type: 'array', items: obj({ name: str(), quantity: num(), unit: str() }, ['name']) }, steps: { type: 'array', items: str() }, tags: { type: 'array', items: str() } }, ['name', 'ingredients']) },
+  { name: 'edit_recipe_ingredients', description: 'Modifie les INGRÉDIENTS d’une recette existante (sans tout remplacer) : `add` [{name,quantity,unit}], `remove` [noms], `update` [{name, quantity, unit, newName}]. Cible chaque ingrédient par son NOM. Les ajouts/renommages sont reliés au catalogue.', parameters: obj({ recipeName: str(), add: { type: 'array', items: obj({ name: str(), quantity: num(), unit: str() }, ['name']) }, remove: { type: 'array', items: str() }, update: { type: 'array', items: obj({ name: str(), quantity: num(), unit: str(), newName: str() }, ['name']) } }, ['recipeName']) },
 ];
 
 /* --------------------------- Lectures (exécutées) --------------------------- */
@@ -445,6 +453,13 @@ function summarize(name: WriteName, a: Record<string, unknown>): string {
       return `Modifier la recette « ${a.recipeName} »${a.newName ? ` → « ${a.newName} »` : ''}`;
     case 'save_recipe':
       return `Enregistrer la nouvelle recette « ${a.name} » (${((a.ingredients as unknown[]) ?? []).length} ingrédient(s))`;
+    case 'edit_recipe_ingredients': {
+      const nA = ((a.add as unknown[]) ?? []).length;
+      const nR = ((a.remove as unknown[]) ?? []).length;
+      const nU = ((a.update as unknown[]) ?? []).length;
+      const parts = [nA && `+${nA}`, nR && `−${nR}`, nU && `~${nU}`].filter(Boolean).join(' ');
+      return `Modifier les ingrédients de « ${a.recipeName} »${parts ? ` (${parts})` : ''}`;
+    }
   }
 }
 
@@ -458,7 +473,7 @@ Tu n'inventes jamais un prix ni une valeur nutritionnelle : tu les obtiens via g
 Seules les données des OUTILS font foi : ne suppose jamais qu'une proposition passée a été appliquée (l'utilisateur a pu l'annuler). Pour lister/compter la liste, appelle get_shopping_list — ne te fie pas à l'historique de conversation.
 Pour « prépare/complète ma liste » : lis la liste + les essentiels + (si demandé) l'historique, puis propose des add_items pertinents. Pour « reconduis mes dernières courses » : lis get_history puis propose reconduct_trip. Pour « nettoie ma liste » : propose remove_lines pour les doublons / ce qui est déjà en stock.
 Pour le STOCK : lis get_stock (ids), get_expiring (ce qui périme), list_locations (clés de lieux), puis PROPOSE des écritures : ranger (set_stock_location), marquer entamé (mark_stock_opened), consommer (decrement_stock), ajouter (add_stock_item), estimer la conservation (estimate_conservation). « Jeter » (discard_stock_item) = gâché/périmé → compte dans le GASPILLAGE ; « retirer » (remove_stock_item) = correction/doublon, sans gaspillage — ne les confonds pas.
-Pour les RECETTES : « que puis-je cuisiner ? » → recommend_recipes ne renvoie QUE les recettes DÉJÀ enregistrées (les plus réalisables avec le stock + manquants) ; détail d'une recette → get_recipe. Tu peux AUSSI INVENTER de NOUVELLES recettes qui ne sont pas dans la bibliothèque : lis get_stock, puis propose 1 à 3 idées réalistes en PRIVILÉGIANT les ingrédients disponibles (indique pour chacune les ingrédients à acheter en plus). Si l'utilisateur veut en garder une, utilise save_recipe pour l'enregistrer (nom + ingrédients + étapes ; la nutrition est calculée depuis le catalogue, jamais inventée par toi). Tu peux aussi : créer/renommer/supprimer un groupe (create_recipe_group / rename_recipe_group / delete_recipe_group), ranger une recette dans un groupe (assign_recipe_to_group), modifier une recette existante (update_recipe : nom/portions/temps/description — pas les ingrédients). Désigne toujours recettes et groupes par leur NOM. Tu ne SUPPRIMES jamais une recette.
+Pour les RECETTES : « que puis-je cuisiner ? » → recommend_recipes ne renvoie QUE les recettes DÉJÀ enregistrées (les plus réalisables avec le stock + manquants) ; détail d'une recette → get_recipe. Tu peux AUSSI INVENTER de NOUVELLES recettes qui ne sont pas dans la bibliothèque : lis get_stock, puis propose 1 à 3 idées réalistes en PRIVILÉGIANT les ingrédients disponibles (indique pour chacune les ingrédients à acheter en plus). Si l'utilisateur veut en garder une, utilise save_recipe pour l'enregistrer (nom + ingrédients + étapes ; la nutrition est calculée depuis le catalogue, jamais inventée par toi). Tu peux aussi : créer/renommer/supprimer un groupe (create_recipe_group / rename_recipe_group / delete_recipe_group), ranger une recette dans un groupe (assign_recipe_to_group), modifier les méta d'une recette (update_recipe : nom/portions/temps/description), et modifier ses INGRÉDIENTS (edit_recipe_ingredients : add/remove/update ciblés par nom — lis get_recipe avant pour connaître les ingrédients actuels). Désigne toujours recettes et groupes par leur NOM. Tu ne SUPPRIMES jamais une recette.
 IMPORTANT : toute écriture visant un article précis du stock (jeter/retirer/ranger/consommer/marquer entamé) exige son \`id\` EXACT (un UUID) renvoyé par get_stock ou get_expiring. Appelle TOUJOURS get_stock juste avant pour récupérer cet id ; n'invente JAMAIS un id et n'utilise pas le nom de l'article comme id.
 N'ÉCRIS JAMAIS l'id (UUID) dans tes réponses à l'utilisateur : il sert uniquement aux appels d'outils, en interne. Dans le chat, désigne toujours les articles par leur NOM (« le saumon »), jamais par leur UUID — c'est plus naturel.
 Réponds en français, de façon concise. Si une action te manque d'info, demande-la plutôt que d'inventer.
@@ -856,6 +871,16 @@ async function executeOne(ctx: Ctx, action: ProposedAction): Promise<string> {
         tags: (a.tags as string[] | undefined) ?? [],
       });
       return `Recette « ${a.name} » enregistrée (ingrédients reliés au catalogue).`;
+    }
+    case 'edit_recipe_ingredients': {
+      const rec = await findRecipe(db, String(a.recipeName));
+      if (!rec) return `Recette « ${a.recipeName} » introuvable.`;
+      const { added, removed, updated } = await editRecipeIngredients(db, rec.id, {
+        add: a.add as Array<{ name: string; quantity?: number; unit?: string }> | undefined,
+        remove: a.remove as string[] | undefined,
+        update: a.update as Array<{ name: string; quantity?: number; unit?: string; newName?: string }> | undefined,
+      });
+      return `Ingrédients de « ${rec.name} » mis à jour (${added} ajouté(s), ${removed} retiré(s), ${updated} modifié(s)).`;
     }
   }
 }
