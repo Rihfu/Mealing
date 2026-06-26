@@ -9,7 +9,7 @@ import {
 } from '@/lib/core';
 import { AddMissingToShopping } from './add-missing-to-shopping';
 import { RecipeOwnerActions } from './recipe-actions';
-import { IngredientCoverageList } from './ingredient-coverage';
+import { RecipePortions } from './recipe-portions';
 import { RecipeImageManager } from './recipe-image';
 
 export default async function RecetteDetailPage({
@@ -29,6 +29,9 @@ export default async function RecetteDetailPage({
 
   if (!recipe) notFound();
   const isOwner = !!userId && recipe.created_by === userId;
+
+  const { data: tagRows } = await supabase.from('recipe_tag').select('tag').eq('recipe_id', id);
+  const tags = (tagRows ?? []).map((t) => t.tag).sort((a, b) => a.localeCompare(b));
 
   // Couverture stock par ingrédient (code couleur + « en stock : X » sur la fiche).
   const coverage = householdId ? await getRecipeIngredientCoverage(supabase, householdId, id) : [];
@@ -58,6 +61,15 @@ export default async function RecetteDetailPage({
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <div className="min-w-0">
           <h1 className="font-display text-3xl font-semibold tracking-tight">{recipe.name}</h1>
+          {tags.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              {tags.map((t) => (
+                <span key={t} className="rounded-full bg-sage-tint/70 px-2.5 py-1 text-xs font-semibold text-sage-deep">
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
           {recipe.description && (
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-soft">{recipe.description}</p>
           )}
@@ -78,8 +90,16 @@ export default async function RecetteDetailPage({
 
           <section className="mt-7">
             <h2 className="mb-3 font-display text-xl font-semibold">Ingrédients</h2>
-            <IngredientCoverageList items={coverage} recipeId={id} />
-            <AddMissingToShopping recipeId={recipe.id} />
+            <RecipePortions
+              recipeId={recipe.id}
+              baseServings={Number(recipe.servings) > 0 ? Number(recipe.servings) : 1}
+              basePrepMin={recipe.prep_time_min}
+              baseCookMin={recipe.cook_time_min}
+              baseItems={coverage}
+            />
+            <div className="mt-3">
+              <AddMissingToShopping recipeId={recipe.id} />
+            </div>
           </section>
 
           {recipe.instructions && (
@@ -100,21 +120,6 @@ export default async function RecetteDetailPage({
         </div>
 
         <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
-          <section className="grid grid-cols-3 divide-x divide-line rounded-2xl border border-line bg-surface p-4 text-center shadow-soft">
-            <div>
-              <div className="text-xs text-ink-soft">Prépa</div>
-              <div className="font-bold">{recipe.prep_time_min ?? 0} min</div>
-            </div>
-            <div>
-              <div className="text-xs text-ink-soft">Cuisson</div>
-              <div className="font-bold">{recipe.cook_time_min ?? 0} min</div>
-            </div>
-            <div>
-              <div className="text-xs text-ink-soft">Portions</div>
-              <div className="font-bold">{recipe.servings}</div>
-            </div>
-          </section>
-
           <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
             <div className="mb-3 flex items-baseline justify-between gap-3">
               <h2 className="font-display text-lg font-semibold">Nutrition</h2>

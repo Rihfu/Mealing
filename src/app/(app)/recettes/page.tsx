@@ -22,6 +22,21 @@ export default async function RecettesPage() {
       ])
     : [[], new Map(), new Map<string, string>()];
 
+  // Tags de toutes les recettes visibles → Map<recipeId, string[]>.
+  const recipeIds = (recipes ?? []).map((r) => r.id);
+  const tagsByRecipe = new Map<string, string[]>();
+  if (recipeIds.length > 0) {
+    const { data: tagRows } = await supabase
+      .from('recipe_tag')
+      .select('recipe_id, tag')
+      .in('recipe_id', recipeIds);
+    for (const t of tagRows ?? []) {
+      const list = tagsByRecipe.get(t.recipe_id) ?? [];
+      list.push(t.tag);
+      tagsByRecipe.set(t.recipe_id, list);
+    }
+  }
+
   // URLs signées (bucket privé) pour les photos présentes, en un seul lot.
   const signed = await signRecipeImageUrls(supabase, [...imagePaths.values()]);
 
@@ -35,6 +50,7 @@ export default async function RecettesPage() {
       servings: r.servings,
       isOwner: !!userId && r.created_by === userId,
       imageUrl: path ? signed.get(path) ?? null : null,
+      tags: (tagsByRecipe.get(r.id) ?? []).sort((a, b) => a.localeCompare(b)),
     };
   });
   const sections = groupRecipes(tiles, groups, assignments);
@@ -63,6 +79,9 @@ export default async function RecettesPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {unlinked > 0 && <BackfillButton count={unlinked} />}
+          <Link href="/recettes/stats" className="btn-secondary">
+            Statistiques
+          </Link>
           <Link href="/recettes/generer" className="btn-secondary">
             Generer (IA)
           </Link>

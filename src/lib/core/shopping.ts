@@ -906,14 +906,30 @@ export async function getRecipeIngredientCoverage(
       .select('food_id, free_text, quantity, unit, position, food:food_id(name)')
       .eq('recipe_id', recipeId)
       .order('position', { ascending: true }),
-  ) ?? []) as Array<{
-    food_id: string | null;
-    free_text: string | null;
-    quantity: number | null;
-    unit: string | null;
-    food: { name: string } | { name: string }[] | null;
-  }>;
+  ) ?? []) as CoverageIngredient[];
 
+  return computeIngredientCoverage(db, householdId, ingredients);
+}
+
+/** Forme minimale d'un ingrédient pour le calcul de couverture. */
+export interface CoverageIngredient {
+  food_id: string | null;
+  free_text: string | null;
+  quantity: number | null;
+  unit: string | null;
+  food?: { name: string } | { name: string }[] | null;
+}
+
+/**
+ * Couverture stock d'une LISTE d'ingrédients fournie (quantités déjà résolues) —
+ * extrait de `getRecipeIngredientCoverage` pour être réutilisé avec des quantités
+ * SCALÉES (adaptation aux portions). Lecture seule.
+ */
+export async function computeIngredientCoverage(
+  db: DB,
+  householdId: string,
+  ingredients: CoverageIngredient[],
+): Promise<RecipeIngredientCoverage[]> {
   const cov = await loadStockCoverage(db, householdId);
 
   // Agrégat de stock par aliment : somme par dimension de base (g/ml) ET par unité brute

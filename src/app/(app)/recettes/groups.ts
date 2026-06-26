@@ -11,6 +11,8 @@ export interface RecipeTile {
   isOwner: boolean;
   /** URL signée de la photo de la recette (sinon icône par défaut). */
   imageUrl?: string | null;
+  /** Tags de la recette (pour affichage + filtre). */
+  tags: string[];
 }
 
 /** Vue d'un groupe (id null = « Sans groupe », pseudo-groupe non éditable/non triable). */

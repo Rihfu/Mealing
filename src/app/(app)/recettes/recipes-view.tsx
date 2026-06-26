@@ -13,7 +13,7 @@ import {
   type DragOverEvent,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { SortableContext, useSortable, verticalListSortingStrategy, rectSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useDndSensors } from '@/components/sortable';
 import { TrashIcon } from '../courses/shopping-list';
@@ -30,6 +30,9 @@ import {
   sortRecipesAction,
   sortGroupsAction,
 } from './actions';
+
+/** Normalisation pour la recherche : minuscules + sans accents. */
+const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
 const RECIPE_SORTS: Array<{ by: RecipeSortBy; label: string }> = [
   { by: 'alpha', label: 'A → Z' },
@@ -100,6 +103,26 @@ function SortMenu({
   );
 }
 
+/** Petites pastilles de tags (non interactives) affichées sur une tuile. */
+function TagChips({ tags, max = 3 }: { tags: string[]; max?: number }) {
+  if (tags.length === 0) return null;
+  const shown = tags.slice(0, max);
+  const extra = tags.length - shown.length;
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-1">
+      {shown.map((t) => (
+        <span key={t} className="rounded-full bg-sage-tint/70 px-2 py-0.5 text-[10px] font-semibold leading-none text-sage-deep">
+          {t}
+        </span>
+      ))}
+      {extra > 0 && <span className="text-[10px] font-semibold text-ink-soft">+{extra}</span>}
+    </span>
+  );
+}
+
+const SearchIcon = (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+);
 const HandleIcon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
@@ -108,11 +131,8 @@ const HandleIcon = (
 const PencilIcon = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
 );
-const ForkIcon = (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 2v7a3 3 0 0 0 6 0V2M10 9v13M17 2c-1.5 0-3 1.8-3 5s1.5 4 3 4 3-.8 3-4-1.5-5-3-5Zm0 13v7" /></svg>
-);
 
-/** Détection de collision : sépare le drag d'en-tête (grp:) du drag de tuile (tuiles +
+/** Détection de collision : sépare le drag d'en-tête (grp:) du drag de carte (cartes +
  *  zones de dépôt grp-drop:), pour ne pas mélanger les deux niveaux (cf. Stock). */
 const collisionStrategy: CollisionDetection = (args) => {
   const isGroup = String(args.active.id).startsWith('grp:');
@@ -120,82 +140,34 @@ const collisionStrategy: CollisionDetection = (args) => {
   return closestCenter({ ...args, droppableContainers: containers });
 };
 
-/** Poubelle rouge à confirmation en place (action irréversible). */
-function TileTrash({ onConfirm }: { onConfirm: () => void }) {
+/** Gros emblème fourchette/couteau pour les cartes sans photo. */
+const ForkIconLg = (
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 2v7a3 3 0 0 0 6 0V2M10 9v13M17 2c-1.5 0-3 1.8-3 5s1.5 4 3 4 3-.8 3-4-1.5-5-3-5Zm0 13v7" /></svg>
+);
+
+/** Bouton « overlay » sur l'image d'une carte (fond translucide pour la lisibilité). */
+const overlayBtn = 'flex h-8 w-8 items-center justify-center rounded-full bg-surface/90 shadow-soft backdrop-blur-sm transition-colors';
+
+/** Poubelle d'overlay avec confirmation en place. */
+function CardTrash({ onConfirm }: { onConfirm: () => void }) {
   const [confirming, setConfirming] = useState(false);
   if (confirming) {
     return (
-      <span className="flex items-center gap-1">
+      <span className="flex items-center gap-1 rounded-full bg-surface/95 px-1 py-0.5 shadow-soft backdrop-blur-sm">
         <button type="button" onClick={onConfirm} className="rounded-full bg-clay px-2 py-1 text-[11px] font-semibold text-white">Oui</button>
         <button type="button" onClick={() => setConfirming(false)} aria-label="Annuler" className="rounded-full bg-line/60 px-2 py-1 text-[11px] font-semibold text-ink-soft">✕</button>
       </span>
     );
   }
   return (
-    <button
-      type="button"
-      onClick={() => setConfirming(true)}
-      aria-label="Supprimer la recette"
-      title="Supprimer la recette"
-      className="flex h-8 w-8 items-center justify-center rounded-full bg-clay-tint/60 text-[#c2774f] transition-colors hover:bg-clay-tint"
-    >
+    <button type="button" onClick={() => setConfirming(true)} aria-label="Supprimer la recette" title="Supprimer la recette" className={`${overlayBtn} text-[#c2774f] hover:bg-clay-tint`}>
       <TrashIcon size={15} />
     </button>
   );
 }
 
-function RecipeTileBody({
-  r,
-  selectMode,
-  selected,
-  onSelectToggle,
-  onDelete,
-  handle,
-}: {
-  r: RecipeTile;
-  selectMode: boolean;
-  selected: boolean;
-  onSelectToggle: () => void;
-  onDelete: () => void;
-  handle?: React.ReactNode;
-}) {
-  const total = (r.prepTimeMin ?? 0) + (r.cookTimeMin ?? 0);
-  return (
-    <>
-      {selectMode && (
-        <button type="button" aria-label={selected ? 'Désélectionner' : 'Sélectionner'} onClick={onSelectToggle}>
-          <span className={`flex h-5 w-5 items-center justify-center rounded-md border text-xs font-bold ${selected ? 'border-green-strong bg-green-strong text-white' : 'border-line-strong bg-surface text-transparent'}`}>✓</span>
-        </button>
-      )}
-      {r.imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- URL signée éphémère (bucket privé)
-        <img src={r.imageUrl} alt="" className="h-9 w-9 shrink-0 rounded-xl object-cover" />
-      ) : (
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sage-tint text-sage-deep">{ForkIcon}</span>
-      )}
-      {selectMode ? (
-        <button type="button" onClick={onSelectToggle} className="min-w-0 flex-1 truncate text-left">
-          <span className="block truncate text-sm font-medium">{r.name}</span>
-          <span className="text-xs text-ink-soft">{total} min · {r.servings} port.</span>
-        </button>
-      ) : (
-        <Link href={`/recettes/${r.id}`} className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-ink hover:text-sage-deep">{r.name}</span>
-          <span className="text-xs text-ink-soft">{total} min · {r.servings} port.</span>
-        </Link>
-      )}
-      {!selectMode && r.isOwner && (
-        <div className="flex shrink-0 items-center gap-1.5">
-          <Link href={`/recettes/${r.id}/modifier`} aria-label="Modifier" title="Modifier" className="flex h-8 w-8 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-sage-tint/60 hover:text-sage-deep">{PencilIcon}</Link>
-          <TileTrash onConfirm={onDelete} />
-        </div>
-      )}
-      {handle}
-    </>
-  );
-}
-
-function SortableRecipeTile({
+/** Carte de recette : photo en haut, infos en bas (grille « livre de recettes »). */
+function SortableRecipeCard({
   r,
   selectMode,
   selected,
@@ -212,34 +184,72 @@ function SortableRecipeTile({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: r.id, disabled: dragDisabled });
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 20 : undefined };
+  const total = (r.prepTimeMin ?? 0) + (r.cookTimeMin ?? 0);
+
+  const image = r.imageUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element -- URL signée éphémère (bucket privé)
+    <img src={r.imageUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover/card:scale-[1.03]" />
+  ) : (
+    <span className="flex h-full w-full items-center justify-center text-sage-deep/70">{ForkIconLg}</span>
+  );
+
   return (
-    <li
+    <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-2.5 rounded-lg px-1 py-2.5 transition-colors duration-200 hover:bg-sage-tint/40 ${selected ? 'bg-sage-tint/60' : ''} ${isDragging ? 'relative bg-surface shadow-soft ring-1 ring-green-strong' : ''}`}
+      className={`group/card relative flex flex-col overflow-hidden rounded-2xl border bg-surface shadow-soft transition-shadow hover:shadow-md ${selected ? 'border-green-strong ring-2 ring-green-strong' : 'border-line'} ${isDragging ? 'opacity-90 ring-1 ring-green-strong' : ''}`}
     >
-      <RecipeTileBody
-        r={r}
-        selectMode={selectMode}
-        selected={selected}
-        onSelectToggle={onSelectToggle}
-        onDelete={onDelete}
-        handle={
-          !selectMode ? (
-            <button
-              type="button"
-              aria-label="Glisser pour déplacer / réordonner"
-              title="Glisser pour déplacer (appui long sur mobile)"
-              {...attributes}
-              {...listeners}
-              className="cursor-grab touch-none text-ink-soft/60 hover:text-ink-soft active:cursor-grabbing"
-            >
-              {HandleIcon}
-            </button>
-          ) : undefined
-        }
-      />
-    </li>
+      {selectMode ? (
+        <button type="button" onClick={onSelectToggle} aria-label={selected ? 'Désélectionner' : 'Sélectionner'} className="relative block aspect-[4/3] w-full overflow-hidden bg-sage-tint">
+          {image}
+        </button>
+      ) : (
+        <Link href={`/recettes/${r.id}`} className="relative block aspect-[4/3] w-full overflow-hidden bg-sage-tint">
+          {image}
+        </Link>
+      )}
+
+      {/* Coin haut-gauche : case à cocher (sélection) ou poignée de glissement. */}
+      {selectMode ? (
+        <button type="button" onClick={onSelectToggle} aria-label={selected ? 'Désélectionner' : 'Sélectionner'} className="absolute left-2 top-2">
+          <span className={`flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold shadow-soft ${selected ? 'border-green-strong bg-green-strong text-white' : 'border-line-strong bg-surface/90 text-transparent'}`}>✓</span>
+        </button>
+      ) : !dragDisabled ? (
+        <button
+          type="button"
+          aria-label="Glisser pour déplacer / réordonner"
+          title="Glisser pour déplacer (appui long sur mobile)"
+          {...attributes}
+          {...listeners}
+          className={`${overlayBtn} absolute left-2 top-2 cursor-grab touch-none text-ink-soft hover:text-ink active:cursor-grabbing`}
+        >
+          {HandleIcon}
+        </button>
+      ) : null}
+
+      {/* Coin haut-droit : actions du créateur. */}
+      {!selectMode && r.isOwner && (
+        <div className="absolute right-2 top-2 flex items-center gap-1">
+          <Link href={`/recettes/${r.id}/modifier`} aria-label="Modifier" title="Modifier" className={`${overlayBtn} text-ink-soft hover:text-sage-deep`}>{PencilIcon}</Link>
+          <CardTrash onConfirm={onDelete} />
+        </div>
+      )}
+
+      {/* Corps. */}
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        {selectMode ? (
+          <button type="button" onClick={onSelectToggle} className="text-left">
+            <span className="line-clamp-2 text-sm font-semibold leading-snug">{r.name}</span>
+          </button>
+        ) : (
+          <Link href={`/recettes/${r.id}`}>
+            <span className="line-clamp-2 text-sm font-semibold leading-snug text-ink hover:text-sage-deep">{r.name}</span>
+          </Link>
+        )}
+        <span className="text-xs text-ink-soft">{total} min · {r.servings} port.</span>
+        <TagChips tags={r.tags} max={3} />
+      </div>
+    </div>
   );
 }
 
@@ -330,10 +340,10 @@ function GroupSection({
         {!isUngrouped && !selectMode && <GroupHeaderActions id={g.view.id!} name={g.view.name} onRefresh={onRefresh} />}
       </div>
       {!collapsed && (
-        <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
-          <ul className="divide-y divide-line">
+        <SortableContext items={itemIds} strategy={rectSortingStrategy}>
+          <div className="mt-1 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {g.recipes.map((r) => (
-              <SortableRecipeTile
+              <SortableRecipeCard
                 key={r.id}
                 r={r}
                 selectMode={selectMode}
@@ -343,9 +353,9 @@ function GroupSection({
                 onDelete={() => onDeleteRecipe(r.id)}
               />
             ))}
-          </ul>
+          </div>
           {/* Zone de dépôt visible UNIQUEMENT pour un groupe vide (sinon on lâche sur les
-              recettes existantes). Évite l'encombrement sous les groupes remplis. */}
+              cartes existantes). Évite l'encombrement sous les groupes remplis. */}
           {!dragDisabled && g.recipes.length === 0 && <GroupDropZone k={k} empty />}
         </SortableContext>
       )}
@@ -373,13 +383,45 @@ export function RecipesView({ sections: serverSections }: { sections: RecipeGrou
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [moveOpen, setMoveOpen] = useState(false);
   const [newGroup, setNewGroup] = useState('');
+  const [search, setSearch] = useState('');
+  const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const dragFrom = useRef<string | null>(null);
 
-  const allTiles = useMemo(() => board.flatMap((g) => g.recipes), [board]);
-  const dragDisabled = selectMode;
+  // Filtre/recherche : vue dérivée au-dessus de `board`. Quand un filtre est actif,
+  // le glisser-déposer est désactivé (réordonner une vue partielle n'a pas de sens).
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const g of board) for (const r of g.recipes) for (const t of r.tags) set.add(t);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [board]);
+  const filtering = search.trim().length > 0 || activeTags.size > 0;
+  const displayBoard = useMemo(() => {
+    if (!filtering) return board;
+    const q = norm(search.trim());
+    return board
+      .map((g) => ({
+        ...g,
+        recipes: g.recipes.filter((r) => {
+          const matchSearch = !q || norm(r.name).includes(q) || r.tags.some((t) => norm(t).includes(q));
+          const matchTags = activeTags.size === 0 || r.tags.some((t) => activeTags.has(t));
+          return matchSearch && matchTags;
+        }),
+      }))
+      .filter((g) => g.recipes.length > 0);
+  }, [board, filtering, search, activeTags]);
+
+  const allTiles = useMemo(() => displayBoard.flatMap((g) => g.recipes), [displayBoard]);
+  const dragDisabled = selectMode || filtering;
   const realGroups = useMemo(() => board.filter((g) => g.view.id !== null), [board]);
-  const groupSortableIds = useMemo(() => realGroups.map((g) => `grp:${sectionKey(g.view.id)}`), [realGroups]);
+  const groupSortableIds = useMemo(
+    () => displayBoard.filter((g) => g.view.id !== null).map((g) => `grp:${sectionKey(g.view.id)}`),
+    [displayBoard],
+  );
   const allSelected = allTiles.length > 0 && allTiles.every((r) => selected.has(r.id));
+  function toggleTag(t: string) {
+    setActiveTags((s) => { const n = new Set(s); if (n.has(t)) n.delete(t); else n.add(t); return n; });
+  }
+  function clearFilters() { setSearch(''); setActiveTags(new Set()); }
 
   function exitSelect() { setSelectMode(false); setSelected(new Set()); }
   function toggleSelect(id: string) {
@@ -493,6 +535,44 @@ export function RecipesView({ sections: serverSections }: { sections: RecipeGrou
 
   return (
     <>
+      <div className="mb-3 flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-48 max-w-xs flex-1">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher une recette…"
+              aria-label="Rechercher une recette"
+              className="field-input w-full py-1.5 pl-9 text-sm"
+            />
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft">{SearchIcon}</span>
+          </div>
+          {filtering && (
+            <button type="button" onClick={clearFilters} className="text-xs font-semibold text-ink-soft hover:text-clay">
+              Réinitialiser ({allTiles.length})
+            </button>
+          )}
+        </div>
+        {allTags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {allTags.map((t) => {
+              const on = activeTags.has(t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => toggleTag(t)}
+                  aria-pressed={on}
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${on ? 'bg-sage-deep text-white' : 'bg-sage-tint/60 text-sage-deep hover:bg-sage-tint'}`}
+                >
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <form action={() => { const n = newGroup.trim(); if (n) startMove(async () => { await createGroupAction(n); setNewGroup(''); refresh(); }); }} className="flex items-center gap-1.5">
           <input value={newGroup} onChange={(e) => setNewGroup(e.target.value)} placeholder="Nouveau groupe…" aria-label="Nom du nouveau groupe" className="field-input w-44 px-3 py-1.5 text-sm" />
@@ -519,7 +599,7 @@ export function RecipesView({ sections: serverSections }: { sections: RecipeGrou
       <DndContext id="recipes-dnd" sensors={sensors} collisionDetection={collisionStrategy} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
         <SortableContext items={groupSortableIds} strategy={verticalListSortingStrategy}>
           <div className="flex flex-col gap-4">
-            {board.map((g) => (
+            {displayBoard.map((g) => (
               <GroupSection
                 key={sectionKey(g.view.id) || 'ungrouped'}
                 g={g}
@@ -533,6 +613,11 @@ export function RecipesView({ sections: serverSections }: { sections: RecipeGrou
                 onRefresh={refresh}
               />
             ))}
+            {filtering && displayBoard.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-line-strong bg-surface p-6 text-center text-sm text-ink-soft">
+                Aucune recette ne correspond à ce filtre.
+              </div>
+            )}
           </div>
         </SortableContext>
       </DndContext>

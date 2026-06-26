@@ -8,6 +8,7 @@ export * from './categories';
 export * from './recipes';
 export * from './recipe-groups';
 export * from './recipe-image';
+export * from './recipe-stats';
 export * from './nutrition';
 export * from './shopping';
 export * from './shopping-history';
