@@ -624,6 +624,7 @@ export type Database = {
           meal_date: string
           produces_leftover: boolean
           recipe_id: string | null
+          servings: number | null
           slot: string
           stock_applied_at: string | null
           total_quantity_prepared: number | null
@@ -641,6 +642,7 @@ export type Database = {
           meal_date: string
           produces_leftover?: boolean
           recipe_id?: string | null
+          servings?: number | null
           slot: string
           stock_applied_at?: string | null
           total_quantity_prepared?: number | null
@@ -658,6 +660,7 @@ export type Database = {
           meal_date?: string
           produces_leftover?: boolean
           recipe_id?: string | null
+          servings?: number | null
           slot?: string
           stock_applied_at?: string | null
           total_quantity_prepared?: number | null

@@ -199,10 +199,13 @@ export function RecipeForm({
   mode = 'create',
   recipeId,
   initial,
+  returnTo,
 }: {
   mode?: 'create' | 'edit';
   recipeId?: string;
   initial?: RecipeFormInitial;
+  /** Chemin de retour après création (ex. revenir au planning et rattacher la recette). */
+  returnTo?: string;
 }) {
   const [rows, setRows] = useState<Row[]>(
     initial && initial.ingredients.length > 0
@@ -240,6 +243,7 @@ export function RecipeForm({
     <form action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="ingredients_json" value={ingredientsJson} />
       {mode === 'edit' && recipeId && <input type="hidden" name="recipe_id" value={recipeId} />}
+      {mode === 'create' && returnTo && <input type="hidden" name="return_to" value={returnTo} />}
 
       <label className="flex flex-col gap-1 text-sm font-semibold">
         Nom

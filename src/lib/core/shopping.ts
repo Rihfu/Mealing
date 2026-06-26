@@ -49,7 +49,7 @@ export async function generateShoppingList(
   const [mealsRes, offRes, recurringRes, manualRes, statesRes, coverage, catalogIndex, prefs] = await Promise.all([
     db
       .from('planned_meal')
-      .select('recipe_id, meal_date')
+      .select('recipe_id, meal_date, servings')
       .eq('household_id', hh)
       .gte('meal_date', params.from)
       .lte('meal_date', params.to)
@@ -68,19 +68,39 @@ export async function generateShoppingList(
     loadFoodPrefs(db, hh),
   ]);
 
-  const meals = (unwrap(mealsRes) ?? []) as Array<{ recipe_id: string; meal_date: string }>;
+  const meals = (unwrap(mealsRes) ?? []) as Array<{ recipe_id: string; meal_date: string; servings: number | null }>;
   const offDates = new Set(
     ((unwrap(offRes) ?? []) as Array<{ off_date: string; scope: string }>)
       .filter((o) => o.scope === 'household')
       .map((o) => o.off_date),
   );
 
-  const activeRecipeIds = meals.filter((m) => !offDates.has(m.meal_date)).map((m) => m.recipe_id);
+  const activeMeals = meals.filter((m) => !offDates.has(m.meal_date));
+  const activeRecipeIds = activeMeals.map((m) => m.recipe_id);
 
   const needByFood = new Map<string, { qty: number; unit?: string }>();
   const needByLabel = new Map<string, { label: string; qty?: number; unit?: string }>();
 
   if (activeRecipeIds.length > 0) {
+    // Portions de base des recettes planifiées → pour scaler les ingrédients quand un
+    // repas est planifié pour un nombre de portions différent (ex. invités).
+    const baseServings = new Map<string, number>();
+    for (const r of (unwrap(
+      await db.from('recipe').select('id, servings').in('id', Array.from(new Set(activeRecipeIds))),
+    ) ?? []) as Array<{ id: string; servings: number | null }>) {
+      baseServings.set(r.id, Number(r.servings) > 0 ? Number(r.servings) : 1);
+    }
+
+    // Facteur d'échelle CUMULÉ par recette = somme sur les repas actifs de
+    // (portions planifiées ?? portions de base) / portions de base. Remplace le simple
+    // décompte d'occurrences : 1 dîner « pour 4 » d'une recette à 2 portions → facteur 2.
+    const factorByRecipe = new Map<string, number>();
+    for (const m of activeMeals) {
+      const base = baseServings.get(m.recipe_id) ?? 1;
+      const f = m.servings != null && m.servings > 0 ? m.servings / base : 1;
+      factorByRecipe.set(m.recipe_id, (factorByRecipe.get(m.recipe_id) ?? 0) + f);
+    }
+
     const ingredients = (unwrap(
       await db
         .from('recipe_ingredient')
@@ -94,11 +114,8 @@ export async function generateShoppingList(
       unit: string | null;
     }>;
 
-    const occ = new Map<string, number>();
-    for (const id of activeRecipeIds) occ.set(id, (occ.get(id) ?? 0) + 1);
-
     for (const ing of ingredients) {
-      const times = occ.get(ing.recipe_id) ?? 1;
+      const times = factorByRecipe.get(ing.recipe_id) ?? 1;
 
       if (ing.food_id) {
         if (ing.quantity == null) continue;

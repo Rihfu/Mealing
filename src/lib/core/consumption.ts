@@ -84,15 +84,24 @@ export async function applyDueMealsToStock(db: DB, householdId: string): Promise
   const meals = (unwrap(
     await db
       .from('planned_meal')
-      .select('id, recipe_id')
+      .select('id, recipe_id, servings')
       .eq('household_id', householdId)
       .lt('meal_date', today)
       .not('recipe_id', 'is', null)
       .is('stock_applied_at', null),
-  ) ?? []) as Array<{ id: string; recipe_id: string }>;
+  ) ?? []) as Array<{ id: string; recipe_id: string; servings: number | null }>;
   if (meals.length === 0) return { decrements: [], meals: 0 };
 
   const mealIds = meals.map((m) => m.id);
+
+  // Portions de base des recettes → pour scaler le décrément quand le repas a été
+  // planifié pour un nombre de portions différent (cohérent avec la liste de courses).
+  const baseServings = new Map<string, number>();
+  for (const r of (unwrap(
+    await db.from('recipe').select('id, servings').in('id', Array.from(new Set(meals.map((m) => m.recipe_id)))),
+  ) ?? []) as Array<{ id: string; servings: number | null }>) {
+    baseServings.set(r.id, Number(r.servings) > 0 ? Number(r.servings) : 1);
+  }
   // Repas explicitement sautés → on les marque appliqués sans décrémenter.
   const skipped = new Set(
     ((unwrap(
@@ -129,12 +138,14 @@ export async function applyDueMealsToStock(db: DB, householdId: string): Promise
       await db.from('recipe_ingredient').select('food_id, quantity, unit').eq('recipe_id', meal.recipe_id).not('food_id', 'is', null),
     ) ?? []) as Array<{ food_id: string | null; quantity: number | null; unit: string | null }>;
 
+    const base = baseServings.get(meal.recipe_id) ?? 1;
+    const factor = meal.servings != null && meal.servings > 0 ? meal.servings / base : 1;
     let touched = false;
     for (const ing of ingredients) {
       if (!ing.food_id || ing.quantity == null) continue;
       const s = stockByFood.get(ing.food_id);
       if (!s) continue;
-      const dec = reconcileAmount(ing.quantity, ing.unit, s.unit);
+      const dec = reconcileAmount(ing.quantity * factor, ing.unit, s.unit);
       if (dec == null || dec <= 0) continue;
       const newQty = Math.max(0, s.quantity - dec);
       await db.from('stock').update({ quantity: newQty }).eq('id', s.id);

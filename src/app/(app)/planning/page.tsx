@@ -1,176 +1,173 @@
-import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { addDays, isoDate, mondayOf, SLOTS } from '@/lib/dates';
-import { addMealAction, deleteMealAction, markDayOffAction, recordDeviationAction } from './actions';
+import { addDays, isoDate, mondayOf } from '@/lib/dates';
+import { loadRecipeImagePaths, signRecipeImageUrls } from '@/lib/core';
+import { PlanningBoard, type MealView, type RecipeOption, type ProfileOption } from './planning-board';
 
-interface Meal {
-  id: string;
-  meal_date: string;
-  slot: string;
-  recipe_id: string | null;
-  free_text: string | null;
-}
-
-const DAYS_ABBR = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
-const MONTHS = [
-  'janv.', 'févr.', 'mars', 'avril', 'mai', 'juin',
-  'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
-];
-const SLOT_DOT: Record<string, string> = {
-  breakfast: 'bg-butter',
-  lunch: 'bg-sage',
-  dinner: 'bg-clay',
-  snack: 'bg-sage-deep',
+/** Créneaux BDD → clés du design. */
+const SLOT_DB_TO_DESIGN: Record<string, string> = {
+  breakfast: 'petitDej',
+  lunch: 'dejeuner',
+  dinner: 'diner',
+  snack: 'collation',
 };
 
 export default async function PlanningPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string }>;
+  searchParams: Promise<{ week?: string; planRecipe?: string; planD?: string; planSlot?: string }>;
 }) {
-  const { week } = await searchParams;
-  const { supabase } = await getAuthContext();
+  const { week, planRecipe, planD, planSlot } = await searchParams;
+  const { supabase, profile } = await getAuthContext();
+  if (!profile?.household_id) redirect('/onboarding');
+  const householdId = profile.household_id as string;
 
   const weekStart = mondayOf(week);
   const weekEnd = addDays(weekStart, 6);
   const fromIso = isoDate(weekStart);
   const toIso = isoDate(weekEnd);
 
-  const [{ data: meals }, { data: offDays }, { data: recipes }] = await Promise.all([
+  const [{ data: meals }, { data: offDays }, { data: recipes }, { data: profiles }, imagePaths] = await Promise.all([
     supabase
       .from('planned_meal')
-      .select('id, meal_date, slot, recipe_id, free_text')
+      .select('id, meal_date, slot, recipe_id, free_text, servings, produces_leftover, leftover_source_meal_id, is_individual, individual_profile_id')
       .gte('meal_date', fromIso)
       .lte('meal_date', toIso),
-    supabase.from('day_off_plan').select('off_date').gte('off_date', fromIso).lte('off_date', toIso),
-    supabase.from('recipe').select('id, name').order('name', { ascending: true }),
+    supabase.from('day_off_plan').select('off_date').eq('scope', 'household').gte('off_date', fromIso).lte('off_date', toIso),
+    supabase.from('recipe').select('id, name, servings, prep_time_min, cook_time_min').order('name', { ascending: true }),
+    supabase.from('profile').select('id, display_name').eq('household_id', householdId),
+    loadRecipeImagePaths(supabase, householdId),
   ]);
 
-  const mealList = (meals ?? []) as Meal[];
-  const recipeName = new Map((recipes ?? []).map((r) => [r.id, r.name]));
-  const offSet = new Set((offDays ?? []).map((o) => o.off_date));
+  const mealRows = meals ?? [];
+  const recipeRows = recipes ?? [];
+  const recipeName = new Map(recipeRows.map((r) => [r.id, r.name]));
+  const recipeServings = new Map(recipeRows.map((r) => [r.id, Number(r.servings) || 1]));
+  const profileName = new Map((profiles ?? []).map((p) => [p.id, p.display_name || 'Profil']));
 
+  // Photos de recettes (URLs signées) pour le sélecteur + les cartes.
+  const signed = await signRecipeImageUrls(supabase, [...imagePaths.values()]);
+  const recipeImage = new Map<string, string>();
+  for (const [rid, path] of imagePaths) {
+    const url = signed.get(path);
+    if (url) recipeImage.set(rid, url);
+  }
+
+  // Tags par recette (filtre du sélecteur).
+  const tagsByRecipe = new Map<string, string[]>();
+  if (recipeRows.length > 0) {
+    const { data: tagRows } = await supabase.from('recipe_tag').select('recipe_id, tag').in('recipe_id', recipeRows.map((r) => r.id));
+    for (const t of tagRows ?? []) {
+      const list = tagsByRecipe.get(t.recipe_id) ?? [];
+      list.push(t.tag);
+      tagsByRecipe.set(t.recipe_id, list);
+    }
+  }
+
+  // Écarts de consommation.
+  const mealIds = mealRows.map((m) => m.id);
   const { data: consumptions } = await supabase
     .from('real_consumption')
-    .select('planned_meal_id, status')
-    .in('planned_meal_id', mealList.map((m) => m.id).length ? mealList.map((m) => m.id) : ['']);
-  const statusByMeal = new Map(
-    (consumptions ?? []).filter((c) => c.planned_meal_id).map((c) => [c.planned_meal_id as string, c.status]),
+    .select('planned_meal_id, status, actual_free_text')
+    .in('planned_meal_id', mealIds.length ? mealIds : ['']);
+  const consByMeal = new Map(
+    (consumptions ?? []).filter((c) => c.planned_meal_id).map((c) => [c.planned_meal_id as string, c]),
   );
 
-  const prevWeek = isoDate(addDays(weekStart, -7));
-  const nextWeek = isoDate(addDays(weekStart, 7));
+  // Nom du repas-source d'un reste (peut être hors semaine) + nb de restes replanifiés.
+  const sourceIds = [...new Set(mealRows.map((m) => m.leftover_source_meal_id).filter((x): x is string => !!x))];
+  const sourceName = new Map<string, string>();
+  if (sourceIds.length > 0) {
+    const { data: sources } = await supabase.from('planned_meal').select('id, recipe_id, free_text').in('id', sourceIds);
+    for (const s of sources ?? []) sourceName.set(s.id, s.recipe_id ? recipeName.get(s.recipe_id) ?? 'Recette' : s.free_text ?? 'Repas');
+  }
+  const replannedCount = new Map<string, number>();
+  if (mealIds.length > 0) {
+    const { data: rep } = await supabase.from('planned_meal').select('leftover_source_meal_id').in('leftover_source_meal_id', mealIds);
+    for (const r of rep ?? []) {
+      const sid = r.leftover_source_meal_id as string | null;
+      if (sid) replannedCount.set(sid, (replannedCount.get(sid) ?? 0) + 1);
+    }
+  }
+
+  // Index jour (0=lundi … 6=dimanche) à partir de la date.
+  const dayIndexOf = (dateIso: string) => {
+    const diff = Math.round((new Date(`${dateIso}T00:00:00`).getTime() - weekStart.getTime()) / 86_400_000);
+    return diff;
+  };
+
+  const mealViews: MealView[] = mealRows
+    .map((m) => {
+      const cons = consByMeal.get(m.id);
+      const di = dayIndexOf(m.meal_date);
+      const status = cons?.status === 'skipped' ? 'skipped' : cons?.status === 'different' ? 'different' : null;
+      const isLeftover = !!m.leftover_source_meal_id;
+      const srcName = isLeftover ? sourceName.get(m.leftover_source_meal_id as string) ?? null : null;
+      // Nom : recette > plat improvisé (free_text) > « Reste : <source> » > « Repas libre ».
+      const name = m.recipe_id
+        ? recipeName.get(m.recipe_id) ?? 'Recette'
+        : m.free_text
+          ? m.free_text
+          : isLeftover
+            ? `Reste : ${srcName ?? 'repas'}`
+            : 'Repas libre';
+      return {
+        id: m.id,
+        dayIndex: di,
+        slot: SLOT_DB_TO_DESIGN[m.slot] ?? 'dejeuner',
+        recipeId: m.recipe_id,
+        name,
+        serves: m.servings != null ? Number(m.servings) : m.recipe_id ? recipeServings.get(m.recipe_id) ?? 1 : 1,
+        imageUrl: m.recipe_id ? recipeImage.get(m.recipe_id) ?? null : null,
+        leftover: !!m.produces_leftover,
+        fromLeftover: isLeftover,
+        leftoverSourceName: srcName,
+        replannedCount: replannedCount.get(m.id) ?? 0,
+        individual: m.individual_profile_id ? profileName.get(m.individual_profile_id) ?? null : null,
+        status: status as MealView['status'],
+        diff: cons?.actual_free_text ?? null,
+      };
+    })
+    .filter((m) => m.dayIndex >= 0 && m.dayIndex <= 6);
+
+  const recipeOptions: RecipeOption[] = recipeRows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    time: (r.prep_time_min ?? 0) + (r.cook_time_min ?? 0),
+    tags: (tagsByRecipe.get(r.id) ?? []).sort((a, b) => a.localeCompare(b)),
+    serves: Number(r.servings) || 1,
+    imageUrl: recipeImage.get(r.id) ?? null,
+  }));
+
+  const profileOptions: ProfileOption[] = (profiles ?? []).map((p) => ({ id: p.id, name: p.display_name || 'Profil' }));
+
+  const MONTHS = ['janv.', 'févr.', 'mars', 'avril', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  const dayDates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const dates = dayDates.map((d) => d.getDate());
+  const dateLabels = dayDates.map((d) => `${d.getDate()} ${MONTHS[d.getMonth()]}`);
   const weekLabel = `${weekStart.getDate()} – ${weekEnd.getDate()} ${MONTHS[weekEnd.getMonth()]}`;
-  const slotLabel = (s: string) => SLOTS.find((x) => x.key === s)?.label ?? s;
+  const todayIso = isoDate(new Date());
+  const todayIndex = dayIndexOf(todayIso);
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="font-display text-2xl font-semibold tracking-tight">Planning</h1>
-        <div className="flex items-center gap-1 rounded-full border border-line bg-surface px-1.5 py-1 text-sm">
-          <Link href={`/planning?week=${prevWeek}`} aria-label="Semaine précédente" className="flex h-6 w-6 items-center justify-center rounded-full text-ink hover:bg-sage-tint">‹</Link>
-          <span className="whitespace-nowrap px-1 text-xs font-bold">{weekLabel}</span>
-          <Link href={`/planning?week=${nextWeek}`} aria-label="Semaine suivante" className="flex h-6 w-6 items-center justify-center rounded-full text-ink hover:bg-sage-tint">›</Link>
-        </div>
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-7 lg:items-stretch">
-        {DAYS_ABBR.map((abbr, i) => {
-          const d = addDays(weekStart, i);
-          const date = isoDate(d);
-          const dateLabel = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
-          const isOff = offSet.has(date);
-          const dayMeals = mealList.filter((m) => m.meal_date === date);
-
-          if (isOff) {
-            return (
-              <section key={date} className="flex min-h-36 flex-col rounded-2xl border border-butter bg-butter-tint p-3.5 lg:min-h-72">
-                <div className="flex items-center justify-between gap-2 border-b border-butter pb-2">
-                  <h2 className="font-display text-base font-semibold">
-                    {abbr} <span className="text-ink-soft">{dateLabel}</span>
-                  </h2>
-                  <span className="pill bg-butter text-[#7a5e12]">journée hors-plan</span>
-                </div>
-                <p className="mt-1.5 text-xs text-ink-soft">Aucun suivi ce jour-là — on profite.</p>
-              </section>
-            );
-          }
-
-          return (
-            <section key={date} className="flex min-h-36 flex-col rounded-2xl border border-line bg-surface p-3.5 shadow-soft lg:min-h-72">
-              <div className="mb-3 flex items-center justify-between gap-2 border-b border-line pb-2">
-                <h2 className="font-display text-base font-semibold">
-                  {abbr} <span className="text-ink-soft">{dateLabel}</span>
-                </h2>
-                <form action={markDayOffAction}>
-                  <input type="hidden" name="date" value={date} />
-                  <button type="submit" className="text-xs text-ink-soft hover:underline">
-                    hors-plan
-                  </button>
-                </form>
-              </div>
-
-              {dayMeals.map((m, idx) => {
-                const status = statusByMeal.get(m.id);
-                return (
-                  <div key={m.id}>
-                    {idx > 0 && <div className="h-px bg-line" />}
-                    <div className="flex flex-wrap items-center gap-2.5 py-1.5 lg:items-start">
-                      <span className={`h-2.5 w-2.5 flex-none rounded-full ${SLOT_DOT[m.slot] ?? 'bg-sage'}`} />
-                      <span className="w-16 flex-none text-xs text-ink-soft lg:w-[calc(100%-1.25rem)]">{slotLabel(m.slot)}</span>
-                      <span className={`min-w-0 flex-1 text-sm font-medium lg:basis-full ${status === 'skipped' ? 'text-ink-soft line-through' : ''}`}>
-                        {m.recipe_id ? recipeName.get(m.recipe_id) : m.free_text}
-                      </span>
-                      {status === 'skipped' && <span className="pill bg-red text-white">sauté</span>}
-                      {status === 'different' && <span className="pill bg-orange text-white">différent</span>}
-                      {!status && (
-                        <span className="flex gap-1.5 text-xs lg:w-full lg:flex-wrap">
-                          <form action={recordDeviationAction}>
-                            <input type="hidden" name="meal_id" value={m.id} />
-                            <input type="hidden" name="status" value="skipped" />
-                            <button className="text-ink-soft hover:underline">sauté</button>
-                          </form>
-                          <form action={recordDeviationAction}>
-                            <input type="hidden" name="meal_id" value={m.id} />
-                            <input type="hidden" name="status" value="different" />
-                            <button className="text-ink-soft hover:underline">différent</button>
-                          </form>
-                        </span>
-                      )}
-                      <form action={deleteMealAction}>
-                        <input type="hidden" name="meal_id" value={m.id} />
-                        <button aria-label="Supprimer" className="text-xs text-ink-soft hover:text-red-strong">✕</button>
-                      </form>
-                    </div>
-                  </div>
-                );
-              })}
-
-              <details className="mt-auto pt-2 text-sm [&[open]>summary]:hidden">
-                <summary className="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-line-strong py-2 text-xs font-bold text-sage-deep">
-                  + Ajouter un repas
-                </summary>
-                <form action={addMealAction} className="mt-2 flex flex-wrap items-center gap-2 lg:flex-col lg:items-stretch">
-                  <input type="hidden" name="date" value={date} />
-                  <select name="slot" className="field-input py-1.5 text-sm">
-                    {SLOTS.map((s) => (
-                      <option key={s.key} value={s.key}>{s.label}</option>
-                    ))}
-                  </select>
-                  <select name="recipe_id" className="field-input py-1.5 text-sm">
-                    <option value="">— recette —</option>
-                    {(recipes ?? []).map((r) => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                  </select>
-                  <input name="free_text" placeholder="ou repas libre" className="field-input flex-1 py-1.5 text-sm lg:w-full" />
-                  <button type="submit" className="btn-primary px-3 py-1.5">Ajouter</button>
-                </form>
-              </details>
-            </section>
-          );
-        })}
-      </div>
-    </div>
+    <PlanningBoard
+      weekStart={fromIso}
+      weekLabel={weekLabel}
+      dates={dates}
+      dateLabels={dateLabels}
+      todayIndex={todayIndex >= 0 && todayIndex <= 6 ? todayIndex : -1}
+      prevWeek={isoDate(addDays(weekStart, -7))}
+      nextWeek={isoDate(addDays(weekStart, 7))}
+      thisWeek={todayIso}
+      meals={mealViews}
+      offDates={(offDays ?? []).map((o) => dayIndexOf(o.off_date)).filter((i) => i >= 0 && i <= 6)}
+      recipes={recipeOptions}
+      profiles={profileOptions}
+      pending={
+        planRecipe && planD != null && planSlot
+          ? { recipeId: planRecipe, d: Number(planD), slot: planSlot }
+          : null
+      }
+    />
   );
 }

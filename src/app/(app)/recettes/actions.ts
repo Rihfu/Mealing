@@ -94,8 +94,14 @@ export async function createRecipeAction(
   const { supabase, userId } = await getAuthContext();
   if (!userId) redirect('/login');
 
-  await createRecipe(supabase, parsed.input);
+  const id = await createRecipe(supabase, parsed.input);
   revalidatePath('/recettes');
+  // Retour contextualisé (ex. planning → rattacher la recette au créneau). Chemin interne only.
+  const returnTo = String(formData.get('return_to') ?? '');
+  if (returnTo && /^\/(?!\/)/.test(returnTo)) {
+    revalidatePath('/planning');
+    redirect(`${returnTo}${returnTo.includes('?') ? '&' : '?'}planRecipe=${id}`);
+  }
   redirect('/recettes');
 }
 
