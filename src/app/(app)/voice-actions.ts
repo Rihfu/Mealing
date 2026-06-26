@@ -25,8 +25,22 @@ export async function transcribeDictationAction(
 }
 
 /**
+ * Découpe un TEXTE déjà transcrit en articles (nature FR + qté + unité + lieu), sans
+ * audio. Permet de transcrire une dictée LONGUE par SEGMENTS (chacun via
+ * `transcribeTextAction`, petit + rapide → sous la limite de taille des Server Actions
+ * et le timeout serverless), de concaténer les textes, puis de parser UNE seule fois.
+ */
+export async function parseDictationAction(text: string): Promise<{ items: DictatedItem[] }> {
+  const { userId, profile } = await getAuthContext();
+  if (!userId || !profile?.household_id) throw new Error('Contexte foyer manquant.');
+  const items = await parseStockDictation(text);
+  return { items };
+}
+
+/**
  * Transcription SEULE (audio → texte), sans découpe : pour la saisie vocale de
- * l'assistant (on veut le message brut, pas une liste d'articles). Garde-fou auth.
+ * l'assistant (on veut le message brut, pas une liste d'articles) ET pour chaque SEGMENT
+ * d'une dictée longue (Stock/Courses). Garde-fou auth.
  */
 export async function transcribeTextAction(formData: FormData): Promise<{ text: string }> {
   const { userId, profile } = await getAuthContext();

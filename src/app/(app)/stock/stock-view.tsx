@@ -11,7 +11,7 @@ import { StockRefreshProvider, useStockRefresh } from './stock-refresh';
 import { StockList } from './stock-list';
 import { AddStock } from './add-stock';
 import { VoiceCapture } from '@/components/voice-capture';
-import { transcribeDictationAction } from '../voice-actions';
+import { transcribeTextAction, parseDictationAction } from '../voice-actions';
 import { addStockBulkAction } from './voice-actions';
 import { ManageLocations } from './locations-manager';
 
@@ -126,7 +126,8 @@ export function StockView() {
                   Le plus rapide pour démarrer : énumère ce que tu as à voix haute, on s’occupe du rangement.
                 </p>
                 <VoiceCapture
-                  transcribe={transcribeDictationAction}
+                  transcribeChunk={transcribeTextAction}
+                  parse={parseDictationAction}
                   onAdd={addStockBulkAction}
                   refresh={refresh}
                   texts={STOCK_VOICE_TEXTS}
@@ -171,7 +172,8 @@ export function StockView() {
             <h2 className="mb-3 font-display text-base font-semibold">Ajouter un article</h2>
             <AddStock locationOptions={locationOptions} />
             <VoiceCapture
-              transcribe={transcribeDictationAction}
+              transcribeChunk={transcribeTextAction}
+              parse={parseDictationAction}
               onAdd={addStockBulkAction}
               refresh={refresh}
               texts={STOCK_VOICE_TEXTS}

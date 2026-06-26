@@ -7,7 +7,7 @@ import { getCoursesSnapshotAction, type CoursesSnapshot } from './snapshot';
 import { CoursesRefreshProvider } from './courses-refresh';
 import { AddArticle } from './add-article';
 import { VoiceCapture } from '@/components/voice-capture';
-import { transcribeDictationAction } from '../voice-actions';
+import { transcribeTextAction, parseDictationAction } from '../voice-actions';
 import { addManualBulkAction } from './voice-actions';
 import { PurchaseCheckout } from './purchase-checkout';
 
@@ -111,7 +111,8 @@ export function CoursesView() {
             <h2 className="mb-3 font-display text-lg font-semibold">Ajouter un article</h2>
             <AddArticle onList={onListRefs} inStock={inStockRefs} />
             <VoiceCapture
-              transcribe={transcribeDictationAction}
+              transcribeChunk={transcribeTextAction}
+              parse={parseDictationAction}
               onAdd={addManualBulkAction}
               refresh={refresh}
               texts={COURSES_VOICE_TEXTS}

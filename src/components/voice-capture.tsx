@@ -29,6 +29,10 @@ interface ReviewRow {
   location: string;
 }
 
+function mmss(s: number): string {
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
 function extFromMime(m: string): string {
   if (m.includes('webm')) return 'webm';
   if (m.includes('mp4')) return 'mp4';
@@ -55,7 +59,8 @@ function MicIcon({ size = 20 }: { size?: number }) {
  * la voix donne nature + quantité ; la nutrition vient toujours d'USDA/OFF.
  */
 export function VoiceCapture({
-  transcribe,
+  transcribeChunk,
+  parse,
   onAdd,
   refresh,
   texts,
@@ -63,7 +68,10 @@ export function VoiceCapture({
   locationOptions = [],
   variant = 'inline',
 }: {
-  transcribe: (formData: FormData) => Promise<{ transcript: string; items: DictatedItem[] }>;
+  /** Transcrit UN segment audio → texte (appelé une fois par segment). */
+  transcribeChunk: (formData: FormData) => Promise<{ text: string }>;
+  /** Découpe le texte concaténé en articles (une seule fois, à la fin). */
+  parse: (text: string) => Promise<{ items: DictatedItem[] }>;
   onAdd: (items: BulkVoiceItem[]) => Promise<{ added: number }>;
   refresh: () => void | Promise<void>;
   texts: VoiceCaptureTexts;
@@ -77,42 +85,90 @@ export function VoiceCapture({
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [defaultLocation, setDefaultLocation] = useState('');
   const [addedCount, setAddedCount] = useState(0);
+  const [recSeconds, setRecSeconds] = useState(0);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [submitting, start] = useTransition();
 
+  // Enregistrement SEGMENTÉ : on découpe en segments de SEGMENT_MS (recorder relancé), pour
+  // qu'une dictée longue (plusieurs minutes) ne parte pas en une seule requête géante
+  // (qui dépasserait la limite de taille des Server Actions + le timeout serverless).
+  const SEGMENT_MS = 60_000;
+  const streamRef = useRef<MediaStream | null>(null);
   const recRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const segmentsRef = useRef<Blob[]>([]);
+  const mimeRef = useRef<string>('audio/webm');
+  const finishingRef = useRef(false);
+  const rotateRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function clearTimers() {
+    if (rotateRef.current) clearInterval(rotateRef.current);
+    if (tickRef.current) clearInterval(tickRef.current);
+    rotateRef.current = null;
+    tickRef.current = null;
+  }
+  function stopStream() {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }
 
   function close() {
+    clearTimers();
+    finishingRef.current = true;
     if (recRef.current && recRef.current.state !== 'inactive') {
-      recRef.current.stream.getTracks().forEach((t) => t.stop());
-      recRef.current = null;
+      recRef.current.onstop = null;
+      recRef.current.stop();
     }
+    recRef.current = null;
+    stopStream();
     setOpen(false);
     setPhase('idle');
     setError(null);
     setRows([]);
     setDefaultLocation('');
     setAddedCount(0);
+    setRecSeconds(0);
+    setProgress(null);
+  }
+
+  /** Démarre un segment (recorder dédié) ; au stop, l'empile et relance le suivant
+   *  tant qu'on n'a pas fini — sinon lance la transcription de tous les segments. */
+  function startSegment() {
+    const stream = streamRef.current;
+    if (!stream) return;
+    const rec = new MediaRecorder(stream);
+    mimeRef.current = rec.mimeType || mimeRef.current;
+    const buf: Blob[] = [];
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0) buf.push(e.data);
+    };
+    rec.onstop = () => {
+      const type = rec.mimeType || 'audio/webm';
+      mimeRef.current = type;
+      if (buf.length) segmentsRef.current.push(new Blob(buf, { type }));
+      if (finishingRef.current) {
+        stopStream();
+        void runTranscription();
+      } else {
+        startSegment();
+      }
+    };
+    recRef.current = rec;
+    rec.start();
   }
 
   async function startRecording() {
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      chunksRef.current = [];
-      const rec = new MediaRecorder(stream);
-      rec.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      rec.onstop = () => {
-        const type = rec.mimeType || 'audio/webm';
-        const blob = new Blob(chunksRef.current, { type });
-        stream.getTracks().forEach((t) => t.stop());
-        void runTranscription(blob, type);
-      };
-      recRef.current = rec;
-      rec.start();
+      streamRef.current = stream;
+      segmentsRef.current = [];
+      finishingRef.current = false;
+      setRecSeconds(0);
+      startSegment();
       setPhase('recording');
+      tickRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000);
+      rotateRef.current = setInterval(() => recRef.current?.stop(), SEGMENT_MS);
     } catch {
       setError("Micro indisponible — autorise l'accès au microphone pour dicter ta liste.");
       setPhase('idle');
@@ -120,16 +176,40 @@ export function VoiceCapture({
   }
 
   function stopRecording() {
-    recRef.current?.stop();
-    recRef.current = null;
+    clearTimers();
+    finishingRef.current = true;
+    setProgress(null);
     setPhase('transcribing');
+    recRef.current?.stop(); // l'onstop du segment courant lancera runTranscription
+    recRef.current = null;
   }
 
-  async function runTranscription(blob: Blob, type: string) {
+  /** Transcrit chaque segment l'un après l'autre, concatène, puis découpe en articles. */
+  async function runTranscription() {
+    const segs = segmentsRef.current;
+    if (segs.length === 0) {
+      setError("Je n'ai rien entendu — réessaie.");
+      setPhase('idle');
+      return;
+    }
     try {
-      const fd = new FormData();
-      fd.append('audio', new File([blob], `dictee.${extFromMime(type)}`, { type }));
-      const { items } = await transcribe(fd);
+      const ext = extFromMime(mimeRef.current);
+      let full = '';
+      for (let i = 0; i < segs.length; i++) {
+        setProgress({ done: i, total: segs.length });
+        const fd = new FormData();
+        fd.append('audio', new File([segs[i]], `seg${i}.${ext}`, { type: mimeRef.current }));
+        const { text } = await transcribeChunk(fd);
+        const t = (text ?? '').trim();
+        if (t) full += (full ? ' ' : '') + t;
+      }
+      setProgress({ done: segs.length, total: segs.length });
+      if (!full.trim()) {
+        setError("Je n'ai rien compris — réessaie en parlant distinctement.");
+        setPhase('idle');
+        return;
+      }
+      const { items } = await parse(full);
       if (items.length === 0) {
         setError("Je n'ai rien compris — réessaie en parlant distinctement.");
         setPhase('idle');
@@ -148,6 +228,8 @@ export function VoiceCapture({
     } catch {
       setError('La transcription a échoué — réessaie dans un instant.');
       setPhase('idle');
+    } finally {
+      setProgress(null);
     }
   }
 
@@ -249,8 +331,13 @@ export function VoiceCapture({
                   </button>
                 )}
                 <span className="text-xs font-semibold text-ink-soft">
-                  {phase === 'recording' ? 'Enregistrement… appuie pour arrêter' : 'Appuie pour parler'}
+                  {phase === 'recording' ? `Enregistrement ${mmss(recSeconds)} — appuie pour arrêter` : 'Appuie pour parler'}
                 </span>
+                {phase === 'recording' && (
+                  <span className="text-center text-[11px] text-ink-soft/80">
+                    Tu peux énumérer autant que tu veux — c’est découpé automatiquement.
+                  </span>
+                )}
                 {error && <p className="text-center text-sm text-clay">{error}</p>}
               </div>
             )}
@@ -258,7 +345,10 @@ export function VoiceCapture({
             {phase === 'transcribing' && (
               <div className="flex flex-col items-center gap-3 py-12">
                 <span className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-green-strong" />
-                <p className="text-sm text-ink-soft">Transcription en cours…</p>
+                <p className="text-sm text-ink-soft">
+                  Transcription en cours…
+                  {progress && progress.total > 1 ? ` (${Math.min(progress.done + 1, progress.total)}/${progress.total})` : ''}
+                </p>
               </div>
             )}
 
