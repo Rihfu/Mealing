@@ -7,7 +7,7 @@
  *   - autres origines (Supabase, USDA, OFF, Groq) et requêtes non-GET → réseau direct
  *     (JAMAIS mises en cache ici ; les données hors-ligne passeront par IndexedDB en Phase 2).
  */
-const VERSION = 'mealing-v2';
+const VERSION = 'mealing-v3';
 const PRECACHE = `${VERSION}-precache`;
 const RUNTIME = `${VERSION}-runtime`;
 const APP_SHELL = ['/offline', '/logo.svg', '/icon-192.png', '/icon-512.png'];

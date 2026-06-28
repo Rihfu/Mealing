@@ -15,12 +15,6 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-# Budget d'exécution des fonctions (SSR / Server Actions). La transcription vocale est le
-# poste le plus lent → on prend le maximum synchrone (26 s). La dictée longue est découpée
-# côté client en segments transcrits un par un, chacun bien sous ce budget.
-[functions]
-  timeout = 26
-
 # Rappel : configurer les variables d'environnement dans
 # Netlify > Site settings > Environment variables (jamais committées) :
 #   Requises  : NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,

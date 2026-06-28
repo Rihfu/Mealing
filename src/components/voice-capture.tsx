@@ -92,7 +92,9 @@ export function VoiceCapture({
   // Enregistrement SEGMENTÉ : on découpe en segments de SEGMENT_MS (recorder relancé), pour
   // qu'une dictée longue (plusieurs minutes) ne parte pas en une seule requête géante
   // (qui dépasserait la limite de taille des Server Actions + le timeout serverless).
-  const SEGMENT_MS = 60_000;
+  // 30 s : chaque segment se transcrit en quelques secondes → tient dans le budget des
+  // fonctions serverless par défaut (sans dépendre d'un timeout configuré).
+  const SEGMENT_MS = 30_000;
   const streamRef = useRef<MediaStream | null>(null);
   const recRef = useRef<MediaRecorder | null>(null);
   const segmentsRef = useRef<Blob[]>([]);
