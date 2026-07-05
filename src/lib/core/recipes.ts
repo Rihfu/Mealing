@@ -26,32 +26,34 @@ async function buildIngredientRows(
   recipeId: string,
   ingredients: RecipeIngredientInput[],
 ) {
-  const rows: Array<{
-    recipe_id: string;
-    food_id: string | null;
-    free_text: string | null;
-    quantity: number | null;
-    unit: string | null;
-    position: number;
-  }> = [];
-  let position = 0;
-  for (const ing of ingredients) {
-    const foodId = await resolveOrCreateFoodId(db, {
-      label: (ing.freeText ?? '').trim(),
-      foodId: ing.foodId ?? null,
-      source: ing.source ?? null,
-      externalId: ing.externalId ?? null,
-    });
-    rows.push({
-      recipe_id: recipeId,
-      food_id: foodId,
-      free_text: ing.freeText ?? null,
-      quantity: ing.quantity ?? null,
-      unit: ing.unit ?? null,
-      position: position++,
-    });
-  }
-  return rows;
+  // Résolutions en PARALLÈLE : chacune peut enchaîner import externe + IA best-effort
+  // (~secondes) — en série, sauvegarder une recette de N ingrédients nouveaux devenait
+  // N fois plus lent. Mémo par identité : le même libellé n'est résolu qu'une fois
+  // (évite aussi une course de création de fiche catalogue en double).
+  const memo = new Map<string, Promise<string | null>>();
+  const resolve = (ing: RecipeIngredientInput): Promise<string | null> => {
+    const key = `${ing.foodId ?? ''}|${ing.source ?? ''}|${ing.externalId ?? ''}|${normalizeLabel(ing.freeText ?? '')}`;
+    let p = memo.get(key);
+    if (!p) {
+      p = resolveOrCreateFoodId(db, {
+        label: (ing.freeText ?? '').trim(),
+        foodId: ing.foodId ?? null,
+        source: ing.source ?? null,
+        externalId: ing.externalId ?? null,
+      });
+      memo.set(key, p);
+    }
+    return p;
+  };
+  const foodIds = await Promise.all(ingredients.map(resolve));
+  return ingredients.map((ing, position) => ({
+    recipe_id: recipeId,
+    food_id: foodIds[position],
+    free_text: ing.freeText ?? null,
+    quantity: ing.quantity ?? null,
+    unit: ing.unit ?? null,
+    position,
+  }));
 }
 
 export interface CreateRecipeInput {
@@ -289,44 +291,49 @@ export interface RecipeNutrition {
  * quantité / food.base_amount. Les ingrédients libres (sans food lié) sont ignorés.
  */
 export async function computeRecipeNutrition(db: DB, recipeId: string): Promise<RecipeNutrition> {
-  const recipe = unwrap(
-    await db.from('recipe').select('servings').eq('id', recipeId).single(),
-  ) as { servings: number };
+  // Recette + ingrédients en parallèle, puis aliments + valeurs BATCHÉS (2 requêtes,
+  // en parallèle) au lieu de 2 requêtes PAR ingrédient en série — cette fonction est
+  // sur des chemins chauds (fiche recette, agrégation Nutrition sur une période).
+  const [recipeRes, ingredientsRes] = await Promise.all([
+    db.from('recipe').select('servings').eq('id', recipeId).single(),
+    db.from('recipe_ingredient').select('food_id, quantity').eq('recipe_id', recipeId),
+  ]);
+  const recipe = unwrap(recipeRes) as { servings: number };
+  const ingredients = (unwrap(ingredientsRes) ?? []) as Array<{ food_id: string | null; quantity: number | null }>;
 
-  const ingredients = (unwrap(
-    await db
-      .from('recipe_ingredient')
-      .select('food_id, quantity')
-      .eq('recipe_id', recipeId),
-  ) ?? []) as Array<{ food_id: string | null; quantity: number | null }>;
-
+  const linked = ingredients.filter((i): i is { food_id: string; quantity: number } => !!i.food_id && i.quantity != null);
   const total: Record<string, number> = {};
 
-  for (const ing of ingredients) {
-    if (!ing.food_id || ing.quantity == null) continue;
-
-    const food = unwrap(
-      await db.from('food').select('base_amount').eq('id', ing.food_id).single(),
-    ) as { base_amount: number };
-
-    const values = (unwrap(
-      await db
-        .from('nutrient_value')
-        .select('amount, nutrient_type:nutrient_type_id(code)')
-        .eq('food_id', ing.food_id),
-    ) ?? []) as unknown as Array<{
+  if (linked.length > 0) {
+    const foodIds = Array.from(new Set(linked.map((i) => i.food_id)));
+    const [foodsRes, valuesRes] = await Promise.all([
+      db.from('food').select('id, base_amount').in('id', foodIds),
+      db.from('nutrient_value').select('food_id, amount, nutrient_type:nutrient_type_id(code)').in('food_id', foodIds),
+    ]);
+    const baseAmounts = new Map(
+      ((unwrap(foodsRes) ?? []) as Array<{ id: string; base_amount: number }>).map((f) => [f.id, f.base_amount]),
+    );
+    const valuesByFood = new Map<string, Array<{ amount: number; code: string }>>();
+    for (const v of (unwrap(valuesRes) ?? []) as unknown as Array<{
+      food_id: string;
       amount: number;
       // Supabase peut renvoyer la relation comme objet ou tableau selon l'inférence.
       nutrient_type: { code: string } | { code: string }[] | null;
-    }>;
-
-    const factor = food.base_amount > 0 ? ing.quantity / food.base_amount : 0;
-
-    for (const v of values) {
+    }>) {
       const nt = v.nutrient_type;
       const code = Array.isArray(nt) ? nt[0]?.code : nt?.code;
       if (!code) continue;
-      total[code] = (total[code] ?? 0) + v.amount * factor;
+      const list = valuesByFood.get(v.food_id) ?? [];
+      list.push({ amount: v.amount, code });
+      valuesByFood.set(v.food_id, list);
+    }
+
+    for (const ing of linked) {
+      const base = baseAmounts.get(ing.food_id) ?? 0;
+      const factor = base > 0 ? ing.quantity / base : 0;
+      for (const v of valuesByFood.get(ing.food_id) ?? []) {
+        total[v.code] = (total[v.code] ?? 0) + v.amount * factor;
+      }
     }
   }
 

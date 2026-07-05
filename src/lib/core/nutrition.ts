@@ -29,14 +29,22 @@ export async function aggregatePeriodNutrition(
   db: DB,
   params: { householdId: string; profileId: string; from: string; to: string },
 ): Promise<PeriodNutrition> {
-  const meals = (unwrap(
-    await db
+  // Repas + journées hors-plan en PARALLÈLE (indépendants) ; seules les consommations
+  // (qui dépendent des repas) restent séquentielles.
+  const [mealsRes, offDaysRes] = await Promise.all([
+    db
       .from('planned_meal')
       .select('id, meal_date, recipe_id, is_individual, individual_profile_id')
       .eq('household_id', params.householdId)
       .gte('meal_date', params.from)
       .lte('meal_date', params.to),
-  ) ?? []) as Array<{
+    db
+      .from('day_off_plan')
+      .select('off_date, scope, profile_id')
+      .gte('off_date', params.from)
+      .lte('off_date', params.to),
+  ]);
+  const meals = (unwrap(mealsRes) ?? []) as Array<{
     id: string;
     meal_date: string;
     recipe_id: string | null;
@@ -44,13 +52,7 @@ export async function aggregatePeriodNutrition(
     individual_profile_id: string | null;
   }>;
 
-  const offDays = (unwrap(
-    await db
-      .from('day_off_plan')
-      .select('off_date, scope, profile_id')
-      .gte('off_date', params.from)
-      .lte('off_date', params.to),
-  ) ?? []) as Array<{ off_date: string; scope: string; profile_id: string | null }>;
+  const offDays = (unwrap(offDaysRes) ?? []) as Array<{ off_date: string; scope: string; profile_id: string | null }>;
 
   const offDates = new Set(
     offDays
@@ -85,6 +87,17 @@ export async function aggregatePeriodNutrition(
     }
     return cache.get(recipeId) as Record<string, number>;
   };
+
+  // Préchauffe le cache : toutes les recettes DISTINCTES de la période calculées en
+  // PARALLÈLE (chacune = 4 requêtes batchées) au lieu d'une par une dans la boucle —
+  // c'était le N+1 principal de la page Nutrition.
+  const distinctRecipeIds = new Set<string>();
+  for (const meal of relevant) {
+    if (meal.recipe_id) distinctRecipeIds.add(meal.recipe_id);
+    const cons = consByMeal.get(meal.id);
+    if (cons?.status === 'different' && cons.actual_recipe_id) distinctRecipeIds.add(cons.actual_recipe_id);
+  }
+  await Promise.all(Array.from(distinctRecipeIds).map((id) => perServing(id)));
 
   const planned: Record<string, number> = {};
   const real: Record<string, number> = {};
