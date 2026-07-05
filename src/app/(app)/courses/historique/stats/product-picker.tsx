@@ -26,10 +26,17 @@ export function ProductPicker() {
         }
         return;
       }
-      const r = await searchCatalogAction(query);
-      if (id === seq.current) {
-        setResults(r);
-        setOpen(true);
+      // Phase 1 : catalogue LOCAL seul → résultats immédiats (~100 ms).
+      const local = await searchCatalogAction(query, false);
+      if (id !== seq.current) return;
+      setResults(local);
+      setOpen(true);
+      // Phase 2 : complétés par USDA/OFF (~1 s) quand la réponse arrive.
+      try {
+        const full = await searchCatalogAction(query, true);
+        if (id === seq.current) setResults(full);
+      } catch {
+        /* fournisseurs indisponibles : on garde le local */
       }
     }, 250);
     return () => clearTimeout(t);

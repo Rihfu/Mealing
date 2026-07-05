@@ -42,10 +42,11 @@ const num = (v: FormDataEntryValue | null) => {
   return v != null && v !== '' && !Number.isNaN(n) ? n : undefined;
 };
 
-/** Autocomplétion d'aliments (catalogue local + USDA/OFF) — partagé avec Courses. */
-export async function searchCatalogAction(query: string): Promise<FoodSuggestion[]> {
+/** Autocomplétion d'aliments (catalogue local + USDA/OFF) — partagé avec Courses.
+ *  `includeExternal=false` = local seul (rapide, 1re phase du client). */
+export async function searchCatalogAction(query: string, includeExternal = true): Promise<FoodSuggestion[]> {
   const { supabase } = await requireHousehold();
-  return searchFoodCatalog(supabase, query);
+  return searchFoodCatalog(supabase, query, { includeExternal });
 }
 
 /**

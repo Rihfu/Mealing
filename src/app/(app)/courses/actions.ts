@@ -84,10 +84,12 @@ export async function clearCheckedAction(): Promise<void> {
   revalidatePath('/courses');
 }
 
-/** Autocomplétion d'aliments (catalogue local + fournisseurs). */
-export async function searchCatalogAction(query: string): Promise<FoodSuggestion[]> {
+/** Autocomplétion d'aliments (catalogue local + fournisseurs). `includeExternal=false`
+ *  = catalogue local seul (rapide) — le client appelle en 2 phases : local d'abord,
+ *  puis complété par USDA/OFF (~1 s) quand la réponse arrive. */
+export async function searchCatalogAction(query: string, includeExternal = true): Promise<FoodSuggestion[]> {
   const { supabase } = await requireHousehold();
-  return searchFoodCatalog(supabase, query, { limit: 8 });
+  return searchFoodCatalog(supabase, query, { limit: 8, includeExternal });
 }
 
 /**

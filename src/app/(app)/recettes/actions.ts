@@ -144,10 +144,11 @@ export async function backfillRecipeLinksAction(): Promise<number> {
   return linked;
 }
 
-/** Autocomplétion catalogue (local + USDA/OFF) pour la saisie d'ingrédients. */
-export async function searchCatalogAction(query: string): Promise<FoodSuggestion[]> {
+/** Autocomplétion catalogue (local + USDA/OFF) pour la saisie d'ingrédients.
+ *  `includeExternal=false` = local seul (rapide, 1re phase du client). */
+export async function searchCatalogAction(query: string, includeExternal = true): Promise<FoodSuggestion[]> {
   const { supabase } = await getAuthContext();
-  return searchFoodCatalog(supabase, query, { limit: 8 });
+  return searchFoodCatalog(supabase, query, { limit: 8, includeExternal });
 }
 
 // ----------------------------------------------------------------------------

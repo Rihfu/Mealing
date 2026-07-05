@@ -60,10 +60,17 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
     let cancelled = false;
     const t = setTimeout(async () => {
       try {
-        const res = await searchCatalogAction(query);
-        if (!cancelled && !submitting) {
-          setSuggestions(res);
-          setOpen(true);
+        // Phase 1 : catalogue LOCAL seul → suggestions immédiates (~100 ms).
+        const local = await searchCatalogAction(query, false);
+        if (cancelled || submitting) return;
+        setSuggestions(local);
+        setOpen(true);
+        // Phase 2 : complétées par USDA/OFF (~1 s) quand la réponse arrive.
+        try {
+          const full = await searchCatalogAction(query, true);
+          if (!cancelled && !submitting) setSuggestions(full);
+        } catch {
+          /* fournisseurs indisponibles : on garde le local */
         }
       } catch {
         if (!cancelled) setSuggestions([]);
