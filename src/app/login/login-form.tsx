@@ -3,7 +3,7 @@
 import { useActionState, useState } from 'react';
 import { signIn, signUp, type AuthFormState } from '@/app/auth/actions';
 
-export function LoginForm() {
+export function LoginForm({ callbackError = false }: { callbackError?: boolean }) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const action = mode === 'signin' ? signIn : signUp;
   const [state, formAction, pending] = useActionState<AuthFormState | undefined, FormData>(
@@ -33,6 +33,15 @@ export function LoginForm() {
             <p className="font-hand text-2xl text-green-strong">Qu’est-ce qu’on mange ?</p>
           </div>
         </div>
+
+        {callbackError && (
+          <div className="mt-5 rounded-2xl border border-line bg-butter-tint px-4 py-3 text-sm text-ink">
+            La connexion automatique n’a pas abouti — ça arrive quand le lien de
+            confirmation est ouvert sur un autre appareil que celui de l’inscription,
+            ou quand il a expiré. Si tu viens de confirmer ton adresse, connecte-toi
+            simplement ci-dessous avec ton email et ton mot de passe.
+          </div>
+        )}
 
         <div className="mt-7 flex rounded-full border border-line bg-paper p-1">
           {tab('signin', 'Connexion')}
