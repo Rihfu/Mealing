@@ -50,6 +50,15 @@ export async function signUp(
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signUp(parsed.data);
   if (error) {
+    // Anti-énumération : ne pas révéler qu'un email est déjà inscrit → même message
+    // neutre qu'une inscription réussie. Les autres erreurs (email invalide, rate
+    // limit…) restent utiles et sont affichées telles quelles.
+    if (/already (registered|exists)/i.test(error.message)) {
+      return {
+        message:
+          'Compte créé. Vérifiez votre boîte mail pour confirmer votre adresse, puis connectez-vous.',
+      };
+    }
     return { error: error.message };
   }
 

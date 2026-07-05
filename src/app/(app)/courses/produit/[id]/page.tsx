@@ -25,7 +25,8 @@ export default async function ProduitPage({
   // Statistiques si l'origine est inconnue.
   const sp = await searchParams;
   const rawFrom = typeof sp.from === 'string' ? sp.from : '';
-  const from = /^\/(?!\/)/.test(rawFrom) ? rawFrom : null;
+  // « \ » rejeté aussi : les navigateurs normalisent «/\host» en «//host» (externe).
+  const from = /^\/(?!\/)/.test(rawFrom) && !rawFrom.includes('\\') ? rawFrom : null;
   // Libellé du bouton retour selon l'origine (du plus spécifique au plus général).
   const BACK_LABELS: ReadonlyArray<readonly [string, string]> = [
     ['/courses/historique/stats', 'Statistiques'],

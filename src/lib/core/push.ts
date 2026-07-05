@@ -44,6 +44,10 @@ export async function savePushSubscription(
   sub: PushSubscriptionInput,
   label?: string | null,
 ): Promise<void> {
+  // Garde-fou : un endpoint Web Push légitime est TOUJOURS une URL https émise par le
+  // service push du navigateur. Refuser le reste évite d'enregistrer une URL arbitraire
+  // vers laquelle le serveur enverrait ensuite des POST signés (anti-SSRF).
+  if (!/^https:\/\//.test(sub.endpoint)) throw new Error('Endpoint push invalide.');
   await db.from('push_subscription').upsert(
     {
       profile_id: profileId,

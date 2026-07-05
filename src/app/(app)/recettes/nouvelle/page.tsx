@@ -7,8 +7,9 @@ export default async function NouvelleRecettePage({
   searchParams: Promise<{ return?: string }>;
 }) {
   const { return: ret } = await searchParams;
-  // On n'accepte qu'un chemin interne (anti open-redirect).
-  const returnTo = ret && /^\/(?!\/)/.test(ret) ? ret : undefined;
+  // On n'accepte qu'un chemin interne (anti open-redirect) ; « \ » rejeté aussi
+  // (les navigateurs normalisent «/\host» en «//host», donc externe).
+  const returnTo = ret && /^\/(?!\/)/.test(ret) && !ret.includes('\\') ? ret : undefined;
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
