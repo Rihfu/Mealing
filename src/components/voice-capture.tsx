@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { UNIT_OPTIONS } from '@/lib/units';
 import type { DictatedItem } from '@/lib/ai/parse-stock-dictation';
 
@@ -51,6 +51,50 @@ function MicIcon({ size = 20 }: { size?: number }) {
   );
 }
 
+const METER_BARS = 7;
+
+/**
+ * Barre de niveau sonore pendant l'enregistrement : lit l'`AnalyserNode` en boucle
+ * (requestAnimationFrame) et anime des barres. Composant isolé → seul lui se re-rend à
+ * 60 fps, pas toute la modale. Purement décoratif (feedback « je t'écoute »).
+ */
+function LevelMeter({ analyser }: { analyser: AnalyserNode | null }) {
+  const [levels, setLevels] = useState<number[]>(() => new Array(METER_BARS).fill(0.14));
+
+  useEffect(() => {
+    if (!analyser) return;
+    const bins = new Uint8Array(analyser.frequencyBinCount);
+    const step = Math.max(1, Math.floor(bins.length / METER_BARS));
+    let raf = 0;
+    const tick = () => {
+      analyser.getByteFrequencyData(bins);
+      const next: number[] = [];
+      for (let b = 0; b < METER_BARS; b++) {
+        let sum = 0;
+        for (let j = 0; j < step; j++) sum += bins[b * step + j] ?? 0;
+        const avg = sum / step / 255; // 0..1
+        next.push(Math.max(0.14, Math.min(1, avg * 1.7)));
+      }
+      setLevels(next);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [analyser]);
+
+  return (
+    <div className="flex h-8 items-end justify-center gap-1" aria-hidden="true">
+      {levels.map((v, i) => (
+        <span
+          key={i}
+          className="w-1.5 rounded-full bg-green-strong/70"
+          style={{ height: `${Math.round(v * 100)}%`, transition: 'height 90ms linear' }}
+        />
+      ))}
+    </div>
+  );
+}
+
 /**
  * Saisie par DICTÉE (speech-to-text), réutilisable Stock ↔ Courses : l'utilisateur
  * énonce sa liste, on transcrit (gpt-4o-transcribe via l'action `transcribe`), on
@@ -87,6 +131,7 @@ export function VoiceCapture({
   const [addedCount, setAddedCount] = useState(0);
   const [recSeconds, setRecSeconds] = useState(0);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const [submitting, start] = useTransition();
 
   // Enregistrement SEGMENTÉ : on découpe en segments de SEGMENT_MS (recorder relancé), pour
@@ -102,6 +147,7 @@ export function VoiceCapture({
   const finishingRef = useRef(false);
   const rotateRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
   function clearTimers() {
     if (rotateRef.current) clearInterval(rotateRef.current);
@@ -113,9 +159,16 @@ export function VoiceCapture({
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
   }
+  /** Coupe l'analyseur de niveau sonore (best-effort — purement décoratif). */
+  function stopMeter() {
+    setAnalyser(null);
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
+  }
 
   function close() {
     clearTimers();
+    stopMeter();
     finishingRef.current = true;
     if (recRef.current && recRef.current.state !== 'inactive') {
       recRef.current.onstop = null;
@@ -131,6 +184,16 @@ export function VoiceCapture({
     setAddedCount(0);
     setRecSeconds(0);
     setProgress(null);
+  }
+
+  /** Fermeture depuis la croix / le fond : confirme si une dictée est en cours pour ne
+   *  pas perdre l'enregistrement par erreur. */
+  function requestClose() {
+    if (phase === 'recording') {
+      const ok = window.confirm('Arrêter la dictée en cours ? L’enregistrement sera perdu.');
+      if (!ok) return;
+    }
+    close();
   }
 
   /** Démarre un segment (recorder dédié) ; au stop, l'empile et relance le suivant
@@ -167,6 +230,23 @@ export function VoiceCapture({
       segmentsRef.current = [];
       finishingRef.current = false;
       setRecSeconds(0);
+      // Analyseur de niveau sonore (feedback visuel « je t'écoute »). Best-effort :
+      // si Web Audio n'est pas dispo, la dictée fonctionne sans le témoin.
+      try {
+        const Ctx: typeof AudioContext | undefined =
+          window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (Ctx) {
+          const ctx = new Ctx();
+          const src = ctx.createMediaStreamSource(stream);
+          const an = ctx.createAnalyser();
+          an.fftSize = 64;
+          src.connect(an);
+          audioCtxRef.current = ctx;
+          setAnalyser(an);
+        }
+      } catch {
+        /* le témoin de niveau est un plus, on n'échoue pas la dictée */
+      }
       startSegment();
       setPhase('recording');
       tickRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000);
@@ -179,6 +259,7 @@ export function VoiceCapture({
 
   function stopRecording() {
     clearTimers();
+    stopMeter();
     finishingRef.current = true;
     setProgress(null);
     setPhase('transcribing');
@@ -186,7 +267,10 @@ export function VoiceCapture({
     recRef.current = null;
   }
 
-  /** Transcrit chaque segment l'un après l'autre, concatène, puis découpe en articles. */
+  /** Transcrit les segments EN PARALLÈLE (concurrence bornée), concatène dans l'ordre,
+   *  puis découpe en articles. Les segments étant indépendants, une longue dictée se
+   *  transcrit en ≈ (nb segments / concurrence) au lieu de la somme, sans saturer le
+   *  rate-limit du fournisseur. */
   async function runTranscription() {
     const segs = segmentsRef.current;
     if (segs.length === 0) {
@@ -196,16 +280,23 @@ export function VoiceCapture({
     }
     try {
       const ext = extFromMime(mimeRef.current);
-      let full = '';
-      for (let i = 0; i < segs.length; i++) {
-        setProgress({ done: i, total: segs.length });
-        const fd = new FormData();
-        fd.append('audio', new File([segs[i]], `seg${i}.${ext}`, { type: mimeRef.current }));
-        const { text } = await transcribeChunk(fd);
-        const t = (text ?? '').trim();
-        if (t) full += (full ? ' ' : '') + t;
-      }
-      setProgress({ done: segs.length, total: segs.length });
+      const parts = new Array<string>(segs.length).fill('');
+      let completed = 0;
+      setProgress({ done: 0, total: segs.length });
+      let next = 0;
+      const worker = async () => {
+        while (next < segs.length) {
+          const idx = next++;
+          const fd = new FormData();
+          fd.append('audio', new File([segs[idx]], `seg${idx}.${ext}`, { type: mimeRef.current }));
+          const { text } = await transcribeChunk(fd);
+          parts[idx] = (text ?? '').trim();
+          completed += 1;
+          setProgress({ done: completed, total: segs.length });
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(3, segs.length) }, worker));
+      const full = parts.filter(Boolean).join(' ').trim();
       if (!full.trim()) {
         setError("Je n'ai rien compris — réessaie en parlant distinctement.");
         setPhase('idle');
@@ -295,7 +386,7 @@ export function VoiceCapture({
         <div
           className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
           style={{ background: 'rgba(40,38,34,0.32)' }}
-          onClick={close}
+          onClick={requestClose}
         >
           <div
             className="flex max-h-[92vh] w-full max-w-md flex-col rounded-t-2xl border border-line bg-surface p-5 shadow-soft sm:rounded-2xl"
@@ -303,7 +394,7 @@ export function VoiceCapture({
           >
             <div className="flex items-center justify-between">
               <h3 className="font-display text-xl font-semibold">{texts.title}</h3>
-              <button type="button" onClick={close} className="text-ink-soft hover:text-ink" aria-label="Fermer">
+              <button type="button" onClick={requestClose} className="text-ink-soft hover:text-ink" aria-label="Fermer">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M18 6 6 18M6 6l12 12" />
                 </svg>
@@ -332,6 +423,7 @@ export function VoiceCapture({
                     <MicIcon size={30} />
                   </button>
                 )}
+                {phase === 'recording' && <LevelMeter analyser={analyser} />}
                 <span className="text-xs font-semibold text-ink-soft">
                   {phase === 'recording' ? `Enregistrement ${mmss(recSeconds)} — appuie pour arrêter` : 'Appuie pour parler'}
                 </span>
@@ -349,7 +441,7 @@ export function VoiceCapture({
                 <span className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-green-strong" />
                 <p className="text-sm text-ink-soft">
                   Transcription en cours…
-                  {progress && progress.total > 1 ? ` (${Math.min(progress.done + 1, progress.total)}/${progress.total})` : ''}
+                  {progress && progress.total > 1 ? ` (${progress.done}/${progress.total})` : ''}
                 </p>
               </div>
             )}
