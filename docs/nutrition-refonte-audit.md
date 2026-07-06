@@ -118,6 +118,13 @@ Trois promesses, dans cet ordre :
 
 ## 5. Personnalisation (cœur de la demande)
 
+> **⚠️ SECTION REMPLACÉE (2026-07-06)** — le concept de personas a été implémenté (N1, commit `4508794`)
+> puis **abandonné comme concept central** après retour utilisateur (trop rigide, peu personnalisable,
+> pas user-friendly : un utilisateur réel est une COMBINAISON, pas une case). Nouveau modèle validé :
+> **facettes → moteur de règles curé → suivi à la carte (quantitatif + habitudes)**.
+> **Voir `docs/nutrition-suivis-personnalises-design.md`** (document de référence du pivot).
+> La plomberie N1 (nutrition_profile privée, nutrient_reference, zones min/max, tracking) est conservée.
+
 - **Presets par persona** à l'activation de la section (3 écrans max) : Équilibre (défaut) · Sportif force ·
   Sportif endurance · Perte de poids douce · Végétarien/végan · Étudiant budget · Senior · **Enfant** (mode
   famille : variété/équilibre, kcal jamais affichées). Chaque preset = nutriments suivis + méthode de cible.
