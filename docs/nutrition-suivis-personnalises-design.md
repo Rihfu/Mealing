@@ -131,18 +131,37 @@ Garde-fous imposés par la traîne :
 Phasage : catalogue étendu + mode observation + cible perso = **N1.5** (quasi gratuits) ; constructeur
 d'habitude custom = **N1.5 si le budget le permet, sinon N1.6 dédié** ; interprète assistant = **N3**.
 
-## 6. Parcours UX
+## 6. Parcours UX — v2 (audit de fluidité 2026-07-06 : 6 frictions corrigées)
 
-1. **Onboarding 3 écrans en chips multi-sélection** (remplace le choix de persona) : « Qu'est-ce qui te
-   ressemble ? » (activités) → « Comment tu manges ? » (alimentation) → « Qu'est-ce qui compte pour toi ? »
-   (objectifs). Tout optionnel, skippable. Infos corporelles : écran existant conservé.
-2. **« Ton plan de suivi »** : cartes recommandées AVEC leur pourquoi (« recommandé parce que tu as coché
-   course à pied + articulations »), pré-cochées, cibles modifiables → Appliquer.
-3. **Section Nutrition** : jauges quantitatives (existant) + **cartes d'habitudes** (« Poisson gras 1/2
-   cette semaine ✓ » — comptées depuis le planning).
-4. **« Gérer mes suivis »** : catalogue complet consultable (chaque suivi = explication + source), badge
-   « recommandé pour toi », ajout/retrait libre. Le profil est modifiable à tout moment → recalcul.
-5. Plus tard (N3) : suggestions dérivées du comportement (« 0 poisson planifié ce mois-ci → … »).
+**Onboarding en 2 ÉCRANS (pas 5)** — activation cible ~90 s :
+- **Écran A « Parle-nous de toi »** : les 3 groupes de chips (activités / alimentation / objectifs) sur
+  UNE page, tout optionnel ; infos corporelles en dépliant optionnel « Affiner mes repères ».
+- **Écran B « Ton plan de suivi »** : cartes recommandées avec leur pourquoi, pré-cochées, cibles
+  modifiables → Appliquer. **Fin d'onboarding = enchaîne la réparation N0** si couverture faible
+  (« Ta semaine est couverte à 40 % → [Compléter les données] ») — une seule cérémonie.
+
+**La page Nutrition = machine à 3 ÉTATS** (corrige l'état vide démoralisant, surtout mobile) :
+1. *Pas activé* → hero « Active ton suivi » + promesse (JAMAIS de tableaux de zéros en premier).
+2. *Activé sans planning* → « Planifie tes repas → tes repères se remplissent seuls » + CTA Planning.
+3. *Activé + planning* → l'écran réel : suivis quantitatifs (jauges) + cartes d'habitudes.
+
+**UNE SEULE surface de gestion : « Mes suivis »** (corrige la double porte panneau/catalogue) —
+2 onglets : *Suivis* (cartes actives : toggle/cible/retrait + catalogue cherchable dessous, badge
+« recommandé pour toi », recherche sans résultat → « Demande à l'assistant ») et *Profil* (chips
+re-modifiables → recalcul). Le panneau de la page n'a qu'un bouton « Gérer ».
+
+**Moteur — collisions et plafond** : dédoublonnage PAR SUIVI CIBLE (une carte, le pourquoi cite toutes
+les facettes déclencheuses) ; plafond ~6 par PALIERS de priorité — *risque de carence* (B12 végan,
+fer F endurance) > *objectif* > *confort* (collagène) ; un suivi coupé reste trouvable au catalogue.
+
+**Habitudes — nuance planifié/à venir** : « Poisson gras 2/2 · dont 1 à venir ». Conforme au principe
+n°1 (planifié = mangé) — le moment où l'on « réussit » ses repères devient la PLANIFICATION, là où
+Mealing veut l'engagement — mais sans la nuance, l'utilisateur croirait à un bug.
+
+**Typologie invisible** : les mots « quantitatif / habitude » n'apparaissent JAMAIS à l'utilisateur —
+il voit des cartes ; certaines portent une jauge (mg), d'autres des coches (2/2).
+
+Plus tard (N3) : suggestions dérivées du comportement (« 0 poisson planifié ce mois-ci → … »).
 
 ## 7. Impact sur l'existant (faible — N1 a construit la plomberie)
 
