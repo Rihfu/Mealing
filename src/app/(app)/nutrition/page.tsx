@@ -2,6 +2,7 @@ import { getAuthContext } from '@/lib/auth';
 import { aggregatePeriodNutrition } from '@/lib/core';
 import { addDays, isoDate, mondayOf } from '@/lib/dates';
 import { setGoalsAction } from './actions';
+import { CoverageCard } from './coverage-card';
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -42,6 +43,8 @@ export default async function NutritionPage() {
           Planifié, réel estimé et objectifs personnels. Ton suivi reste privé par défaut.
         </p>
       </div>
+
+      <CoverageCard coverage={weekAgg.coverage} />
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
         <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-1">

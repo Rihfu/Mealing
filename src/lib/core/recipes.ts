@@ -1,6 +1,6 @@
 import type { DB } from './types';
 import { unwrap } from './types';
-import { resolveOrCreateFoodId } from './foods';
+import { resolveOrCreateFoodId, completeMissingFoodNutrition } from './foods';
 import { normalizeLabel } from '@/lib/text';
 
 export interface RecipeIngredientInput {
@@ -280,6 +280,12 @@ export interface RecipeNutrition {
   /** Par portion (total / servings). */
   perServing: Record<string, number>;
   servings: number;
+  /** Couverture des données (N0) : nombre d'ingrédients de la recette. */
+  ingredientsTotal: number;
+  /** … dont reliés au catalogue (`food_id`). */
+  ingredientsLinked: number;
+  /** … dont contribuant réellement aux chiffres (liés + quantité + valeurs stockées). */
+  ingredientsWithData: number;
 }
 
 /**
@@ -295,14 +301,21 @@ export async function computeRecipeNutrition(db: DB, recipeId: string): Promise<
   // en parallèle) au lieu de 2 requêtes PAR ingrédient en série — cette fonction est
   // sur des chemins chauds (fiche recette, agrégation Nutrition sur une période).
   const [recipeRes, ingredientsRes] = await Promise.all([
-    db.from('recipe').select('servings').eq('id', recipeId).single(),
+    // maybeSingle (PAS unwrap+single) : une recette invisible sous RLS (créateur parti
+    // du foyer, repas orphelin…) ne doit pas faire planter toute la page Nutrition —
+    // elle compte comme « sans données » (couverture honnête, principe n°2).
+    db.from('recipe').select('servings').eq('id', recipeId).maybeSingle(),
     db.from('recipe_ingredient').select('food_id, quantity').eq('recipe_id', recipeId),
   ]);
-  const recipe = unwrap(recipeRes) as { servings: number };
+  const recipe = (recipeRes.data ?? null) as { servings: number } | null;
+  if (!recipe) {
+    return { total: {}, perServing: {}, servings: 1, ingredientsTotal: 0, ingredientsLinked: 0, ingredientsWithData: 0 };
+  }
   const ingredients = (unwrap(ingredientsRes) ?? []) as Array<{ food_id: string | null; quantity: number | null }>;
 
   const linked = ingredients.filter((i): i is { food_id: string; quantity: number } => !!i.food_id && i.quantity != null);
   const total: Record<string, number> = {};
+  let ingredientsWithData = 0;
 
   if (linked.length > 0) {
     const foodIds = Array.from(new Set(linked.map((i) => i.food_id)));
@@ -331,7 +344,9 @@ export async function computeRecipeNutrition(db: DB, recipeId: string): Promise<
     for (const ing of linked) {
       const base = baseAmounts.get(ing.food_id) ?? 0;
       const factor = base > 0 ? ing.quantity / base : 0;
-      for (const v of valuesByFood.get(ing.food_id) ?? []) {
+      const values = valuesByFood.get(ing.food_id) ?? [];
+      if (factor > 0 && values.length > 0) ingredientsWithData += 1;
+      for (const v of values) {
         total[v.code] = (total[v.code] ?? 0) + v.amount * factor;
       }
     }
@@ -343,5 +358,35 @@ export async function computeRecipeNutrition(db: DB, recipeId: string): Promise<
     perServing[code] = amount / servings;
   }
 
-  return { total, perServing, servings };
+  return {
+    total,
+    perServing,
+    servings,
+    ingredientsTotal: ingredients.length,
+    ingredientsLinked: ingredients.filter((i) => !!i.food_id).length,
+    ingredientsWithData,
+  };
+}
+
+/**
+ * Complète en best-effort la nutrition MANQUANTE des aliments liés d'une recette
+ * (N0-4 : appelé après la sauvegarde d'une recette pour que la Nutrition soit
+ * calculable sans autre geste). Réutilise `completeMissingFoodNutrition` (valeurs
+ * du fournisseur, jamais l'IA — garde-fou n°3). @returns le nb d'aliments complétés.
+ */
+export async function completeRecipeNutrition(
+  db: DB,
+  recipeId: string,
+  opts?: { max?: number },
+): Promise<number> {
+  const rows = (unwrap(
+    await db.from('recipe_ingredient').select('food_id').eq('recipe_id', recipeId).not('food_id', 'is', null),
+  ) ?? []) as Array<{ food_id: string }>;
+  if (rows.length === 0) return 0;
+  const res = await completeMissingFoodNutrition(
+    db,
+    rows.map((r) => r.food_id),
+    { max: opts?.max ?? 8, concurrency: 3 },
+  );
+  return res.completed;
 }

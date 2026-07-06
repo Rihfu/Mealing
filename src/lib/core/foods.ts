@@ -8,6 +8,7 @@ import type { DB } from './types';
 import { unwrap } from './types';
 import { normalizeLabel } from '@/lib/text';
 import { SYNONYM_TO_SLUG } from '@/lib/food-synonyms';
+import { mapLimit } from '@/lib/async';
 
 /**
  * Importe (ou met à jour) un aliment issu d'un fournisseur nutritionnel dans la
@@ -486,4 +487,51 @@ export async function fetchAndStoreNutrition(db: DB, foodId: string): Promise<nu
   const { error } = await db.from('nutrient_value').upsert(rows, { onConflict: 'food_id,nutrient_type_id' });
   if (error) throw new Error(error.message);
   return rows.length;
+}
+
+/** Résultat d'une passe de complétion nutritionnelle en lot (N0). */
+export interface NutritionCompletionResult {
+  /** Aliments SANS aucune valeur stockée au moment de l'appel. */
+  missing: number;
+  /** Aliments effectivement tentés dans cette passe (borné par `max`). */
+  attempted: number;
+  /** Aliments pour lesquels des valeurs ont été stockées. */
+  completed: number;
+}
+
+/**
+ * Complète en LOT la nutrition des aliments qui n'ont AUCUNE valeur stockée
+ * (réutilise `fetchAndStoreNutrition` : valeurs du fournisseur, jamais l'IA —
+ * garde-fou n°3). Best-effort : un échec sur un aliment n'arrête pas la passe.
+ * Bornée (`max` + concurrence) pour tenir dans le budget temps d'une server
+ * action serverless — relancer la passe traite la suite (idempotent : les
+ * aliments déjà servis sont sautés d'office).
+ */
+export async function completeMissingFoodNutrition(
+  db: DB,
+  foodIds: Array<string | null | undefined>,
+  opts?: { max?: number; concurrency?: number },
+): Promise<NutritionCompletionResult> {
+  const ids = Array.from(new Set(foodIds.filter((id): id is string => !!id)));
+  if (ids.length === 0) return { missing: 0, attempted: 0, completed: 0 };
+
+  const withValues = new Set(
+    (
+      (unwrap(await db.from('nutrient_value').select('food_id').in('food_id', ids)) ?? []) as Array<{
+        food_id: string;
+      }>
+    ).map((r) => r.food_id),
+  );
+  const missing = ids.filter((id) => !withValues.has(id));
+  const batch = missing.slice(0, opts?.max ?? 12);
+
+  let completed = 0;
+  await mapLimit(batch, opts?.concurrency ?? 3, async (id) => {
+    try {
+      if ((await fetchAndStoreNutrition(db, id)) > 0) completed += 1;
+    } catch {
+      // best-effort : fournisseur muet ou quota — l'aliment sera retenté à la prochaine passe.
+    }
+  });
+  return { missing: missing.length, attempted: batch.length, completed };
 }

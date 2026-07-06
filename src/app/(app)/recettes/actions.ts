@@ -8,6 +8,7 @@ import {
   createRecipe,
   updateRecipe,
   deleteRecipe,
+  completeRecipeNutrition,
   backfillRecipeIngredientLinks,
   searchFoodCatalog,
   createRecipeGroup,
@@ -95,6 +96,13 @@ export async function createRecipeAction(
   if (!userId) redirect('/login');
 
   const id = await createRecipe(supabase, parsed.input);
+  // N0 : complète la nutrition des aliments nouvellement liés (best-effort, borné) —
+  // la section Nutrition devient calculable sans autre geste. Jamais l'IA (n°3).
+  try {
+    await completeRecipeNutrition(supabase, id);
+  } catch {
+    // best-effort : la sauvegarde de la recette n'échoue jamais pour ça.
+  }
   revalidatePath('/recettes');
   // Retour contextualisé (ex. planning → rattacher la recette au créneau). Chemin interne only.
   const returnTo = String(formData.get('return_to') ?? '');
@@ -119,6 +127,12 @@ export async function updateRecipeAction(
   if (!userId) redirect('/login');
 
   await updateRecipe(supabase, recipeId, parsed.input);
+  // N0 : complétion nutrition best-effort (cf. createRecipeAction).
+  try {
+    await completeRecipeNutrition(supabase, recipeId);
+  } catch {
+    // best-effort.
+  }
   revalidatePath('/recettes');
   revalidatePath(`/recettes/${recipeId}`);
   redirect(`/recettes/${recipeId}`);

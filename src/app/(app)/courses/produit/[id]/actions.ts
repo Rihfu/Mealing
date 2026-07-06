@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getAuthContext } from '@/lib/auth';
+import { mapLimit } from '@/lib/async';
 import {
   fetchAndStoreNutrition,
   getFoodNutrition,
@@ -54,20 +55,6 @@ export async function getProductBundleAction(foodId: string): Promise<ProductBun
     getFoodNutrition(supabase, foodId),
   ]);
   return { detail, nutrition: nutrition ?? [] };
-}
-
-/** map avec concurrence bornée (évite de saturer USDA/OFF + le budget temps de l'action). */
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let i = 0;
-  const worker = async () => {
-    while (i < items.length) {
-      const idx = i++;
-      results[idx] = await fn(items[idx]);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
 }
 
 /**
