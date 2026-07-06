@@ -1,0 +1,52 @@
+/* Mealing — Color tokens.
+   Base hexes mirror the Tailwind v4 @theme names in design-direction.md exactly,
+   so they map 1:1 to the app. Semantic aliases sit on top for design-time use. */
+:root {
+  /* ---- Neutrals: paper & ink ---- */
+  --color-paper:     #FBF7EF; /* app background — warm cream, never pure white */
+  --color-surface:   #FFFDFA; /* cards, panels */
+  --color-line:      #E7E0D2; /* soft sketch-like borders */
+  --color-ink:       #34322C; /* primary text — warm near-black */
+  --color-ink-soft:  #6F6B61; /* secondary text, captions */
+
+  /* ---- Muted base (the pastel ambience) ---- */
+  --color-sage:        #9CBE96; /* faded green — soft brand color */
+  --color-sage-tint:   #DCE8D4; /* fills, section backgrounds, neutral tags */
+  --color-sage-deep:   #5E7E58; /* deep sage — discreet cool-info accent / outline text */
+  --color-butter:      #E9DFA3; /* faded yellow */
+  --color-butter-tint: #F5EFCF; /* soft highlight, fills */
+  --color-clay:        #D9A98C; /* faded terracotta — warmth, secondary badges */
+  --color-clay-tint:   #F0DDD0; /* soft warm fill */
+
+  /* ---- Vivid accents (points of interest — use sparingly) ---- */
+  --color-green:        #45A35E; /* fresh, validated, success */
+  --color-green-strong: #2F8049; /* AA text-on-surface / primary buttons */
+  --color-yellow:       #F4C430; /* highlight, focus of interest (use very lightly) */
+  --color-orange:       #EF8A3C; /* warning — consume soon */
+  --color-red:          #DD5240; /* danger, expired, delete */
+  --color-red-strong:   #C23E2E; /* AA text-on-surface / destructive buttons */
+
+  /* ---- Semantic roles ---- */
+  --surface-app:    var(--color-paper);
+  --surface-card:   var(--color-surface);
+  --border:         var(--color-line);
+  --border-strong:  #D7CDB9;
+
+  --text-body:      var(--color-ink);
+  --text-muted:     var(--color-ink-soft);
+  --text-on-accent: #FFFFFF;
+
+  --action-primary-bg:   var(--color-green-strong);
+  --action-primary-fg:   #FFFFFF;
+  --action-secondary-fg: var(--color-sage-deep);
+  --action-destructive:  var(--color-red-strong);
+  --link:                var(--color-green-strong);
+
+  --success:   var(--color-green);
+  --warning:   var(--color-orange);
+  --danger:    var(--color-red);
+  --highlight: var(--color-yellow);
+  --info:      var(--color-sage-deep);
+
+  --focus-ring: #45A35E66; /* green @ 40% for focus halos */
+}

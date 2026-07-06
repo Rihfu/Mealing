@@ -1,0 +1,4 @@
+/* Mealing webfonts — Fraunces (display), Nunito (body/UI), Caveat (handwritten accent).
+   Loaded from Google Fonts. To self-host, replace these @font-face src URLs with
+   local binaries under assets/fonts/ and keep the family names identical. */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Nunito:wght@400;500;600;700;800&family=Caveat:wght@500;600;700&display=swap');

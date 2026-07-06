@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/mealing-design-system-352e84cf-b2a2-4a81-8dc8-b1a3898707d7/styles.css">
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<style>
+  body{margin:0;background:#F0EBE0;font-family:var(--font-sans);color:var(--color-ink)}
+  a{color:var(--color-green-strong)}a:hover{color:var(--color-sage-deep)}
+  .sec{padding:44px 52px 40px;border-bottom:1px solid rgba(52,50,44,.09);scroll-margin-top:16px}
+  .shd{display:flex;align-items:baseline;gap:12px;margin:0 0 6px}
+  .sid{font:700 11px var(--font-sans);letter-spacing:.04em;padding:4px 9px;background:var(--color-ink);color:#fff;border-radius:6px;text-decoration:none}
+  .snm{font:600 24px var(--font-display);letter-spacing:-0.01em;color:var(--color-ink)}
+  .sds{font:400 13.5px/1.55 var(--font-sans);color:var(--color-ink-soft);max-width:760px;margin:0 0 26px}
+  .row{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}
+  .opt{display:flex;flex-direction:column;gap:10px;flex:none;max-width:100%}
+  .olab{font:700 12px var(--font-sans);color:var(--color-ink-soft)}
+  .ph{width:390px;background:var(--color-paper);border-radius:28px;border:1px solid var(--color-line);box-shadow:var(--shadow-lg);overflow:hidden;flex:none;color:var(--color-ink)}
+  .dk{width:1240px;background:var(--color-paper);border-radius:20px;border:1px solid var(--color-line);box-shadow:var(--shadow-lg);overflow:hidden;flex:none;color:var(--color-ink)}
+  i[data-lucide]{display:inline-block}
+</style>
+</helmet>
+
+<!-- ============ EN-TÊTE DU DOCUMENT ============ -->
+<section class="sec" style="background:var(--color-paper)">
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px">
+    <img src="assets/logo/app-icon.svg" alt="Mealing" style="width:44px;height:44px;border-radius:12px">
+    <div>
+      <div style="font:600 30px var(--font-display);letter-spacing:-0.01em">Nutrition — refonte de la section</div>
+      <div style="font:500 20px var(--font-hand);color:var(--color-sage-deep)">déduite du planning, zéro saisie — promis</div>
+    </div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:28px;margin-top:20px">
+    <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:20px 24px;max-width:520px">
+      <div style="font:800 12px var(--font-sans);letter-spacing:.04em;color:var(--color-ink-soft);text-transform:uppercase;margin-bottom:10px">Hypothèses &amp; principes appliqués</div>
+      <ul style="margin:0;padding-left:18px;font:400 13.5px/1.7 var(--font-sans);color:var(--color-ink)">
+        <li><b>Zéro saisie</b> : tout découle du planning — aucun bouton « logger » nulle part.</li>
+        <li><b>La semaine juge, le jour zoome</b> : vue Semaine par défaut, jamais de binaire réussi/raté.</li>
+        <li><b>Jamais de rouge punitif</b> : « au-dessus » se signale en terracotta doux, texte apaisant.</li>
+        <li><b>Honnêteté</b> : couverture des données visible partout, « estimé » assumé.</li>
+        <li><b>Privé par défaut</b> : rappels « invisible pour ton foyer » aux moments de confiance.</li>
+        <li>Vocabulaire utilisateur : « mes suivis », « mes repères », « mon profil » — zéro jargon.</li>
+      </ul>
+    </div>
+    <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:20px 24px;min-width:280px">
+      <div style="font:800 12px var(--font-sans);letter-spacing:.04em;color:var(--color-ink-soft);text-transform:uppercase;margin-bottom:10px">Sommaire</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font:600 13.5px/1.6 var(--font-sans)">
+        <a href="#spec" style="text-decoration:none">0 · Spec du composant</a>
+        <a href="#e1" style="text-decoration:none">1 · Hero d'activation</a>
+        <a href="#e2" style="text-decoration:none">2 · Onboarding A</a>
+        <a href="#e3" style="text-decoration:none">3 · Onboarding B + fin</a>
+        <a href="#e4" style="text-decoration:none">4 · Page principale</a>
+        <a href="#e5" style="text-decoration:none">5 · Mes suivis</a>
+        <a href="#e6" style="text-decoration:none">6 · Mon repère à moi</a>
+        <a href="#e7" style="text-decoration:none">7 · Mode enfant</a>
+        <a href="#e8" style="text-decoration:none">8 · Sans planning</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 0 · SPEC DU COMPOSANT ============ -->
+<section class="sec" id="spec">
+  <div class="shd"><a class="sid" href="#spec">0</a><span class="snm">Le composant central — carte de suivi</span></div>
+  <p class="sds">Deux familles, une seule enveloppe visuelle (l'utilisateur ne voit que « des cartes »). À gauche la <b>jauge vers zone</b> (jamais une barre 0→max), à droite l'<b>habitude à coches</b>. Chaque carte porte son indicateur d'honnêteté « couvert à X % ».</p>
+  <div class="row">
+
+    <!-- Anatomie jauge -->
+    <div class="opt" style="width:430px">
+      <div class="olab">A · Suivi chiffré — jauge vers zone cible</div>
+      <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:20px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:38px;height:38px;border-radius:11px;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep)"><i data-lucide="beef" style="width:20px;height:20px"></i></div>
+          <div style="flex:1">
+            <div style="font:700 16px var(--font-sans)">Protéines</div>
+            <div style="font:600 12px var(--font-sans);color:var(--color-ink-soft)">couvert à 60 %</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font:600 24px var(--font-display)">96 g</div>
+            <div style="font:600 11.5px var(--font-sans);color:var(--color-ink-soft)">réel estimé</div>
+          </div>
+        </div>
+        <div style="position:relative;height:14px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line);margin:18px 0 8px">
+          <div style="position:absolute;top:0;bottom:0;left:70%;width:30%;background:var(--color-sage-tint);border-radius:0 999px 999px 0"></div>
+          <div style="position:absolute;top:2px;bottom:2px;left:2px;width:55%;background:var(--color-sage);border-radius:999px"></div>
+          <div style="position:absolute;top:50%;left:58%;width:13px;height:13px;transform:translate(-50%,-50%);background:var(--color-surface);border:2.5px solid var(--color-ink-soft);border-radius:50%"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font:600 12px var(--font-sans);color:var(--color-ink-soft)">
+          <span><span style="color:var(--color-sage-deep)">▬</span> réel estimé · <span style="letter-spacing:-1px">○</span> planifié 96 g</span>
+          <span>zone ≥ 120 g</span>
+        </div>
+        <div style="margin-top:10px;font:600 13px var(--font-sans);color:var(--color-sage-deep);background:var(--color-sage-tint);border-radius:10px;padding:8px 12px">Un peu en dessous cette semaine — les repas de jeudi et vendredi peuvent combler l'écart.</div>
+      </div>
+      <div style="font:400 12.5px/1.6 var(--font-sans);color:var(--color-ink-soft);max-width:420px">Planifié <b>et</b> réel estimé sur la même échelle ; la zone cible est un fond, pas une fin de barre. La phrase d'accompagnement reste factuelle et apaisante.</div>
+    </div>
+
+    <!-- Anatomie habitude -->
+    <div class="opt" style="width:430px">
+      <div class="olab">B · Suivi d'habitude — occurrences vers un repère</div>
+      <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:20px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:38px;height:38px;border-radius:11px;background:var(--color-butter-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep)"><i data-lucide="fish" style="width:20px;height:20px"></i></div>
+          <div style="flex:1">
+            <div style="font:700 16px var(--font-sans)">Poisson gras</div>
+            <div style="font:600 12px var(--font-sans);color:var(--color-ink-soft)">repère : 2× par semaine · couvert à 100 %</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;font:600 20px var(--font-display);color:var(--color-green-strong)">2/2 <i data-lucide="check" style="width:18px;height:18px"></i></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin:16px 0 8px">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--color-sage-tint);border:1.5px solid var(--color-green);display:flex;align-items:center;justify-content:center;color:var(--color-green-strong)"><i data-lucide="check" style="width:16px;height:16px"></i></div>
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--color-surface);border:1.5px dashed var(--color-sage);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep)"><i data-lucide="clock" style="width:15px;height:15px"></i></div>
+          <div style="font:600 13px var(--font-sans);color:var(--color-ink-soft)">dont 1 à venir — saumon planifié vendredi</div>
+        </div>
+      </div>
+      <div style="font:400 12.5px/1.6 var(--font-sans);color:var(--color-ink-soft);max-width:420px">Compté depuis les repas <b>planifiés</b> ; « à venir » (coche pointillée + horloge) évite de croire à un bug. Existe en <b>minimum</b> (« au moins 2× ») et en <b>limite</b> (« au plus 2× »).</div>
+    </div>
+
+    <!-- États de jauge -->
+    <div class="opt" style="width:300px">
+      <div class="olab">C · Traitement couleur des états de jauge</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:12px;padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:8px;font:700 13px var(--font-sans)"><span style="width:14px;height:14px;border-radius:5px;background:var(--color-sage);display:inline-block"></span>Sous la zone — sauge fanée</div>
+          <div style="font:400 12px/1.5 var(--font-sans);color:var(--color-ink-soft);margin-top:3px">« en chemin », jamais un échec. Texte : ce qui peut combler l'écart.</div>
+        </div>
+        <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:12px;padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:8px;font:700 13px var(--font-sans)"><span style="width:14px;height:14px;border-radius:5px;background:var(--color-green);display:inline-block"></span>Dans la zone — vert vif</div>
+          <div style="font:400 12px/1.5 var(--font-sans);color:var(--color-ink-soft);margin-top:3px">Le seul moment vif de la carte : la réussite est le point d'intérêt.</div>
+        </div>
+        <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:12px;padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:8px;font:700 13px var(--font-sans)"><span style="width:14px;height:14px;border-radius:5px;background:var(--color-clay);display:inline-block"></span>Au-dessus — terracotta douce</div>
+          <div style="font:400 12px/1.5 var(--font-sans);color:var(--color-ink-soft);margin-top:3px">Jamais de rouge. Texte : « ça se lisse sur la semaine ». Le rouge reste réservé à Supprimer/Périmé ailleurs dans l'app.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Badges -->
+    <div class="opt" style="width:300px">
+      <div class="olab">D · Badges &amp; indicateurs</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px">
+          <span style="display:inline-flex;align-items:center;gap:5px;background:var(--color-clay-tint);color:var(--color-ink);border-radius:999px;padding:4px 10px;font:700 11.5px var(--font-sans)"><i data-lucide="stethoscope" style="width:13px;height:13px"></i>cible perso</span>
+          <span style="font:400 12px/1.45 var(--font-sans);color:var(--color-ink-soft)">valeur donnée par un médecin ou un coach — pas par l'app</span>
+        </div>
+        <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px">
+          <span style="display:inline-flex;align-items:center;gap:5px;background:var(--color-butter-tint);color:var(--color-ink);border-radius:999px;padding:4px 10px;font:700 11.5px var(--font-sans)"><i data-lucide="eye" style="width:13px;height:13px"></i>en observation</span>
+          <span style="font:400 12px/1.45 var(--font-sans);color:var(--color-ink-soft)">pas de cible : juste la valeur et sa tendance</span>
+        </div>
+        <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px">
+          <span style="font:600 12px var(--font-sans);color:var(--color-ink-soft);white-space:nowrap">couvert à 60 %</span>
+          <span style="font:400 12px/1.45 var(--font-sans);color:var(--color-ink-soft)">part des ingrédients de la semaine dont la donnée est connue — discret, toujours présent</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Icônes -->
+    <div class="opt" style="width:640px">
+      <div class="olab">E · Icônes Lucide retenues (stroke 1.75, coins ronds)</div>
+      <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:18px 20px;display:grid;grid-template-columns:1fr 1fr;gap:14px 28px;font:400 12.5px/1.7 var(--font-sans)">
+        <div><b>Facettes · activités</b><br>dumbbell muscu/force · footprints course &amp; impact · bike endurance · book-open études · hard-hat métier physique · armchair sédentaire · battery-low fatigue</div>
+        <div><b>Facettes · alimentation</b><br>leaf végétarien · sprout végan · fish peu de poisson · milk peu de laitages</div>
+        <div><b>Facettes · ce qui compte</b><br>salad équilibre · scale poids doux · trophy muscle/perf · bone articulations · brain mémoire · zap énergie · shield immunité · heart-pulse vieillir en forme</div>
+        <div><b>Types de suivi</b><br>gauge chiffré · repeat habitude · eye observation · stethoscope cible perso · percent couverture · trending-up tendance</div>
+        <div><b>Suivis (exemples)</b><br>beef protéines &amp; viande rouge · wheat fibres · fish poisson gras · bean légumineuses · soup collagène · droplet fer · activity magnésium · carrot légumes</div>
+        <div><b>Actions</b><br>settings-2 gérer mes suivis · pencil modifier la cible · trash-2 retirer · plus suivre · search catalogue · sparkles assistant · clock à venir · eye-off privé · chevron-down déplier</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ 1 · HERO D'ACTIVATION ============ -->
+<section class="sec" id="e1">
+  <div class="shd"><a class="sid" href="#e1">1</a><span class="snm">État 1 — Hero d'activation</span></div>
+  <p class="sds">Premier contact : la promesse, jamais un tableau de zéros. Le rappel vie privée est présent dès ce moment de confiance.</p>
+  <div class="row">
+
+    <!-- Desktop -->
+    <div class="opt">
+      <div class="olab">Desktop · 1240</div>
+      <div class="dk" style="display:flex;min-height:720px">
+        <div style="width:216px;flex:none;background:var(--color-surface);border-right:1px solid var(--color-line);padding:20px 14px;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;gap:10px;padding:0 10px 18px"><img src="assets/logo/symbol-bowl.svg" alt="" style="width:30px;height:30px"><span style="font:600 21px var(--font-display)">Mealing</span></div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font:700 14px var(--font-sans);color:var(--color-ink-soft)"><i data-lucide="calendar-days" style="width:19px;height:19px"></i>Planning</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font:700 14px var(--font-sans);color:var(--color-ink-soft)"><i data-lucide="chef-hat" style="width:19px;height:19px"></i>Recettes</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font:700 14px var(--font-sans);color:var(--color-ink-soft)"><i data-lucide="shopping-cart" style="width:19px;height:19px"></i>Courses</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font:700 14px var(--font-sans);color:var(--color-ink-soft)"><i data-lucide="refrigerator" style="width:19px;height:19px"></i>Stock</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:var(--color-sage-tint);font:700 14px var(--font-sans);color:var(--color-ink)"><i data-lucide="apple" style="width:19px;height:19px"></i>Nutrition</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font:700 14px var(--font-sans);color:var(--color-ink-soft)"><i data-lucide="sparkles" style="width:19px;height:19px"></i>Assistant</div>
+          <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--color-line);font:700 13px var(--font-sans);color:var(--color-ink-soft)"><i data-lucide="users" style="width:18px;height:18px"></i>Foyer Morel</div>
+        </div>
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:48px">
+          <div style="display:flex;align-items:center;gap:56px;max-width:920px">
+            <div style="flex:1;min-width:0">
+              <div style="font:500 24px var(--font-hand);color:var(--color-sage-deep)">rien à pointer, rien à peser</div>
+              <h1 style="font:600 42px/1.15 var(--font-display);letter-spacing:-0.01em;margin:8px 0 12px">Ta nutrition, déduite de ton planning. Zéro saisie.</h1>
+              <p style="font:400 17px/1.55 var(--font-sans);color:var(--color-ink-soft);margin:0 0 24px;max-width:520px">Un repas planifié compte tel que prévu — tes repères se remplissent tout seuls, semaine après semaine.</p>
+              <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:28px">
+                <div style="display:flex;align-items:center;gap:12px;font:600 15px var(--font-sans)"><span style="width:34px;height:34px;border-radius:10px;background:var(--color-sage-tint);display:inline-flex;align-items:center;justify-content:center;color:var(--color-sage-deep)"><i data-lucide="calendar-days" style="width:18px;height:18px"></i></span>Tes repas planifiés font tout le travail</div>
+                <div style="display:flex;align-items:center;gap:12px;font:600 15px var(--font-sans)"><span style="width:34px;height:34px;border-radius:10px;background:var(--color-butter-tint);display:inline-flex;align-items:center;justify-content:center;color:var(--color-sage-deep)"><i data-lucide="gauge" style="width:18px;height:18px"></i></span>Des repères et des zones — jamais de notes ni de jugement</div>
+                <div style="display:flex;align-items:center;gap:12px;font:600 15px var(--font-sans)"><span style="width:34px;height:34px;border-radius:10px;background:var(--color-clay-tint);display:inline-flex;align-items:center;justify-content:center;color:var(--color-sage-deep)"><i data-lucide="eye-off" style="width:18px;height:18px"></i></span>Strictement personnel — invisible pour ton foyer</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px">
+                <button style="display:inline-flex;align-items:center;gap:8px;height:50px;padding:0 24px;border-radius:12px;background:var(--color-green-strong);color:#fff;font:700 16px var(--font-sans);border:none;box-shadow:var(--shadow-md);cursor:pointer">Activer mon suivi<i data-lucide="arrow-right" style="width:18px;height:18px"></i></button>
+                <button style="display:inline-flex;align-items:center;height:50px;padding:0 20px;border-radius:12px;background:var(--color-surface);color:var(--color-sage-deep);font:700 15px var(--font-sans);border:1.5px solid var(--color-sage);cursor:pointer">Comment ça marche ?</button>
+              </div>
+              <div style="font:400 12.5px var(--font-sans);color:var(--color-ink-soft);margin-top:22px">Des estimations bien-être, pas des mesures. Ceci n'est pas un avis médical.</div>
+            </div>
+            <div style="flex:none;width:280px;height:280px;border-radius:50%;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;position:relative">
+              <img src="assets/logo/symbol-bowl.svg" alt="" style="width:150px;height:150px">
+              <div style="position:absolute;top:18px;right:8px;font:500 21px var(--font-hand);color:var(--color-sage-deep);transform:rotate(6deg)">ça se remplit tout seul !</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile -->
+    <div class="opt">
+      <div class="olab">Mobile · 390</div>
+      <div class="ph">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 24px 6px;font:700 13px var(--font-sans)"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><i data-lucide="signal" style="width:14px;height:14px"></i><i data-lucide="wifi" style="width:15px;height:15px"></i><i data-lucide="battery-full" style="width:19px;height:19px"></i></span></div>
+        <div style="padding:18px 24px 28px">
+          <div style="font:600 22px var(--font-display);letter-spacing:-0.01em;margin-bottom:22px">Nutrition</div>
+          <div style="width:170px;height:170px;border-radius:50%;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;margin:0 auto 8px"><img src="assets/logo/symbol-bowl.svg" alt="" style="width:92px;height:92px"></div>
+          <div style="text-align:center;font:500 21px var(--font-hand);color:var(--color-sage-deep);margin-bottom:14px">rien à pointer, rien à peser</div>
+          <h1 style="font:600 28px/1.2 var(--font-display);letter-spacing:-0.01em;text-align:center;margin:0 0 10px">Ta nutrition, déduite de ton planning. Zéro saisie.</h1>
+          <p style="font:400 15px/1.55 var(--font-sans);color:var(--color-ink-soft);text-align:center;margin:0 0 22px">Un repas planifié compte tel que prévu — tes repères se remplissent tout seuls.</p>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:24px">
+            <div style="display:flex;align-items:center;gap:12px;background:var(--color-surface);border:1px solid var(--color-line);border-radius:14px;padding:12px 14px;font:600 14px var(--font-sans)"><span style="width:32px;height:32px;border-radius:9px;background:var(--color-sage-tint);display:inline-flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="calendar-days" style="width:17px;height:17px"></i></span>Tes repas planifiés font tout le travail</div>
+            <div style="display:flex;align-items:center;gap:12px;background:var(--color-surface);border:1px solid var(--color-line);border-radius:14px;padding:12px 14px;font:600 14px var(--font-sans)"><span style="width:32px;height:32px;border-radius:9px;background:var(--color-butter-tint);display:inline-flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="gauge" style="width:17px;height:17px"></i></span>Des repères et des zones, jamais de notes</div>
+            <div style="display:flex;align-items:center;gap:12px;background:var(--color-surface);border:1px solid var(--color-line);border-radius:14px;padding:12px 14px;font:600 14px var(--font-sans)"><span style="width:32px;height:32px;border-radius:9px;background:var(--color-clay-tint);display:inline-flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="eye-off" style="width:17px;height:17px"></i></span>Invisible pour ton foyer</div>
+          </div>
+          <button style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:52px;border-radius:12px;background:var(--color-green-strong);color:#fff;font:700 16px var(--font-sans);border:none;box-shadow:var(--shadow-md)">Activer mon suivi<i data-lucide="arrow-right" style="width:18px;height:18px"></i></button>
+          <div style="text-align:center;font:400 12px var(--font-sans);color:var(--color-ink-soft);margin-top:14px">Des estimations bien-être, pas des mesures.<br>Ceci n'est pas un avis médical.</div>
+        </div>
+        <div style="display:flex;justify-content:space-around;align-items:center;padding:10px 8px 24px;border-top:1px solid var(--color-line);background:var(--color-surface)">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="calendar-days" style="width:22px;height:22px"></i>Planning</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="chef-hat" style="width:22px;height:22px"></i>Recettes</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-green-strong);min-width:52px"><i data-lucide="apple" style="width:22px;height:22px"></i>Nutrition</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="shopping-cart" style="width:22px;height:22px"></i>Courses</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="refrigerator" style="width:22px;height:22px"></i>Stock</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2 · ONBOARDING A ============ -->
+<section class="sec" id="e2">
+  <div class="shd"><a class="sid" href="#e2">2</a><span class="snm">État 2 — Onboarding A « Parle-nous de toi »</span></div>
+  <p class="sds">Trois groupes de chips multi-sélection sur une page, tout optionnel et skippable. Ici <b>course &amp; impact</b> et <b>articulations</b> sont cochés — ils alimenteront la recommandation « Sources de collagène » de l'écran B. Le dépliant « Affiner mes repères » est montré ouvert.</p>
+  <div class="row">
+    <div class="opt">
+      <div class="olab">Mobile · chips + dépliant ouvert</div>
+      <div class="ph">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 24px 6px;font:700 13px var(--font-sans)"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><i data-lucide="signal" style="width:14px;height:14px"></i><i data-lucide="wifi" style="width:15px;height:15px"></i><i data-lucide="battery-full" style="width:19px;height:19px"></i></span></div>
+        <div style="padding:12px 22px 24px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div style="display:flex;gap:6px"><span style="width:22px;height:6px;border-radius:999px;background:var(--color-green)"></span><span style="width:22px;height:6px;border-radius:999px;background:var(--color-line)"></span></div>
+            <a href="#e3" style="font:700 14px var(--font-sans);color:var(--color-ink-soft);text-decoration:none">Passer</a>
+          </div>
+          <h1 style="font:600 27px/1.15 var(--font-display);letter-spacing:-0.01em;margin:0 0 4px">Parle-nous de toi</h1>
+          <div style="font:500 19px var(--font-hand);color:var(--color-sage-deep);margin-bottom:18px">tout est optionnel, promis</div>
+
+          <div style="font:800 12px var(--font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--color-ink-soft);margin-bottom:10px">Tes activités</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px">
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="dumbbell" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Muscu / force</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1.5px solid var(--color-green);background:var(--color-sage-tint);font:700 13.5px var(--font-sans)"><i data-lucide="footprints" style="width:16px;height:16px;color:var(--color-green-strong)"></i>Course &amp; impact<i data-lucide="check" style="width:14px;height:14px;color:var(--color-green-strong)"></i></span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="bike" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Endurance</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="book-open" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Études / travail intellectuel</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="hard-hat" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Métier physique</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="armchair" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Plutôt sédentaire</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="battery-low" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Souvent fatigué·e</span>
+          </div>
+
+          <div style="font:800 12px var(--font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--color-ink-soft);margin-bottom:10px">Ton alimentation</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px">
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="leaf" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Végétarien·ne</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="sprout" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Végan·e</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="fish" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Peu de poisson</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="milk" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Peu de laitages</span>
+          </div>
+
+          <div style="font:800 12px var(--font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--color-ink-soft);margin-bottom:10px">Ce qui compte pour toi</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px">
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="salad" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Équilibre</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="scale" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Perte de poids douce</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="trophy" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Muscle / perf</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1.5px solid var(--color-green);background:var(--color-sage-tint);font:700 13.5px var(--font-sans)"><i data-lucide="bone" style="width:16px;height:16px;color:var(--color-green-strong)"></i>Articulations<i data-lucide="check" style="width:14px;height:14px;color:var(--color-green-strong)"></i></span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="brain" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Mémoire &amp; concentration</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="zap" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Énergie</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="shield" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Immunité</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="heart-pulse" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Vieillir en forme</span>
+          </div>
+
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px 18px;margin-bottom:22px">
+            <div style="display:flex;align-items:center;justify-content:space-between;font:700 15px var(--font-sans)">Affiner mes repères <i data-lucide="chevron-up" style="width:18px;height:18px;color:var(--color-ink-soft)"></i></div>
+            <div style="font:400 12.5px/1.5 var(--font-sans);color:var(--color-ink-soft);margin:4px 0 14px">Optionnel — rend les zones cibles plus justes.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div><div style="font:700 12px var(--font-sans);color:var(--color-ink-soft);margin-bottom:5px">Année de naissance</div><div style="height:44px;border:1px solid var(--color-line);border-radius:12px;background:var(--color-paper);display:flex;align-items:center;padding:0 14px;font:600 15px var(--font-sans)">1991</div></div>
+              <div><div style="font:700 12px var(--font-sans);color:var(--color-ink-soft);margin-bottom:5px">Sexe</div><div style="height:44px;border:1px solid var(--color-line);border-radius:12px;background:var(--color-paper);display:flex;align-items:center;justify-content:space-between;padding:0 14px;font:600 15px var(--font-sans)">Femme<i data-lucide="chevron-down" style="width:16px;height:16px;color:var(--color-ink-soft)"></i></div></div>
+              <div><div style="font:700 12px var(--font-sans);color:var(--color-ink-soft);margin-bottom:5px">Poids</div><div style="height:44px;border:1px solid var(--color-line);border-radius:12px;background:var(--color-paper);display:flex;align-items:center;padding:0 14px;font:600 15px var(--font-sans)">63 kg</div></div>
+              <div><div style="font:700 12px var(--font-sans);color:var(--color-ink-soft);margin-bottom:5px">Taille</div><div style="height:44px;border:1px solid var(--color-line);border-radius:12px;background:var(--color-paper);display:flex;align-items:center;padding:0 14px;font:600 15px var(--font-sans)">168 cm</div></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:12px;background:var(--color-sage-tint);border-radius:10px;padding:9px 12px;font:600 12.5px/1.45 var(--font-sans);color:var(--color-sage-deep)"><i data-lucide="lock" style="width:15px;height:15px;flex:none"></i>Jamais partagé — même pas avec ton foyer.</div>
+          </div>
+
+          <button style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:52px;border-radius:12px;background:var(--color-green-strong);color:#fff;font:700 16px var(--font-sans);border:none;box-shadow:var(--shadow-md)">Voir mes recommandations<i data-lucide="arrow-right" style="width:18px;height:18px"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3 · ONBOARDING B ============ -->
+<section class="sec" id="e3">
+  <div class="shd"><a class="sid" href="#e3">3</a><span class="snm">État 3 — Onboarding B « Ton plan de suivi » + fin</span></div>
+  <p class="sds">Les recommandations <b>s'expliquent</b> : chaque carte dit pourquoi elle est là (les facettes cochées), pré-cochée mais refusable, cible modifiable. La cérémonie de fin enchaîne sur la couverture des données — une seule fois.</p>
+  <div class="row">
+
+    <!-- Écran B -->
+    <div class="opt">
+      <div class="olab">Mobile · recommandations expliquées</div>
+      <div class="ph">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 24px 6px;font:700 13px var(--font-sans)"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><i data-lucide="signal" style="width:14px;height:14px"></i><i data-lucide="wifi" style="width:15px;height:15px"></i><i data-lucide="battery-full" style="width:19px;height:19px"></i></span></div>
+        <div style="padding:12px 22px 24px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div style="display:flex;gap:6px"><span style="width:22px;height:6px;border-radius:999px;background:var(--color-green)"></span><span style="width:22px;height:6px;border-radius:999px;background:var(--color-green)"></span></div>
+            <a href="#e4" style="font:700 14px var(--font-sans);color:var(--color-ink-soft);text-decoration:none">Passer</a>
+          </div>
+          <h1 style="font:600 27px/1.15 var(--font-display);letter-spacing:-0.01em;margin:0 0 4px">Ton plan de suivi</h1>
+          <div style="font:400 14px/1.55 var(--font-sans);color:var(--color-ink-soft);margin-bottom:16px">4 idées d'après ce que tu as coché. Tu gardes la main sur tout, tout le temps.</div>
+
+          <div style="background:var(--color-surface);border:1.5px solid var(--color-sage);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div style="width:34px;height:34px;border-radius:10px;background:var(--color-clay-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="soup" style="width:18px;height:18px"></i></div>
+              <div style="font:700 15.5px var(--font-sans)">Sources de collagène</div>
+              <span style="margin-left:auto;background:var(--color-butter-tint);border-radius:999px;padding:4px 10px;font:700 11.5px var(--font-sans)">1× / semaine</span>
+            </div>
+            <div style="font:400 13px/1.55 var(--font-sans);color:var(--color-ink);margin-bottom:10px"><b>Recommandé parce que tu as coché</b> <span style="background:var(--color-sage-tint);border-radius:999px;padding:1px 8px;font-weight:700">course &amp; impact</span> + <span style="background:var(--color-sage-tint);border-radius:999px;padding:1px 8px;font-weight:700">articulations</span>. Les sports à impact sollicitent tendons et cartilages ; certains sportifs veillent à leurs sources de collagène (bouillons, plats mijotés gélatineux…).</div>
+            <div style="display:flex;gap:10px">
+              <button style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;height:44px;border-radius:12px;background:var(--color-green-strong);color:#fff;font:700 14.5px var(--font-sans);border:none"><i data-lucide="check" style="width:16px;height:16px"></i>Suivre</button>
+              <button style="flex:1;height:44px;border-radius:12px;background:var(--color-surface);color:var(--color-ink-soft);font:700 14.5px var(--font-sans);border:1px solid var(--color-line)">Non merci</button>
+            </div>
+          </div>
+
+          <div style="background:var(--color-surface);border:1.5px solid var(--color-sage);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div style="width:34px;height:34px;border-radius:10px;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="beef" style="width:18px;height:18px"></i></div>
+              <div style="font:700 15.5px var(--font-sans)">Protéines</div>
+              <span style="margin-left:auto;background:var(--color-butter-tint);border-radius:999px;padding:4px 10px;font:700 11.5px var(--font-sans)">zone quotidienne</span>
+            </div>
+            <div style="font:400 13px/1.55 var(--font-sans);margin-bottom:10px"><b>Recommandé parce que tu as coché</b> <span style="background:var(--color-sage-tint);border-radius:999px;padding:1px 8px;font-weight:700">course &amp; impact</span>. Courir régulièrement augmente les besoins de réparation musculaire.</div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <span style="font:700 13px var(--font-sans);color:var(--color-ink-soft)">Ta zone :</span>
+              <div style="height:42px;width:76px;border:1px solid var(--color-line);border-radius:12px;background:var(--color-paper);display:flex;align-items:center;justify-content:center;font:700 15px var(--font-sans)">110</div>
+              <span style="font:600 13px var(--font-sans);color:var(--color-ink-soft)">à</span>
+              <div style="height:42px;width:76px;border:1px solid var(--color-line);border-radius:12px;background:var(--color-paper);display:flex;align-items:center;justify-content:center;font:700 15px var(--font-sans)">150</div>
+              <span style="font:600 13px var(--font-sans);color:var(--color-ink-soft)">g / jour</span>
+            </div>
+            <div style="display:flex;gap:10px">
+              <button style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;height:44px;border-radius:12px;background:var(--color-green-strong);color:#fff;font:700 14.5px var(--font-sans);border:none"><i data-lucide="check" style="width:16px;height:16px"></i>Suivre</button>
+              <button style="flex:1;height:44px;border-radius:12px;background:var(--color-surface);color:var(--color-ink-soft);font:700 14.5px var(--font-sans);border:1px solid var(--color-line)">Non merci</button>
+            </div>
+          </div>
+
+          <div style="background:var(--color-surface);border:1.5px solid var(--color-sage);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div style="width:34px;height:34px;border-radius:10px;background:var(--color-butter-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="fish" style="width:18px;height:18px"></i></div>
+              <div style="font:700 15.5px var(--font-sans)">Poisson gras</div>
+              <span style="margin-left:auto;background:var(--color-butter-tint);border-radius:999px;padding:4px 10px;font:700 11.5px var(--font-sans)">2× / semaine</span>
+            </div>
+            <div style="font:400 13px/1.55 var(--font-sans);margin-bottom:10px"><b>Recommandé parce que tu as coché</b> <span style="background:var(--color-sage-tint);border-radius:999px;padding:1px 8px;font-weight:700">articulations</span>. Repère officiel français : du poisson deux fois par semaine, dont un gras.</div>
+            <div style="display:flex;gap:10px">
+              <button style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;height:44px;border-radius:12px;background:var(--color-green-strong);color:#fff;font:700 14.5px var(--font-sans);border:none"><i data-lucide="check" style="width:16px;height:16px"></i>Suivre</button>
+              <button style="flex:1;height:44px;border-radius:12px;background:var(--color-surface);color:var(--color-ink-soft);font:700 14.5px var(--font-sans);border:1px solid var(--color-line)">Non merci</button>
+            </div>
+          </div>
+
+          <div style="background:var(--color-paper);border:1px dashed var(--color-line);border-radius:16px;padding:16px;margin-bottom:20px;opacity:.75">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:34px;height:34px;border-radius:10px;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="bean" style="width:18px;height:18px"></i></div>
+              <div style="flex:1">
+                <div style="font:700 15.5px var(--font-sans)">Légumineuses</div>
+                <div style="font:400 12.5px var(--font-sans);color:var(--color-ink-soft)">mis de côté — retrouvable dans le catalogue</div>
+              </div>
+              <button style="height:38px;padding:0 14px;border-radius:12px;background:var(--color-surface);color:var(--color-sage-deep);font:700 13px var(--font-sans);border:1px solid var(--color-sage)">Reprendre</button>
+            </div>
+          </div>
+
+          <button style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:52px;border-radius:12px;background:var(--color-green-strong);color:#fff;font:700 16px var(--font-sans);border:none;box-shadow:var(--shadow-md)">C'est parti — 3 suivis<i data-lucide="arrow-right" style="width:18px;height:18px"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fin d'onboarding -->
+    <div class="opt">
+      <div class="olab">Mobile · fin — la couverture, une seule cérémonie</div>
+      <div class="ph">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 24px 6px;font:700 13px var(--font-sans)"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><i data-lucide="signal" style="width:14px;height:14px"></i><i data-lucide="wifi" style="width:15px;height:15px"></i><i data-lucide="battery-full" style="width:19px;height:19px"></i></span></div>
+        <div style="padding:36px 26px 32px;text-align:center">
+          <div style="width:150px;height:150px;border-radius:50%;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;margin:0 auto 14px"><img src="assets/logo/symbol-bowl.svg" alt="" style="width:80px;height:80px"></div>
+          <div style="font:500 22px var(--font-hand);color:var(--color-sage-deep)">c'est tout bon !</div>
+          <h1 style="font:600 27px/1.2 var(--font-display);letter-spacing:-0.01em;margin:4px 0 8px">Ton plan de suivi est prêt</h1>
+          <p style="font:400 14.5px/1.55 var(--font-sans);color:var(--color-ink-soft);margin:0 0 26px">3 suivis actifs. Ils se rempliront tout seuls depuis ton planning — rien d'autre à faire.</p>
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:18px;text-align:left;margin-bottom:18px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <i data-lucide="percent" style="width:18px;height:18px;color:var(--color-sage-deep)"></i>
+              <span style="font:700 15px var(--font-sans)">Ta semaine est couverte à 40 %</span>
+            </div>
+            <div style="position:relative;height:12px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line);margin-bottom:10px"><div style="position:absolute;top:2px;bottom:2px;left:2px;width:40%;background:var(--color-butter);border-radius:999px"></div></div>
+            <div style="font:400 13px/1.55 var(--font-sans);color:var(--color-ink-soft)">5 ingrédients sur 13 ont des données nutritionnelles. Plus la couverture monte, plus tes repères sont justes.</div>
+          </div>
+          <button style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:52px;border-radius:12px;background:var(--color-green-strong);color:#fff;font:700 16px var(--font-sans);border:none;box-shadow:var(--shadow-md)">Compléter les données</button>
+          <a href="#e4" style="display:inline-block;margin-top:14px;font:700 14.5px var(--font-sans);color:var(--color-ink-soft);text-decoration:none">Plus tard</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4 · PAGE PRINCIPALE ============ -->
+<section class="sec" id="e4">
+  <div class="shd"><a class="sid" href="#e4">4</a><span class="snm">État 4 — Page principale (planning rempli)</span></div>
+  <p class="sds">Le cœur du design. Vue <b>Semaine</b> par défaut (l'unité de bienveillance), le Jour est un zoom. Jauges vers zone + habitudes mélangées, score hebdo doux, couverture 80 %, un suivi en observation (Magnésium), un suivi à cible perso (Fer).</p>
+  <div class="row">
+
+    <!-- Desktop semaine -->
+    <div class="opt">
+      <div class="olab">Desktop · vue Semaine</div>
+      <div class="dk" style="display:flex">
+        <div style="width:216px;flex:none;background:var(--color-surface);border-right:1px solid var(--color-line);padding:20px 14px;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;gap:10px;padding:0 10px 18px"><img src="assets/logo/symbol-bowl.svg" alt="" style="width:30px;height:30px"><span style="font:600 21px var(--font-display)">Mealing</span></div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font:700 14px var(--font-sans);color:var(--color-ink-soft)"><i data-lucide="calendar-days" style="width:19px;height:19px"></i>Planning</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font:700 14px var(--font-sans);color:var(--color-ink-soft)"><i data-lucide="chef-hat" style="width:19px;height:19px"></i>Recettes</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font:700 14px var(--font-sans);color:var(--color-ink-soft)"><i data-lucide="shopping-cart" style="width:19px;height:19px"></i>Courses</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font:700 14px var(--font-sans);color:var(--color-ink-soft)"><i data-lucide="refrigerator" style="width:19px;height:19px"></i>Stock</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:var(--color-sage-tint);font:700 14px var(--font-sans);color:var(--color-ink)"><i data-lucide="apple" style="width:19px;height:19px"></i>Nutrition</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font:700 14px var(--font-sans);color:var(--color-ink-soft)"><i data-lucide="sparkles" style="width:19px;height:19px"></i>Assistant</div>
+          <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--color-line);font:700 13px var(--font-sans);color:var(--color-ink-soft)"><i data-lucide="users" style="width:18px;height:18px"></i>Foyer Morel</div>
+        </div>
+        <div style="flex:1;padding:28px 32px 32px;min-width:0">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px">
+            <div>
+              <div style="font:600 28px var(--font-display);letter-spacing:-0.01em">Nutrition</div>
+              <div style="font:500 17px var(--font-hand);color:var(--color-sage-deep)">déduite de ton planning — zéro saisie</div>
+            </div>
+            <div style="margin-left:auto;display:flex;align-items:center;background:var(--color-surface);border:1px solid var(--color-line);border-radius:999px;padding:4px">
+              <span style="padding:8px 18px;border-radius:999px;font:700 13.5px var(--font-sans);color:var(--color-ink-soft)">Jour</span>
+              <span style="padding:8px 18px;border-radius:999px;font:700 13.5px var(--font-sans);background:var(--color-sage-tint);color:var(--color-ink)">Semaine</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;font:700 14px var(--font-sans)"><i data-lucide="chevron-left" style="width:18px;height:18px;color:var(--color-ink-soft)"></i>6 – 12 juillet<i data-lucide="chevron-right" style="width:18px;height:18px;color:var(--color-ink-soft)"></i></div>
+            <button style="display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 16px;border-radius:12px;background:var(--color-surface);color:var(--color-sage-deep);font:700 14px var(--font-sans);border:1.5px solid var(--color-sage)"><i data-lucide="settings-2" style="width:17px;height:17px"></i>Gérer mes suivis</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;margin-bottom:16px">
+            <div style="background:var(--color-sage-tint);border:1px solid var(--color-line);border-radius:16px;padding:20px 22px;display:flex;align-items:center;gap:20px">
+              <div>
+                <div style="font:600 22px var(--font-display)">Dans la zone 5 jours sur 7</div>
+                <div style="font:500 16px var(--font-hand);color:var(--color-sage-deep);margin-top:2px">un écart ponctuel se lisse sur la semaine</div>
+              </div>
+              <div style="margin-left:auto;display:flex;gap:7px">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:4px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft)"><span style="width:22px;height:22px;border-radius:50%;background:var(--color-green);display:inline-flex;align-items:center;justify-content:center;color:#fff"><i data-lucide="check" style="width:12px;height:12px"></i></span>lun</div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:4px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft)"><span style="width:22px;height:22px;border-radius:50%;background:var(--color-green);display:inline-flex;align-items:center;justify-content:center;color:#fff"><i data-lucide="check" style="width:12px;height:12px"></i></span>mar</div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:4px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft)"><span style="width:22px;height:22px;border-radius:50%;background:var(--color-clay);display:inline-block"></span>mer</div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:4px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft)"><span style="width:22px;height:22px;border-radius:50%;background:var(--color-green);display:inline-flex;align-items:center;justify-content:center;color:#fff"><i data-lucide="check" style="width:12px;height:12px"></i></span>jeu</div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:4px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft)"><span style="width:22px;height:22px;border-radius:50%;background:var(--color-green);display:inline-flex;align-items:center;justify-content:center;color:#fff"><i data-lucide="check" style="width:12px;height:12px"></i></span>ven</div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:4px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft)"><span style="width:22px;height:22px;border-radius:50%;background:var(--color-green);display:inline-flex;align-items:center;justify-content:center;color:#fff"><i data-lucide="check" style="width:12px;height:12px"></i></span>sam</div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:4px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft)"><span style="width:22px;height:22px;border-radius:50%;background:var(--color-surface);border:1.5px dashed var(--color-sage);display:inline-block"></span>dim</div>
+              </div>
+            </div>
+            <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:20px 22px">
+              <div style="display:flex;align-items:center;gap:9px;font:700 15px var(--font-sans)"><i data-lucide="percent" style="width:17px;height:17px;color:var(--color-sage-deep)"></i>Semaine couverte à 80 %<span style="margin-left:auto;font:600 12.5px var(--font-sans);color:var(--color-ink-soft)">12/13 ingrédients</span></div>
+              <div style="position:relative;height:12px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line);margin:12px 0"><div style="position:absolute;top:2px;bottom:2px;left:2px;width:80%;background:var(--color-sage);border-radius:999px"></div></div>
+              <button style="display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px;border-radius:12px;background:var(--color-surface);color:var(--color-sage-deep);font:700 13px var(--font-sans);border:1.5px solid var(--color-sage)"><i data-lucide="plus" style="width:15px;height:15px"></i>Compléter les données</button>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px">
+            <!-- Protéines -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:18px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:34px;height:34px;border-radius:10px;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="beef" style="width:18px;height:18px"></i></div>
+                <div style="flex:1"><div style="font:700 15px var(--font-sans)">Protéines</div><div style="font:600 11.5px var(--font-sans);color:var(--color-ink-soft)">couvert à 60 %</div></div>
+                <div style="text-align:right"><div style="font:600 21px var(--font-display)">96 g</div><div style="font:600 11px var(--font-sans);color:var(--color-ink-soft)">réel estimé / j</div></div>
+              </div>
+              <div style="position:relative;height:13px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line);margin:15px 0 7px">
+                <div style="position:absolute;top:0;bottom:0;left:62%;width:26%;background:var(--color-sage-tint)"></div>
+                <div style="position:absolute;top:2px;bottom:2px;left:2px;width:54%;background:var(--color-sage);border-radius:999px"></div>
+                <div style="position:absolute;top:50%;left:56%;width:12px;height:12px;transform:translate(-50%,-50%);background:var(--color-surface);border:2.5px solid var(--color-ink-soft);border-radius:50%"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font:600 11.5px var(--font-sans);color:var(--color-ink-soft)"><span>○ planifié 96 g</span><span>zone 110 – 150 g</span></div>
+              <div style="margin-top:10px;font:600 12.5px/1.5 var(--font-sans);color:var(--color-sage-deep);background:var(--color-sage-tint);border-radius:10px;padding:7px 10px">Un peu en dessous — le dahl de jeudi peut combler l'écart.</div>
+            </div>
+            <!-- Fibres -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:18px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:34px;height:34px;border-radius:10px;background:var(--color-butter-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="wheat" style="width:18px;height:18px"></i></div>
+                <div style="flex:1"><div style="font:700 15px var(--font-sans)">Fibres</div><div style="font:600 11.5px var(--font-sans);color:var(--color-ink-soft)">couvert à 85 %</div></div>
+                <div style="text-align:right"><div style="font:600 21px var(--font-display);color:var(--color-green-strong)">28 g</div><div style="font:600 11px var(--font-sans);color:var(--color-ink-soft)">réel estimé / j</div></div>
+              </div>
+              <div style="position:relative;height:13px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line);margin:15px 0 7px">
+                <div style="position:absolute;top:0;bottom:0;left:55%;width:30%;background:var(--color-sage-tint)"></div>
+                <div style="position:absolute;top:2px;bottom:2px;left:2px;width:66%;background:var(--color-green);border-radius:999px"></div>
+                <div style="position:absolute;top:50%;left:62%;width:12px;height:12px;transform:translate(-50%,-50%);background:var(--color-surface);border:2.5px solid var(--color-ink-soft);border-radius:50%"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font:600 11.5px var(--font-sans);color:var(--color-ink-soft)"><span>○ planifié 26 g</span><span>zone 25 – 35 g</span></div>
+              <div style="margin-top:10px;display:flex;align-items:center;gap:7px;font:700 12.5px var(--font-sans);color:var(--color-green-strong)"><i data-lucide="check" style="width:14px;height:14px"></i>Dans la zone</div>
+            </div>
+            <!-- Fer cible perso -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:18px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:34px;height:34px;border-radius:10px;background:var(--color-clay-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="droplet" style="width:18px;height:18px"></i></div>
+                <div style="flex:1"><div style="display:flex;align-items:center;gap:7px;font:700 15px var(--font-sans)">Fer<span style="display:inline-flex;align-items:center;gap:4px;background:var(--color-clay-tint);border-radius:999px;padding:3px 8px;font:700 10.5px var(--font-sans)"><i data-lucide="stethoscope" style="width:11px;height:11px"></i>cible perso</span></div><div style="font:600 11.5px var(--font-sans);color:var(--color-ink-soft)">couvert à 70 %</div></div>
+                <div style="text-align:right"><div style="font:600 21px var(--font-display);color:var(--color-green-strong)">14 mg</div><div style="font:600 11px var(--font-sans);color:var(--color-ink-soft)">réel estimé / j</div></div>
+              </div>
+              <div style="position:relative;height:13px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line);margin:15px 0 7px">
+                <div style="position:absolute;top:0;bottom:0;left:58%;width:32%;background:var(--color-sage-tint)"></div>
+                <div style="position:absolute;top:2px;bottom:2px;left:2px;width:70%;background:var(--color-green);border-radius:999px"></div>
+                <div style="position:absolute;top:50%;left:66%;width:12px;height:12px;transform:translate(-50%,-50%);background:var(--color-surface);border:2.5px solid var(--color-ink-soft);border-radius:50%"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font:600 11.5px var(--font-sans);color:var(--color-ink-soft)"><span>○ planifié 13 mg</span><span>zone ≥ 12 mg</span></div>
+              <div style="margin-top:10px;font:600 12.5px/1.5 var(--font-sans);color:var(--color-ink-soft)">Cible notée avec ton médecin — pas une recommandation de l'app.</div>
+            </div>
+            <!-- Poisson gras -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:18px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:34px;height:34px;border-radius:10px;background:var(--color-butter-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="fish" style="width:18px;height:18px"></i></div>
+                <div style="flex:1"><div style="font:700 15px var(--font-sans)">Poisson gras</div><div style="font:600 11.5px var(--font-sans);color:var(--color-ink-soft)">au moins 2× / semaine · couvert à 100 %</div></div>
+                <div style="display:flex;align-items:center;gap:5px;font:600 19px var(--font-display);color:var(--color-green-strong)">2/2<i data-lucide="check" style="width:16px;height:16px"></i></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;margin-top:14px">
+                <div style="width:30px;height:30px;border-radius:50%;background:var(--color-sage-tint);border:1.5px solid var(--color-green);display:flex;align-items:center;justify-content:center;color:var(--color-green-strong)"><i data-lucide="check" style="width:15px;height:15px"></i></div>
+                <div style="width:30px;height:30px;border-radius:50%;background:var(--color-surface);border:1.5px dashed var(--color-sage);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep)"><i data-lucide="clock" style="width:14px;height:14px"></i></div>
+                <div style="font:600 12.5px/1.45 var(--font-sans);color:var(--color-ink-soft)">dont 1 à venir — saumon rôti, vendredi soir</div>
+              </div>
+            </div>
+            <!-- Viande rouge limite -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:18px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:34px;height:34px;border-radius:10px;background:var(--color-clay-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="beef" style="width:18px;height:18px"></i></div>
+                <div style="flex:1"><div style="font:700 15px var(--font-sans)">Viande rouge</div><div style="font:600 11.5px var(--font-sans);color:var(--color-ink-soft)">au plus 2× / semaine · couvert à 100 %</div></div>
+                <div style="font:600 19px var(--font-display)">2/2</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;margin-top:14px">
+                <div style="width:30px;height:30px;border-radius:50%;background:var(--color-clay-tint);border:1.5px solid var(--color-clay);display:flex;align-items:center;justify-content:center;color:var(--color-ink)"><i data-lucide="check" style="width:15px;height:15px"></i></div>
+                <div style="width:30px;height:30px;border-radius:50%;background:var(--color-clay-tint);border:1.5px solid var(--color-clay);display:flex;align-items:center;justify-content:center;color:var(--color-ink)"><i data-lucide="check" style="width:15px;height:15px"></i></div>
+                <div style="font:600 12.5px/1.45 var(--font-sans);color:var(--color-ink-soft)">pile sur le repère — tout va bien</div>
+              </div>
+            </div>
+            <!-- Magnésium observation -->
+            <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:18px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:34px;height:34px;border-radius:10px;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="activity" style="width:18px;height:18px"></i></div>
+                <div style="flex:1"><div style="display:flex;align-items:center;gap:7px;font:700 15px var(--font-sans)">Magnésium<span style="display:inline-flex;align-items:center;gap:4px;background:var(--color-butter-tint);border-radius:999px;padding:3px 8px;font:700 10.5px var(--font-sans)"><i data-lucide="eye" style="width:11px;height:11px"></i>en observation</span></div><div style="font:600 11.5px var(--font-sans);color:var(--color-ink-soft)">couvert à 55 %</div></div>
+                <div style="text-align:right"><div style="font:600 21px var(--font-display)">310 mg</div><div style="font:600 11px var(--font-sans);color:var(--color-ink-soft)">réel estimé / j</div></div>
+              </div>
+              <svg viewBox="0 0 220 44" style="width:100%;height:44px;margin-top:12px" preserveAspectRatio="none"><polyline points="0,30 30,26 60,32 90,22 120,25 150,18 180,21 220,16" fill="none" stroke="#9CBE96" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+              <div style="display:flex;justify-content:space-between;font:600 11.5px var(--font-sans);color:var(--color-ink-soft)"><span>4 dernières semaines</span><span style="display:inline-flex;align-items:center;gap:4px;color:var(--color-sage-deep)"><i data-lucide="trending-up" style="width:13px;height:13px"></i>tendance douce à la hausse</span></div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;align-items:start">
+            <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:18px 20px">
+              <div style="display:flex;align-items:center;gap:9px;font:700 15px var(--font-sans)"><i data-lucide="soup" style="width:17px;height:17px;color:var(--color-sage-deep)"></i>D'où viennent tes protéines cette semaine<i data-lucide="chevron-up" style="width:17px;height:17px;color:var(--color-ink-soft);margin-left:auto"></i></div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+                <div style="display:flex;align-items:center;gap:12px;font:600 13.5px var(--font-sans)"><span style="flex:1">Chili sin carne (×2)</span><div style="width:180px;height:9px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line)"><div style="width:78%;height:100%;background:var(--color-sage);border-radius:999px"></div></div><span style="width:44px;text-align:right;color:var(--color-ink-soft)">148 g</span></div>
+                <div style="display:flex;align-items:center;gap:12px;font:600 13.5px var(--font-sans)"><span style="flex:1">Saumon rôti, riz</span><div style="width:180px;height:9px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line)"><div style="width:42%;height:100%;background:var(--color-sage);border-radius:999px"></div></div><span style="width:44px;text-align:right;color:var(--color-ink-soft)">64 g</span></div>
+                <div style="display:flex;align-items:center;gap:12px;font:600 13.5px var(--font-sans)"><span style="flex:1">Dahl de lentilles</span><div style="width:180px;height:9px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line)"><div style="width:33%;height:100%;background:var(--color-sage);border-radius:999px"></div></div><span style="width:44px;text-align:right;color:var(--color-ink-soft)">51 g</span></div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="background:var(--color-butter-tint);border:1px solid var(--color-line);border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:12px">
+                <i data-lucide="sparkles" style="width:20px;height:20px;color:var(--color-sage-deep);flex:none"></i>
+                <div style="font:600 13.5px/1.5 var(--font-sans)">« Comment monter mes protéines sans plus de viande ? » <span style="color:var(--color-sage-deep)">Demande à l'assistant →</span></div>
+              </div>
+              <div style="font:400 12px var(--font-sans);color:var(--color-ink-soft);padding:0 4px">Des estimations d'après tes repas planifiés, pas des mesures. Ceci n'est pas un avis médical. Visible uniquement par toi.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:36px">
+    <!-- Mobile semaine -->
+    <div class="opt">
+      <div class="olab">Mobile · vue Semaine</div>
+      <div class="ph">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 24px 6px;font:700 13px var(--font-sans)"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><i data-lucide="signal" style="width:14px;height:14px"></i><i data-lucide="wifi" style="width:15px;height:15px"></i><i data-lucide="battery-full" style="width:19px;height:19px"></i></span></div>
+        <div style="padding:14px 20px 20px">
+          <div style="display:flex;align-items:center;margin-bottom:4px">
+            <div style="font:600 24px var(--font-display);letter-spacing:-0.01em">Nutrition</div>
+            <button style="margin-left:auto;display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:12px;background:var(--color-surface);border:1px solid var(--color-line);color:var(--color-sage-deep)"><i data-lucide="settings-2" style="width:19px;height:19px"></i></button>
+          </div>
+          <div style="font:500 16px var(--font-hand);color:var(--color-sage-deep);margin-bottom:14px">déduite de ton planning — zéro saisie</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+            <div style="display:flex;align-items:center;background:var(--color-surface);border:1px solid var(--color-line);border-radius:999px;padding:3px;flex:1">
+              <span style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font:700 13.5px var(--font-sans);color:var(--color-ink-soft)">Jour</span>
+              <span style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font:700 13.5px var(--font-sans);background:var(--color-sage-tint)">Semaine</span>
+            </div>
+            <span style="font:700 13px var(--font-sans);color:var(--color-ink-soft)">6 – 12 juil.</span>
+          </div>
+
+          <div style="background:var(--color-sage-tint);border:1px solid var(--color-line);border-radius:16px;padding:16px 18px;margin-bottom:12px">
+            <div style="font:600 19px var(--font-display)">Dans la zone 5 jours sur 7</div>
+            <div style="display:flex;gap:6px;margin-top:10px">
+              <span style="width:20px;height:20px;border-radius:50%;background:var(--color-green);display:inline-flex;align-items:center;justify-content:center;color:#fff"><i data-lucide="check" style="width:11px;height:11px"></i></span>
+              <span style="width:20px;height:20px;border-radius:50%;background:var(--color-green);display:inline-flex;align-items:center;justify-content:center;color:#fff"><i data-lucide="check" style="width:11px;height:11px"></i></span>
+              <span style="width:20px;height:20px;border-radius:50%;background:var(--color-clay);display:inline-block"></span>
+              <span style="width:20px;height:20px;border-radius:50%;background:var(--color-green);display:inline-flex;align-items:center;justify-content:center;color:#fff"><i data-lucide="check" style="width:11px;height:11px"></i></span>
+              <span style="width:20px;height:20px;border-radius:50%;background:var(--color-green);display:inline-flex;align-items:center;justify-content:center;color:#fff"><i data-lucide="check" style="width:11px;height:11px"></i></span>
+              <span style="width:20px;height:20px;border-radius:50%;background:var(--color-green);display:inline-flex;align-items:center;justify-content:center;color:#fff"><i data-lucide="check" style="width:11px;height:11px"></i></span>
+              <span style="width:20px;height:20px;border-radius:50%;background:var(--color-surface);border:1.5px dashed var(--color-sage);display:inline-block"></span>
+            </div>
+            <div style="font:500 15px var(--font-hand);color:var(--color-sage-deep);margin-top:8px">un écart ponctuel se lisse sur la semaine</div>
+          </div>
+
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:34px;height:34px;border-radius:10px;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="beef" style="width:18px;height:18px"></i></div>
+              <div style="flex:1"><div style="font:700 15px var(--font-sans)">Protéines</div><div style="font:600 11.5px var(--font-sans);color:var(--color-ink-soft)">couvert à 60 %</div></div>
+              <div style="text-align:right"><div style="font:600 20px var(--font-display)">96 g</div><div style="font:600 11px var(--font-sans);color:var(--color-ink-soft)">réel estimé / j</div></div>
+            </div>
+            <div style="position:relative;height:13px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line);margin:14px 0 7px">
+              <div style="position:absolute;top:0;bottom:0;left:62%;width:26%;background:var(--color-sage-tint)"></div>
+              <div style="position:absolute;top:2px;bottom:2px;left:2px;width:54%;background:var(--color-sage);border-radius:999px"></div>
+              <div style="position:absolute;top:50%;left:56%;width:12px;height:12px;transform:translate(-50%,-50%);background:var(--color-surface);border:2.5px solid var(--color-ink-soft);border-radius:50%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font:600 11.5px var(--font-sans);color:var(--color-ink-soft)"><span>○ planifié 96 g</span><span>zone 110 – 150 g</span></div>
+          </div>
+
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:34px;height:34px;border-radius:10px;background:var(--color-butter-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="fish" style="width:18px;height:18px"></i></div>
+              <div style="flex:1"><div style="font:700 15px var(--font-sans)">Poisson gras</div><div style="font:600 11.5px var(--font-sans);color:var(--color-ink-soft)">au moins 2× / semaine</div></div>
+              <div style="display:flex;align-items:center;gap:5px;font:600 18px var(--font-display);color:var(--color-green-strong)">2/2<i data-lucide="check" style="width:15px;height:15px"></i></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;margin-top:12px">
+              <div style="width:30px;height:30px;border-radius:50%;background:var(--color-sage-tint);border:1.5px solid var(--color-green);display:flex;align-items:center;justify-content:center;color:var(--color-green-strong)"><i data-lucide="check" style="width:15px;height:15px"></i></div>
+              <div style="width:30px;height:30px;border-radius:50%;background:var(--color-surface);border:1.5px dashed var(--color-sage);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep)"><i data-lucide="clock" style="width:14px;height:14px"></i></div>
+              <div style="font:600 12px/1.45 var(--font-sans);color:var(--color-ink-soft)">dont 1 à venir — saumon, vendredi</div>
+            </div>
+          </div>
+
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:34px;height:34px;border-radius:10px;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="activity" style="width:18px;height:18px"></i></div>
+              <div style="flex:1"><div style="display:flex;align-items:center;gap:6px;font:700 15px var(--font-sans)">Magnésium<span style="display:inline-flex;align-items:center;gap:4px;background:var(--color-butter-tint);border-radius:999px;padding:3px 8px;font:700 10px var(--font-sans)"><i data-lucide="eye" style="width:10px;height:10px"></i>observation</span></div><div style="font:600 11.5px var(--font-sans);color:var(--color-ink-soft)">couvert à 55 %</div></div>
+              <div style="font:600 20px var(--font-display)">310 mg</div>
+            </div>
+            <svg viewBox="0 0 220 36" style="width:100%;height:36px;margin-top:10px" preserveAspectRatio="none"><polyline points="0,26 30,22 60,27 90,18 120,21 150,15 180,18 220,13" fill="none" stroke="#9CBE96" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+          </div>
+
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+            <i data-lucide="percent" style="width:17px;height:17px;color:var(--color-sage-deep);flex:none"></i>
+            <div style="flex:1;font:700 13.5px var(--font-sans)">Semaine couverte à 80 %<div style="font:600 11.5px var(--font-sans);color:var(--color-ink-soft)">12/13 ingrédients</div></div>
+            <button style="height:38px;padding:0 12px;border-radius:12px;background:var(--color-surface);color:var(--color-sage-deep);font:700 12.5px var(--font-sans);border:1.5px solid var(--color-sage)">Compléter</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;font:700 13.5px var(--font-sans);color:var(--color-ink-soft);padding:2px 4px 0">D'où viennent tes protéines<i data-lucide="chevron-down" style="width:16px;height:16px"></i></div>
+          <div style="text-align:center;font:400 11px/1.5 var(--font-sans);color:var(--color-ink-soft);margin-top:14px">Estimations d'après ton planning — pas un avis médical.<br>Visible uniquement par toi.</div>
+        </div>
+        <div style="display:flex;justify-content:space-around;align-items:center;padding:10px 8px 24px;border-top:1px solid var(--color-line);background:var(--color-surface)">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="calendar-days" style="width:22px;height:22px"></i>Planning</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="chef-hat" style="width:22px;height:22px"></i>Recettes</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-green-strong);min-width:52px"><i data-lucide="apple" style="width:22px;height:22px"></i>Nutrition</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="shopping-cart" style="width:22px;height:22px"></i>Courses</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="refrigerator" style="width:22px;height:22px"></i>Stock</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile jour -->
+    <div class="opt">
+      <div class="olab">Mobile · vue Jour (le zoom)</div>
+      <div class="ph">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 24px 6px;font:700 13px var(--font-sans)"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><i data-lucide="signal" style="width:14px;height:14px"></i><i data-lucide="wifi" style="width:15px;height:15px"></i><i data-lucide="battery-full" style="width:19px;height:19px"></i></span></div>
+        <div style="padding:14px 20px 20px">
+          <div style="display:flex;align-items:center;margin-bottom:4px">
+            <div style="font:600 24px var(--font-display);letter-spacing:-0.01em">Nutrition</div>
+            <button style="margin-left:auto;display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:12px;background:var(--color-surface);border:1px solid var(--color-line);color:var(--color-sage-deep)"><i data-lucide="settings-2" style="width:19px;height:19px"></i></button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin:10px 0 12px">
+            <div style="display:flex;align-items:center;background:var(--color-surface);border:1px solid var(--color-line);border-radius:999px;padding:3px;flex:1">
+              <span style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font:700 13.5px var(--font-sans);background:var(--color-sage-tint)">Jour</span>
+              <span style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font:700 13.5px var(--font-sans);color:var(--color-ink-soft)">Semaine</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;margin-bottom:14px">
+            <span style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font:700 12px var(--font-sans);color:var(--color-ink-soft)">lun<br>6</span>
+            <span style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font:700 12px var(--font-sans);color:var(--color-ink-soft)">mar<br>7</span>
+            <span style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font:700 12px var(--font-sans);background:var(--color-green-strong);color:#fff">mer<br>8</span>
+            <span style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font:700 12px var(--font-sans);color:var(--color-ink-soft)">jeu<br>9</span>
+            <span style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font:700 12px var(--font-sans);color:var(--color-ink-soft)">ven<br>10</span>
+            <span style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font:700 12px var(--font-sans);color:var(--color-ink-soft)">sam<br>11</span>
+            <span style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font:700 12px var(--font-sans);color:var(--color-ink-soft)">dim<br>12</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;background:var(--color-butter-tint);border-radius:12px;padding:10px 14px;font:600 12.5px/1.5 var(--font-sans);margin-bottom:12px"><i data-lucide="info" style="width:15px;height:15px;color:var(--color-sage-deep);flex:none"></i>Le jour est un zoom — ton repère reste la semaine.</div>
+
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:34px;height:34px;border-radius:10px;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="beef" style="width:18px;height:18px"></i></div>
+              <div style="flex:1"><div style="font:700 15px var(--font-sans)">Protéines · mercredi</div><div style="font:600 11.5px var(--font-sans);color:var(--color-ink-soft)">couvert à 60 %</div></div>
+              <div style="text-align:right"><div style="font:600 20px var(--font-display)">88 g</div><div style="font:600 11px var(--font-sans);color:var(--color-ink-soft)">réel estimé</div></div>
+            </div>
+            <div style="position:relative;height:13px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line);margin:14px 0 7px">
+              <div style="position:absolute;top:0;bottom:0;left:62%;width:26%;background:var(--color-sage-tint)"></div>
+              <div style="position:absolute;top:2px;bottom:2px;left:2px;width:50%;background:var(--color-sage);border-radius:999px"></div>
+              <div style="position:absolute;top:50%;left:56%;width:12px;height:12px;transform:translate(-50%,-50%);background:var(--color-surface);border:2.5px solid var(--color-ink-soft);border-radius:50%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font:600 11.5px var(--font-sans);color:var(--color-ink-soft)"><span>○ planifié 98 g</span><span>zone 110 – 150 g</span></div>
+            <div style="margin-top:10px;font:600 12.5px/1.5 var(--font-sans);color:var(--color-sage-deep);background:var(--color-sage-tint);border-radius:10px;padding:7px 10px">Le dîner de ce soir n'est pas encore passé — rien à faire.</div>
+          </div>
+
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px;margin-bottom:12px">
+            <div style="font:800 12px var(--font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--color-ink-soft);margin-bottom:12px">Ce que ton planning compte aujourd'hui</div>
+            <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--color-line)">
+              <div style="width:36px;height:36px;border-radius:10px;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="utensils-crossed" style="width:18px;height:18px"></i></div>
+              <div style="flex:1"><div style="font:700 14px var(--font-sans)">Dahl de lentilles</div><div style="font:600 12px var(--font-sans);color:var(--color-ink-soft)">déjeuner · passé</div></div>
+              <div style="font:700 12px var(--font-sans);color:var(--color-sage-deep);text-align:right">+24 g protéines<br>légumineuses +1</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 0 2px">
+              <div style="width:36px;height:36px;border-radius:10px;background:var(--color-butter-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="clock" style="width:18px;height:18px"></i></div>
+              <div style="flex:1"><div style="font:700 14px var(--font-sans)">Omelette aux herbes</div><div style="font:600 12px var(--font-sans);color:var(--color-ink-soft)">dîner · à venir, compté comme prévu</div></div>
+              <div style="font:700 12px var(--font-sans);color:var(--color-sage-deep)">+18 g protéines</div>
+            </div>
+          </div>
+          <div style="text-align:center;font:400 11px var(--font-sans);color:var(--color-ink-soft);margin-top:10px">Estimations d'après ton planning — pas un avis médical.</div>
+        </div>
+        <div style="display:flex;justify-content:space-around;align-items:center;padding:10px 8px 24px;border-top:1px solid var(--color-line);background:var(--color-surface)">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="calendar-days" style="width:22px;height:22px"></i>Planning</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="chef-hat" style="width:22px;height:22px"></i>Recettes</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-green-strong);min-width:52px"><i data-lucide="apple" style="width:22px;height:22px"></i>Nutrition</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="shopping-cart" style="width:22px;height:22px"></i>Courses</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="refrigerator" style="width:22px;height:22px"></i>Stock</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5 · MES SUIVIS ============ -->
+<section class="sec" id="e5">
+  <div class="shd"><a class="sid" href="#e5">5</a><span class="snm">État 5 — « Mes suivis », la surface de gestion unique</span></div>
+  <p class="sds">Une seule porte pour tout : onglet <b>Suivis</b> (actifs + catalogue cherchable, badge « recommandé pour toi », recherche vide → assistant), onglet <b>Profil</b> (facettes re-modifiables → recalcul, infos corporelles).</p>
+  <div class="row">
+
+    <!-- Onglet Suivis -->
+    <div class="opt">
+      <div class="olab">Mobile · onglet Suivis + catalogue</div>
+      <div class="ph">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 24px 6px;font:700 13px var(--font-sans)"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><i data-lucide="signal" style="width:14px;height:14px"></i><i data-lucide="wifi" style="width:15px;height:15px"></i><i data-lucide="battery-full" style="width:19px;height:19px"></i></span></div>
+        <div style="padding:12px 20px 24px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><i data-lucide="chevron-left" style="width:22px;height:22px;color:var(--color-ink-soft)"></i><span style="font:600 22px var(--font-display);letter-spacing:-0.01em">Mes suivis</span></div>
+          <div style="display:flex;background:var(--color-surface);border:1px solid var(--color-line);border-radius:999px;padding:3px;margin-bottom:16px">
+            <span style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font:700 14px var(--font-sans);background:var(--color-sage-tint)">Suivis</span>
+            <span style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font:700 14px var(--font-sans);color:var(--color-ink-soft)">Profil</span>
+          </div>
+
+          <div style="font:800 12px var(--font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--color-ink-soft);margin-bottom:10px">Actifs · 4</div>
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px">
+            <div style="width:34px;height:34px;border-radius:10px;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="beef" style="width:18px;height:18px"></i></div>
+            <div style="flex:1"><div style="font:700 14.5px var(--font-sans)">Protéines</div><div style="display:inline-flex;align-items:center;gap:5px;font:600 12px var(--font-sans);color:var(--color-sage-deep)">zone 110 – 150 g / j<i data-lucide="pencil" style="width:12px;height:12px"></i></div></div>
+            <i data-lucide="trash-2" style="width:17px;height:17px;color:var(--color-ink-soft)"></i>
+            <div style="width:46px;height:28px;border-radius:999px;background:var(--color-green);position:relative;flex:none"><span style="position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;background:#fff"></span></div>
+          </div>
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px">
+            <div style="width:34px;height:34px;border-radius:10px;background:var(--color-butter-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="fish" style="width:18px;height:18px"></i></div>
+            <div style="flex:1"><div style="font:700 14.5px var(--font-sans)">Poisson gras</div><div style="display:inline-flex;align-items:center;gap:5px;font:600 12px var(--font-sans);color:var(--color-sage-deep)">au moins 2× / semaine<i data-lucide="pencil" style="width:12px;height:12px"></i></div></div>
+            <i data-lucide="trash-2" style="width:17px;height:17px;color:var(--color-ink-soft)"></i>
+            <div style="width:46px;height:28px;border-radius:999px;background:var(--color-green);position:relative;flex:none"><span style="position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;background:#fff"></span></div>
+          </div>
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px">
+            <div style="width:34px;height:34px;border-radius:10px;background:var(--color-clay-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="droplet" style="width:18px;height:18px"></i></div>
+            <div style="flex:1"><div style="display:flex;align-items:center;gap:6px;font:700 14.5px var(--font-sans)">Fer<span style="display:inline-flex;align-items:center;gap:4px;background:var(--color-clay-tint);border-radius:999px;padding:2px 8px;font:700 10px var(--font-sans)"><i data-lucide="stethoscope" style="width:10px;height:10px"></i>cible perso</span></div><div style="display:inline-flex;align-items:center;gap:5px;font:600 12px var(--font-sans);color:var(--color-sage-deep)">zone ≥ 12 mg / j<i data-lucide="pencil" style="width:12px;height:12px"></i></div></div>
+            <i data-lucide="trash-2" style="width:17px;height:17px;color:var(--color-ink-soft)"></i>
+            <div style="width:46px;height:28px;border-radius:999px;background:var(--color-green);position:relative;flex:none"><span style="position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;background:#fff"></span></div>
+          </div>
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;padding:14px 16px;margin-bottom:18px;display:flex;align-items:center;gap:12px;opacity:.7">
+            <div style="width:34px;height:34px;border-radius:10px;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="activity" style="width:18px;height:18px"></i></div>
+            <div style="flex:1"><div style="font:700 14.5px var(--font-sans)">Magnésium</div><div style="font:600 12px var(--font-sans);color:var(--color-ink-soft)">en pause — les données restent</div></div>
+            <i data-lucide="trash-2" style="width:17px;height:17px;color:var(--color-ink-soft)"></i>
+            <div style="width:46px;height:28px;border-radius:999px;background:var(--color-line);position:relative;flex:none"><span style="position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff"></span></div>
+          </div>
+
+          <div style="font:800 12px var(--font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--color-ink-soft);margin-bottom:10px">Catalogue</div>
+          <div style="display:flex;align-items:center;gap:9px;height:46px;border:1px solid var(--color-line);border-radius:12px;background:var(--color-surface);padding:0 14px;margin-bottom:12px;font:600 14px var(--font-sans);color:var(--color-ink-soft)"><i data-lucide="search" style="width:17px;height:17px"></i>Chercher un repère…</div>
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="width:34px;height:34px;border-radius:10px;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="bean" style="width:18px;height:18px"></i></div>
+              <div style="flex:1"><div style="display:flex;align-items:center;gap:6px;font:700 14.5px var(--font-sans)">Légumineuses<span style="background:var(--color-butter-tint);border-radius:999px;padding:2px 8px;font:700 10px var(--font-sans)">recommandé pour toi</span></div><div style="font:400 12px/1.5 var(--font-sans);color:var(--color-ink-soft)">Repère officiel : au moins 2× / semaine. Fibres et protéines végétales.</div></div>
+              <button style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:12px;background:var(--color-surface);color:var(--color-green-strong);border:1.5px solid var(--color-sage);flex:none"><i data-lucide="plus" style="width:18px;height:18px"></i></button>
+            </div>
+          </div>
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="width:34px;height:34px;border-radius:10px;background:var(--color-butter-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="wheat" style="width:18px;height:18px"></i></div>
+              <div style="flex:1"><div style="font:700 14.5px var(--font-sans)">Céréales complètes</div><div style="font:400 12px/1.5 var(--font-sans);color:var(--color-ink-soft)">À privilégier au quotidien. Source : repères alimentaires français.</div></div>
+              <button style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:12px;background:var(--color-surface);color:var(--color-green-strong);border:1.5px solid var(--color-sage);flex:none"><i data-lucide="plus" style="width:18px;height:18px"></i></button>
+            </div>
+          </div>
+          <div style="background:var(--color-paper);border:1px dashed var(--color-line);border-radius:16px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px">
+            <i data-lucide="sparkles" style="width:19px;height:19px;color:var(--color-sage-deep);flex:none"></i>
+            <div style="flex:1;font:600 13px/1.5 var(--font-sans)">Pas trouvé ce que tu cherches ?<div style="font:400 12px var(--font-sans);color:var(--color-ink-soft)">Demande à l'assistant — il peut créer un repère avec toi.</div></div>
+            <i data-lucide="chevron-right" style="width:17px;height:17px;color:var(--color-ink-soft)"></i>
+          </div>
+          <button style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:50px;border-radius:12px;background:var(--color-surface);color:var(--color-sage-deep);font:700 15px var(--font-sans);border:1.5px solid var(--color-sage)"><i data-lucide="plus" style="width:17px;height:17px"></i>Créer mon propre repère</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Onglet Profil -->
+    <div class="opt">
+      <div class="olab">Mobile · onglet Profil</div>
+      <div class="ph">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 24px 6px;font:700 13px var(--font-sans)"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><i data-lucide="signal" style="width:14px;height:14px"></i><i data-lucide="wifi" style="width:15px;height:15px"></i><i data-lucide="battery-full" style="width:19px;height:19px"></i></span></div>
+        <div style="padding:12px 20px 24px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><i data-lucide="chevron-left" style="width:22px;height:22px;color:var(--color-ink-soft)"></i><span style="font:600 22px var(--font-display);letter-spacing:-0.01em">Mes suivis</span></div>
+          <div style="display:flex;background:var(--color-surface);border:1px solid var(--color-line);border-radius:999px;padding:3px;margin-bottom:16px">
+            <span style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font:700 14px var(--font-sans);color:var(--color-ink-soft)">Suivis</span>
+            <span style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font:700 14px var(--font-sans);background:var(--color-sage-tint)">Profil</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;background:var(--color-butter-tint);border-radius:12px;padding:10px 14px;font:600 12.5px/1.5 var(--font-sans);margin-bottom:16px"><i data-lucide="repeat" style="width:15px;height:15px;color:var(--color-sage-deep);flex:none"></i>Modifie tes réponses — tes recommandations se recalculent aussitôt.</div>
+
+          <div style="font:800 12px var(--font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--color-ink-soft);margin-bottom:10px">Tes activités</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px">
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1.5px solid var(--color-green);background:var(--color-sage-tint);font:700 13.5px var(--font-sans)"><i data-lucide="footprints" style="width:16px;height:16px;color:var(--color-green-strong)"></i>Course &amp; impact<i data-lucide="check" style="width:14px;height:14px;color:var(--color-green-strong)"></i></span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="dumbbell" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Muscu / force</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="battery-low" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Souvent fatigué·e</span>
+          </div>
+          <div style="font:800 12px var(--font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--color-ink-soft);margin-bottom:10px">Ce qui compte pour toi</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px">
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1.5px solid var(--color-green);background:var(--color-sage-tint);font:700 13.5px var(--font-sans)"><i data-lucide="bone" style="width:16px;height:16px;color:var(--color-green-strong)"></i>Articulations<i data-lucide="check" style="width:14px;height:14px;color:var(--color-green-strong)"></i></span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="zap" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Énergie</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)"><i data-lucide="brain" style="width:16px;height:16px;color:var(--color-sage-deep)"></i>Mémoire &amp; concentration</span>
+          </div>
+
+          <div style="font:800 12px var(--font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--color-ink-soft);margin-bottom:10px">Mes repères affinés</div>
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div><div style="font:700 12px var(--font-sans);color:var(--color-ink-soft);margin-bottom:5px">Année de naissance</div><div style="height:44px;border:1px solid var(--color-line);border-radius:12px;background:var(--color-paper);display:flex;align-items:center;padding:0 14px;font:600 15px var(--font-sans)">1991</div></div>
+              <div><div style="font:700 12px var(--font-sans);color:var(--color-ink-soft);margin-bottom:5px">Sexe</div><div style="height:44px;border:1px solid var(--color-line);border-radius:12px;background:var(--color-paper);display:flex;align-items:center;justify-content:space-between;padding:0 14px;font:600 15px var(--font-sans)">Femme<i data-lucide="chevron-down" style="width:16px;height:16px;color:var(--color-ink-soft)"></i></div></div>
+              <div><div style="font:700 12px var(--font-sans);color:var(--color-ink-soft);margin-bottom:5px">Poids</div><div style="height:44px;border:1px solid var(--color-line);border-radius:12px;background:var(--color-paper);display:flex;align-items:center;padding:0 14px;font:600 15px var(--font-sans)">63 kg</div></div>
+              <div><div style="font:700 12px var(--font-sans);color:var(--color-ink-soft);margin-bottom:5px">Taille</div><div style="height:44px;border:1px solid var(--color-line);border-radius:12px;background:var(--color-paper);display:flex;align-items:center;padding:0 14px;font:600 15px var(--font-sans)">168 cm</div></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:12px;background:var(--color-sage-tint);border-radius:10px;padding:9px 12px;font:600 12.5px/1.45 var(--font-sans);color:var(--color-sage-deep)"><i data-lucide="lock" style="width:15px;height:15px;flex:none"></i>Jamais partagé — même pas avec ton foyer.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6 · CONSTRUCTEUR ============ -->
+<section class="sec" id="e6">
+  <div class="shd"><a class="sid" href="#e6">6</a><span class="snm">État 6 — « Créer mon propre repère »</span></div>
+  <p class="sds">Quatre choix simples : direction × combien de fois × période × ce qui compte. L'aperçu en écriture manuscrite reformule au fur et à mesure — jamais un formulaire d'ingénieur.</p>
+  <div class="row">
+    <div class="opt">
+      <div class="olab">Mobile · feuille « nouveau repère » (ouverte depuis le catalogue)</div>
+      <div class="ph" style="background:rgba(52,50,44,.32)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 24px 6px;font:700 13px var(--font-sans);color:#fff"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><i data-lucide="signal" style="width:14px;height:14px"></i><i data-lucide="wifi" style="width:15px;height:15px"></i><i data-lucide="battery-full" style="width:19px;height:19px"></i></span></div>
+        <div style="height:64px"></div>
+        <div style="background:var(--color-paper);border-radius:24px 24px 0 0;box-shadow:var(--shadow-lg);padding:14px 22px 28px">
+          <div style="width:44px;height:5px;border-radius:999px;background:var(--color-line);margin:0 auto 16px"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <div style="font:600 23px var(--font-display);letter-spacing:-0.01em">Mon repère à moi</div>
+            <i data-lucide="x" style="width:20px;height:20px;color:var(--color-ink-soft)"></i>
+          </div>
+          <div style="font:400 13.5px/1.5 var(--font-sans);color:var(--color-ink-soft);margin-bottom:18px">Compté automatiquement depuis ton planning, comme les autres.</div>
+
+          <div style="font:700 13px var(--font-sans);color:var(--color-ink-soft);margin-bottom:8px">1 · Plutôt…</div>
+          <div style="display:flex;background:var(--color-surface);border:1px solid var(--color-line);border-radius:999px;padding:3px;margin-bottom:16px">
+            <span style="flex:1;text-align:center;padding:10px 0;border-radius:999px;font:700 14px var(--font-sans);background:var(--color-sage-tint)">Au moins</span>
+            <span style="flex:1;text-align:center;padding:10px 0;border-radius:999px;font:700 14px var(--font-sans);color:var(--color-ink-soft)">Au plus</span>
+          </div>
+
+          <div style="font:700 13px var(--font-sans);color:var(--color-ink-soft);margin-bottom:8px">2 · Combien de fois</div>
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+            <button style="width:46px;height:46px;border-radius:12px;background:var(--color-surface);border:1px solid var(--color-line);color:var(--color-ink);display:inline-flex;align-items:center;justify-content:center"><i data-lucide="minus" style="width:18px;height:18px"></i></button>
+            <span style="font:600 30px var(--font-display);min-width:36px;text-align:center">3</span>
+            <button style="width:46px;height:46px;border-radius:12px;background:var(--color-surface);border:1px solid var(--color-line);color:var(--color-ink);display:inline-flex;align-items:center;justify-content:center"><i data-lucide="plus" style="width:18px;height:18px"></i></button>
+            <div style="display:flex;background:var(--color-surface);border:1px solid var(--color-line);border-radius:999px;padding:3px;flex:1">
+              <span style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font:700 13px var(--font-sans);background:var(--color-sage-tint)">par semaine</span>
+              <span style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font:700 13px var(--font-sans);color:var(--color-ink-soft)">par jour</span>
+            </div>
+          </div>
+
+          <div style="font:700 13px var(--font-sans);color:var(--color-ink-soft);margin-bottom:8px">3 · Ce qui compte</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+            <span style="display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 14px;border-radius:999px;border:1.5px solid var(--color-green);background:var(--color-sage-tint);font:700 13.5px var(--font-sans)">Fermentés<i data-lucide="check" style="width:14px;height:14px;color:var(--color-green-strong)"></i></span>
+            <span style="display:inline-flex;align-items:center;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)">Légumes verts</span>
+            <span style="display:inline-flex;align-items:center;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)">Fruits à coque</span>
+            <span style="display:inline-flex;align-items:center;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--color-line);background:var(--color-surface);font:600 13.5px var(--font-sans)">Fait maison</span>
+          </div>
+          <div style="font:600 12.5px var(--font-sans);color:var(--color-ink-soft);margin-bottom:16px">yaourt, kéfir, choucroute, miso… <a href="#e6" style="color:var(--color-green-strong);text-decoration:none">ou choisis des aliments précis →</a></div>
+
+          <div style="background:var(--color-butter-tint);border-radius:14px;padding:12px 16px;margin-bottom:18px;display:flex;align-items:center;gap:10px">
+            <i data-lucide="check" style="width:17px;height:17px;color:var(--color-sage-deep);flex:none"></i>
+            <span style="font:500 21px var(--font-hand);color:var(--color-ink)">Fermentés, au moins 3 fois par semaine</span>
+          </div>
+          <button style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:52px;border-radius:12px;background:var(--color-green-strong);color:#fff;font:700 16px var(--font-sans);border:none;box-shadow:var(--shadow-md)">Ajouter à mes suivis</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 7 · MODE ENFANT ============ -->
+<section class="sec" id="e7">
+  <div class="shd"><a class="sid" href="#e7">7</a><span class="snm">État 7 — Mode enfant (éthique, non négociable)</span></div>
+  <p class="sds">Jamais de calories, jamais de chiffres anxiogènes, jamais de rouge, jamais de « raté ». Variété et découvertes, langage positif et ludique <b>sobre</b>. La carte phare : la variété de légumes.</p>
+  <div class="row">
+    <div class="opt">
+      <div class="olab">Mobile · page principale d'un profil enfant</div>
+      <div class="ph">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 24px 6px;font:700 13px var(--font-sans)"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><i data-lucide="signal" style="width:14px;height:14px"></i><i data-lucide="wifi" style="width:15px;height:15px"></i><i data-lucide="battery-full" style="width:19px;height:19px"></i></span></div>
+        <div style="padding:14px 20px 24px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:2px">
+            <div style="width:44px;height:44px;border-radius:50%;background:var(--color-butter-tint);border:1.5px solid var(--color-butter);display:flex;align-items:center;justify-content:center;font:600 19px var(--font-display)">L</div>
+            <div style="font:600 24px var(--font-display);letter-spacing:-0.01em">Les assiettes de Lou</div>
+          </div>
+          <div style="font:500 17px var(--font-hand);color:var(--color-sage-deep);margin:4px 0 16px">variété et équilibre au fil des repas — sans comptage</div>
+
+          <div style="background:var(--color-sage-tint);border:1px solid var(--color-line);border-radius:16px;padding:18px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:36px;height:36px;border-radius:11px;background:var(--color-surface);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="carrot" style="width:19px;height:19px"></i></div>
+              <div style="font:600 19px var(--font-display)">4 légumes différents cette semaine</div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <span style="display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 13px;border-radius:999px;background:var(--color-surface);border:1px solid var(--color-line);font:700 13px var(--font-sans)"><i data-lucide="check" style="width:13px;height:13px;color:var(--color-green-strong)"></i>Carotte</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 13px;border-radius:999px;background:var(--color-surface);border:1px solid var(--color-line);font:700 13px var(--font-sans)"><i data-lucide="check" style="width:13px;height:13px;color:var(--color-green-strong)"></i>Courgette</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 13px;border-radius:999px;background:var(--color-surface);border:1px solid var(--color-line);font:700 13px var(--font-sans)"><i data-lucide="check" style="width:13px;height:13px;color:var(--color-green-strong)"></i>Tomate</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 13px;border-radius:999px;background:var(--color-butter-tint);border:1.5px solid var(--color-butter);font:700 13px var(--font-sans)"><i data-lucide="star" style="width:13px;height:13px;color:var(--color-sage-deep)"></i>Fenouil — nouveau !</span>
+              <span style="display:inline-flex;align-items:center;height:38px;padding:0 13px;border-radius:999px;background:var(--color-surface);border:1.5px dashed var(--color-sage);font:700 13px var(--font-sans);color:var(--color-sage-deep)">et bientôt… petits pois (jeudi)</span>
+            </div>
+            <div style="font:500 17px var(--font-hand);color:var(--color-sage-deep);margin-top:12px">encore un et l'arc-en-ciel est complet !</div>
+          </div>
+
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:11px;background:var(--color-butter-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="star" style="width:18px;height:18px"></i></div>
+              <div style="flex:1"><div style="font:700 15px var(--font-sans)">Découverte de la semaine</div><div style="font:400 13px/1.5 var(--font-sans);color:var(--color-ink-soft)">Lou a goûté le fenouil pour la première fois — mardi, dans le gratin.</div></div>
+            </div>
+          </div>
+
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:36px;height:36px;border-radius:11px;background:var(--color-sage-tint);display:flex;align-items:center;justify-content:center;color:var(--color-sage-deep);flex:none"><i data-lucide="salad" style="width:18px;height:18px"></i></div>
+              <div style="font:700 15px var(--font-sans)">Un peu de tout, au fil de la semaine</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px;font:600 13.5px var(--font-sans)">
+              <div style="display:flex;align-items:center;gap:10px"><span style="width:110px">Légumes</span><div style="flex:1;height:10px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line)"><div style="width:80%;height:100%;background:var(--color-sage);border-radius:999px"></div></div></div>
+              <div style="display:flex;align-items:center;gap:10px"><span style="width:110px">Fruits</span><div style="flex:1;height:10px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line)"><div style="width:65%;height:100%;background:var(--color-butter);border-radius:999px"></div></div></div>
+              <div style="display:flex;align-items:center;gap:10px"><span style="width:110px">Céréales</span><div style="flex:1;height:10px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line)"><div style="width:72%;height:100%;background:var(--color-clay)"></div></div></div>
+              <div style="display:flex;align-items:center;gap:10px"><span style="width:110px">Protéines</span><div style="flex:1;height:10px;border-radius:999px;background:var(--color-paper);border:1px solid var(--color-line)"><div style="width:58%;height:100%;background:var(--color-sage);border-radius:999px"></div></div></div>
+            </div>
+            <div style="font:400 12px/1.5 var(--font-sans);color:var(--color-ink-soft);margin-top:10px">Des familles d'aliments, jamais des chiffres. Tout va bien quand ça pousse un peu partout.</div>
+          </div>
+          <div style="text-align:center;font:400 11px var(--font-sans);color:var(--color-ink-soft)">Vue pensée pour les enfants : ni calories, ni comptage.</div>
+        </div>
+        <div style="display:flex;justify-content:space-around;align-items:center;padding:10px 8px 24px;border-top:1px solid var(--color-line);background:var(--color-surface)">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="calendar-days" style="width:22px;height:22px"></i>Planning</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="chef-hat" style="width:22px;height:22px"></i>Recettes</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-green-strong);min-width:52px"><i data-lucide="apple" style="width:22px;height:22px"></i>Nutrition</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="shopping-cart" style="width:22px;height:22px"></i>Courses</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="refrigerator" style="width:22px;height:22px"></i>Stock</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 8 · SANS PLANNING ============ -->
+<section class="sec" id="e8">
+  <div class="shd"><a class="sid" href="#e8">8</a><span class="snm">État 8 — Activé, mais rien de planifié</span></div>
+  <p class="sds">Invitation chaleureuse vers le Planning — jamais de tableaux de zéros.</p>
+  <div class="row">
+    <div class="opt">
+      <div class="olab">Mobile · compact</div>
+      <div class="ph">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 24px 6px;font:700 13px var(--font-sans)"><span>9:41</span><span style="display:flex;gap:5px;align-items:center"><i data-lucide="signal" style="width:14px;height:14px"></i><i data-lucide="wifi" style="width:15px;height:15px"></i><i data-lucide="battery-full" style="width:19px;height:19px"></i></span></div>
+        <div style="padding:14px 20px 28px">
+          <div style="font:600 24px var(--font-display);letter-spacing:-0.01em">Nutrition</div>
+          <div style="font:500 16px var(--font-hand);color:var(--color-sage-deep);margin:2px 0 20px">déduite de ton planning — zéro saisie</div>
+          <div style="background:var(--color-surface);border:1px solid var(--color-line);border-radius:16px;box-shadow:var(--shadow-sm);padding:28px 22px;text-align:center">
+            <div style="width:120px;height:120px;border-radius:50%;background:var(--color-butter-tint);display:flex;align-items:center;justify-content:center;margin:0 auto 14px"><i data-lucide="calendar-days" style="width:52px;height:52px;color:var(--color-sage-deep)"></i></div>
+            <div style="font:600 21px/1.25 var(--font-display);margin-bottom:8px">Rien de prévu cette semaine — on s'y met ?</div>
+            <div style="font:400 14px/1.55 var(--font-sans);color:var(--color-ink-soft);margin-bottom:20px">Planifie tes repas : tes repères se rempliront tout seuls, sans rien saisir ici.</div>
+            <button style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:50px;border-radius:12px;background:var(--color-green-strong);color:#fff;font:700 15.5px var(--font-sans);border:none;box-shadow:var(--shadow-md)"><i data-lucide="calendar-days" style="width:18px;height:18px"></i>Ouvrir le planning</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;background:var(--color-sage-tint);border-radius:12px;padding:10px 14px;font:600 12.5px/1.5 var(--font-sans);color:var(--color-sage-deep);margin-top:12px"><i data-lucide="eye-off" style="width:15px;height:15px;flex:none"></i>Ton suivi reste invisible pour le reste du foyer.</div>
+        </div>
+        <div style="display:flex;justify-content:space-around;align-items:center;padding:10px 8px 24px;border-top:1px solid var(--color-line);background:var(--color-surface)">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="calendar-days" style="width:22px;height:22px"></i>Planning</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="chef-hat" style="width:22px;height:22px"></i>Recettes</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-green-strong);min-width:52px"><i data-lucide="apple" style="width:22px;height:22px"></i>Nutrition</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="shopping-cart" style="width:22px;height:22px"></i>Courses</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;font:700 10.5px var(--font-sans);color:var(--color-ink-soft);min-width:52px"><i data-lucide="refrigerator" style="width:22px;height:22px"></i>Stock</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  componentDidMount() {
+    let tries = 0;
+    this._t = setInterval(() => {
+      tries++;
+      if (window.lucide) {
+        try { window.lucide.createIcons({ attrs: { 'stroke-width': 1.75 } }); } catch (e) {}
+      }
+      if (tries > 40) clearInterval(this._t);
+    }, 500);
+  }
+  componentWillUnmount() { clearInterval(this._t); }
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
