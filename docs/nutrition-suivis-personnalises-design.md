@@ -98,6 +98,39 @@ habitude = `target_count` de la règle/du référentiel.
 **Ton (non négociable)** : factuel, sourcé, registre bien-être (« repère ANSES », « certains sportifs
 veillent à… ») — jamais prescriptif ni médical. Mention « ceci n'est pas un avis médical » conservée.
 
+## 5 bis. La longue traîne — l'utilisateur spécifique SANS carte préenregistrée (ajout 2026-07-06)
+
+Les règles curées couvrent la TÊTE de la distribution ; elles amorcent, elles ne bornent jamais.
+Quatre mécanismes d'échappement pour le besoin non anticipé (« mon médecin m'a dit de limiter le
+potassium », « je grimpe → magnésium », « fermenté 3×/sem », « je veux suivre l'iode ») :
+
+1. **Catalogue étendu cherchable** : ~30-40 nutriments pré-mappés USDA (iode, potassium, sélénium,
+   folates, K, E…) dans `nutrient_type`, cachés par défaut, trouvables via la recherche de « Gérer mes
+   suivis ». Extension unique du mapping provider — aucune règle à anticiper.
+2. **Constructeur d'habitude personnalisée** (le plus puissant) : l'utilisateur compose SA règle —
+   direction (**au moins / au plus** — la limite compte autant que l'objectif) × N fois × jour/semaine ×
+   ce qui compte (tags existants OU sélection libre d'aliments du catalogue). Zéro IA, zéro valeur
+   inventée : c'est sa règle, on la compte contre le planning. Ex. « fermentés ≥ 3×/sem », « viande
+   rouge ≤ 2×/sem ». Stockage : `profile_habit_tracking` avec `custom_label` + `match_food_ids`/
+   `match_tags` + `direction`.
+3. **Mode observation + cible personnelle** : suivre SANS objectif (déjà permis par le modèle — un suivi
+   sans `profile_goal` ; l'assumer dans l'UI) ; ou cible saisie par l'utilisateur (médecin/coach), badge
+   « cible personnelle » — l'app ne la valide pas, elle la compte (jamais inventée par l'app).
+4. **L'assistant IA comme interprète** (N3) : besoin exprimé en langage naturel → l'agent le TRADUIT en
+   configuration via les mêmes fonctions core (activer un suivi, créer une habitude custom), sous plan
+   confirmé (garde-fou n°1). Donnée inexistante (créatine, collagène en mg) → il explique honnêtement et
+   propose l'équivalent habitude. L'IA CONFIGURE, ne calcule jamais une valeur (n°3).
+
+Garde-fous imposés par la traîne :
+- **Indicateur de couverture PAR SUIVI** (« couvert à 60 % par tes ingrédients cette semaine ») — les
+  micros rares sont souvent absents des fiches → sans lui, un suivi iode afficherait des zéros trompeurs
+  (la maladie guérie en N0). Généraliser le pattern de couverture N0 au niveau du suivi.
+- **La traîne nourrit la tête** : recherches sans résultat dans « Gérer mes suivis » loggées (télémétrie
+  interne) → radar de curation des prochaines règles/habitudes (cap commercial).
+
+Phasage : catalogue étendu + mode observation + cible perso = **N1.5** (quasi gratuits) ; constructeur
+d'habitude custom = **N1.5 si le budget le permet, sinon N1.6 dédié** ; interprète assistant = **N3**.
+
 ## 6. Parcours UX
 
 1. **Onboarding 3 écrans en chips multi-sélection** (remplace le choix de persona) : « Qu'est-ce qui te
