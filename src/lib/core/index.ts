@@ -10,6 +10,7 @@ export * from './recipe-groups';
 export * from './recipe-image';
 export * from './recipe-stats';
 export * from './nutrition';
+export * from './nutrition-profile';
 export * from './shopping';
 export * from './shopping-history';
 export * from './shopping-stats';

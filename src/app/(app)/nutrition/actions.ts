@@ -2,7 +2,31 @@
 
 import { revalidatePath } from 'next/cache';
 import { getAuthContext } from '@/lib/auth';
-import { backfillRecipeIngredientLinks, completeMissingFoodNutrition } from '@/lib/core';
+import {
+  backfillRecipeIngredientLinks,
+  completeMissingFoodNutrition,
+  computeNutritionTargets,
+  applyNutritionSetup,
+  type ComputeTargetsInput,
+  type NutritionSetupInput,
+  type TargetZone,
+} from '@/lib/core';
+
+/** Calcule les cibles PROPOSÉES pour l'écran 3 du wizard (référence curée / formule — jamais l'IA). */
+export async function computeTargetsAction(input: ComputeTargetsInput): Promise<TargetZone[]> {
+  const { supabase, userId } = await getAuthContext();
+  if (!userId) return [];
+  return computeNutritionTargets(supabase, input);
+}
+
+/** Applique la configuration nutrition (profil privé + nutriments suivis + objectifs). */
+export async function applyNutritionSetupAction(input: NutritionSetupInput): Promise<{ ok: boolean }> {
+  const { supabase, userId } = await getAuthContext();
+  if (!userId) return { ok: false };
+  await applyNutritionSetup(supabase, userId, input);
+  revalidatePath('/nutrition');
+  return { ok: true };
+}
 
 /** Bilan d'une passe de réparation de la chaîne de données nutrition (N0). */
 export interface RepairNutritionResult {
@@ -41,40 +65,5 @@ export async function repairNutritionDataAction(): Promise<RepairNutritionResult
   return { linked, completed: res.completed, remaining: Math.max(0, res.missing - res.completed) };
 }
 
-/**
- * Définit les objectifs nutritionnels quotidiens du profil courant (cible = max),
- * par code de nutriment. Une valeur vide supprime l'objectif. Données strictement
- * personnelles (RLS profile_goal).
- */
-export async function setGoalsAction(formData: FormData): Promise<void> {
-  const { supabase, userId } = await getAuthContext();
-  if (!userId) return;
-
-  const { data: types } = await supabase
-    .from('nutrient_type')
-    .select('id, code')
-    .eq('is_base', true);
-
-  for (const t of types ?? []) {
-    const raw = formData.get(`goal_${t.code}`);
-    const value = raw != null && String(raw).trim() !== '' ? Number(raw) : null;
-
-    if (value != null && !Number.isNaN(value) && value > 0) {
-      await supabase
-        .from('profile_goal')
-        .upsert(
-          { profile_id: userId, nutrient_type_id: t.id, period: 'daily', target_max: value },
-          { onConflict: 'profile_id,nutrient_type_id,period' },
-        );
-    } else {
-      await supabase
-        .from('profile_goal')
-        .delete()
-        .eq('profile_id', userId)
-        .eq('nutrient_type_id', t.id)
-        .eq('period', 'daily');
-    }
-  }
-
-  revalidatePath('/nutrition');
-}
+// NB : l'ancienne `setGoalsAction` (formulaire manuel, max/jour uniquement) a été
+// remplacée par le wizard N1 (`applyNutritionSetupAction` : zones min/max + suivis).

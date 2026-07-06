@@ -1,8 +1,8 @@
 import { getAuthContext } from '@/lib/auth';
-import { aggregatePeriodNutrition } from '@/lib/core';
+import { aggregatePeriodNutrition, getNutritionProfile, getNutritionSettings, personaById } from '@/lib/core';
 import { addDays, isoDate, mondayOf } from '@/lib/dates';
-import { setGoalsAction } from './actions';
 import { CoverageCard } from './coverage-card';
+import { ProfilePanel } from './setup-wizard';
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -15,32 +15,48 @@ export default async function NutritionPage() {
   const weekStart = isoDate(mondayOf());
   const weekEnd = isoDate(addDays(mondayOf(), 6));
 
-  const [dayAgg, weekAgg, { data: baseTypes }, { data: goals }] = await Promise.all([
+  const [dayAgg, weekAgg, { data: baseTypes }, nutritionProfile, settings] = await Promise.all([
     aggregatePeriodNutrition(supabase, { householdId, profileId, from: today, to: today }),
     aggregatePeriodNutrition(supabase, { householdId, profileId, from: weekStart, to: weekEnd }),
     supabase.from('nutrient_type').select('code, name, unit, category').eq('is_base', true),
-    supabase
-      .from('profile_goal')
-      .select('target_max, nutrient_type:nutrient_type_id(code)')
-      .eq('profile_id', profileId)
-      .eq('period', 'daily'),
+    getNutritionProfile(supabase, profileId),
+    getNutritionSettings(supabase, profileId),
   ]);
 
-  const order = ['energy', 'macro', 'micro'];
-  const types = (baseTypes ?? []).slice().sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
+  const persona = personaById(nutritionProfile?.persona);
+  const childMode = persona?.child === true;
 
-  const goalByCode = new Map<string, number>();
-  for (const g of goals ?? []) {
-    const nt = Array.isArray(g.nutrient_type) ? g.nutrient_type[0] : g.nutrient_type;
-    if (nt?.code && g.target_max != null) goalByCode.set(nt.code, g.target_max);
-  }
+  const order = ['energy', 'macro', 'micro'];
+  const allTypes = (baseTypes ?? []).slice().sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
+  // Nutriments AFFICHÉS : les suivis quand ils existent (profile_nutrient_tracking,
+  // enfin branchée), sinon tous les nutriments de base. Mode enfant : JAMAIS l'énergie.
+  const trackedSet = new Set(settings.tracked);
+  const types = allTypes
+    .filter((t) => (trackedSet.size > 0 ? trackedSet.has(t.code) : true))
+    .filter((t) => !(childMode && t.code === 'energy_kcal'));
+
+  const goalByCode = new Map(settings.goals.map((g) => [g.code, g]));
+  const zoneLabel = (code: string) => {
+    const g = goalByCode.get(code);
+    if (!g) return '—';
+    if (g.min != null && g.max != null) return `${g.min}–${g.max}`;
+    if (g.min != null) return `≥ ${g.min}`;
+    if (g.max != null) return `≤ ${g.max}`;
+    return '—';
+  };
+  const overMax = (code: string, value: number) => {
+    const g = goalByCode.get(code);
+    return g?.max != null && value > g.max;
+  };
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="font-display text-2xl font-semibold tracking-tight">Nutrition</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Planifié, réel estimé et objectifs personnels. Ton suivi reste privé par défaut.
+          {childMode
+            ? 'Variété et équilibre au fil du planning — sans comptage de calories.'
+            : 'Planifié, réel estimé et objectifs personnels. Ton suivi reste privé par défaut.'}
         </p>
       </div>
 
@@ -67,8 +83,7 @@ export default async function NutritionPage() {
                   {types.map((t) => {
                     const planned = dayAgg.planned[t.code] ?? 0;
                     const real = dayAgg.real[t.code] ?? 0;
-                    const goal = goalByCode.get(t.code);
-                    const over = goal != null && real > goal;
+                    const over = overMax(t.code, real);
                     return (
                       <tr key={t.code} className="border-t border-line">
                         <td className="py-2">
@@ -76,7 +91,7 @@ export default async function NutritionPage() {
                         </td>
                         <td className="py-2 text-right text-ink-soft">{r1(planned)}</td>
                         <td className={`py-2 text-right font-bold ${over ? 'text-red-strong' : ''}`}>{r1(real)}</td>
-                        <td className="py-2 text-right text-ink-soft">{goal != null ? goal : '—'}</td>
+                        <td className="py-2 text-right text-ink-soft">{zoneLabel(t.code)}</td>
                       </tr>
                     );
                   })}
@@ -117,32 +132,12 @@ export default async function NutritionPage() {
           </section>
         </div>
 
-        <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft xl:sticky xl:top-24">
-          <h2 className="mb-3 font-display text-lg font-semibold">Objectifs quotidiens</h2>
-          <form action={setGoalsAction} className="flex flex-col gap-2">
-            {types.map((t) => (
-              <label key={t.code} className="flex items-center justify-between gap-3 text-sm">
-                <span>
-                  {t.name} <span className="text-ink-soft">({t.unit})</span>
-                </span>
-                <input
-                  name={`goal_${t.code}`}
-                  type="number"
-                  step="any"
-                  min="0"
-                  defaultValue={goalByCode.get(t.code) ?? ''}
-                  className="field-input w-24 py-1.5 text-right"
-                />
-              </label>
-            ))}
-            <button type="submit" className="btn-primary mt-3 py-2.5">
-              Enregistrer
-            </button>
-          </form>
-          <p className="mt-4 text-xs leading-relaxed text-ink-soft">
-            Les objectifs et consommations ne sont visibles par les autres membres que si tu les partages.
-          </p>
-        </section>
+        <ProfilePanel
+          profile={nutritionProfile}
+          goals={settings.goals}
+          tracked={settings.tracked}
+          types={allTypes.filter((t) => !(childMode && t.code === 'energy_kcal'))}
+        />
       </div>
     </div>
   );

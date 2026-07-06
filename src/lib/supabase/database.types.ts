@@ -510,6 +510,53 @@ export type Database = {
           },
         ]
       }
+      nutrient_reference: {
+        Row: {
+          age_max: number
+          age_min: number
+          created_at: string
+          id: string
+          note: string | null
+          nutrient_type_id: string
+          sex: string | null
+          source: string
+          target_max: number | null
+          target_min: number | null
+        }
+        Insert: {
+          age_max?: number
+          age_min?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          nutrient_type_id: string
+          sex?: string | null
+          source?: string
+          target_max?: number | null
+          target_min?: number | null
+        }
+        Update: {
+          age_max?: number
+          age_min?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          nutrient_type_id?: string
+          sex?: string | null
+          source?: string
+          target_max?: number | null
+          target_min?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nutrient_reference_nutrient_type_id_fkey"
+            columns: ["nutrient_type_id"]
+            isOneToOne: false
+            referencedRelation: "nutrient_type"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nutrient_type: {
         Row: {
           category: string
@@ -575,6 +622,50 @@ export type Database = {
             columns: ["nutrient_type_id"]
             isOneToOne: false
             referencedRelation: "nutrient_type"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nutrition_profile: {
+        Row: {
+          activity_level: string | null
+          birth_year: number | null
+          height_cm: number | null
+          onboarded_at: string | null
+          persona: string | null
+          profile_id: string
+          sex: string | null
+          updated_at: string
+          weight_kg: number | null
+        }
+        Insert: {
+          activity_level?: string | null
+          birth_year?: number | null
+          height_cm?: number | null
+          onboarded_at?: string | null
+          persona?: string | null
+          profile_id: string
+          sex?: string | null
+          updated_at?: string
+          weight_kg?: number | null
+        }
+        Update: {
+          activity_level?: string | null
+          birth_year?: number | null
+          height_cm?: number | null
+          onboarded_at?: string | null
+          persona?: string | null
+          profile_id?: string
+          sex?: string | null
+          updated_at?: string
+          weight_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_profile_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profile"
             referencedColumns: ["id"]
           },
         ]
