@@ -173,3 +173,14 @@ n°7 (la présente proposition chiffre l'extension) ✓ · n°8 (`nutrient_type`
 4. **Source des AJR** : ANSES (FR, marché cible) d'abord, EFSA en complément — à confirmer.
 5. **Défis foyer** : V1 de la gamification ou différé ?
 6. **Périmètre design** : N2 mérite-t-il un handoff Claude Design complet (comme Planning) ? (recommandé)
+
+### ✅ Arbitrages tranchés (2026-07-06)
+
+1. **Personas V1 = 5** : Équilibre, Sportif, Perte de poids douce, Végétarien, Enfant. Autres personas en presets ultérieurs.
+2. **Infos corporelles = OUI, optionnelles** : poids/taille/année de naissance/sexe demandés mais jamais obligatoires ; privées sous RLS, non partagées par défaut ; affinent les cibles.
+3. **Extras hors-plan = OUI en V1** (N3) : saisie express (2 gestes) pour combler le trou du « réel ».
+4. **AJR = ANSES d'abord** (marché FR), EFSA en complément ; valeurs curées, jamais générées par IA (garde-fou n°3).
+5. **Défis foyer = OUI en V1** (N4) : gamification sobre, anti-TCA, dès la première version.
+6. **Design N2 = handoff Claude Design complet** (comme Planning) avant de coder le dashboard.
+
+→ **N1→N4 sont désormais cadrés.** N0 (chaîne de données) reste le prérequis à démarrer en premier — indépendant de ces arbitrages.
