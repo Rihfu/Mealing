@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getAuthContext } from '@/lib/auth';
-import { createRecipe } from '@/lib/core';
+import { createRecipe, findCatalogFoodIdByLabel } from '@/lib/core';
 import {
   analyzeIngredientAvailability,
   draftToCreateInput,
@@ -59,31 +59,37 @@ export async function generateRecipeAction(
   }
 }
 
-export async function addMissingIngredientsToShoppingAction(formData: FormData): Promise<void> {
+/**
+ * Envoie les ingrédients manquants du BROUILLON vers la liste de courses —
+ * SANS redirection : le brouillon n'est pas encore enregistré, quitter la page
+ * le perdrait. Le client affiche simplement « ajouté ». Lignes reliées au
+ * catalogue par libellé (rayon + icône), comme les autres ajouts manuels.
+ */
+export async function addMissingToShoppingAction(
+  items: IngredientAvailability[],
+): Promise<{ added: number }> {
   const { supabase, userId, profile } = await getAuthContext();
-  if (!userId) redirect('/login');
   const householdId = profile?.household_id as string | undefined;
-  if (!householdId) redirect('/onboarding');
+  if (!userId || !householdId) return { added: 0 };
 
-  let items: IngredientAvailability[] = [];
-  try {
-    items = JSON.parse(String(formData.get('items') ?? '[]')) as IngredientAvailability[];
-  } catch {
-    items = [];
+  const rows = await Promise.all(
+    items
+      .filter((item) => !item.covered && item.name.trim())
+      .map(async (item) => ({
+        household_id: householdId,
+        label: item.name.trim(),
+        food_id: await findCatalogFoodIdByLabel(supabase, item.name),
+        quantity: item.quantity ?? null,
+        unit: item.unit || null,
+      })),
+  );
+
+  if (rows.length > 0) {
+    const { error } = await supabase.from('shopping_manual_item').insert(rows);
+    if (error) throw new Error(error.message);
   }
-
-  const rows = items
-    .filter((item) => !item.covered && item.name.trim())
-    .map((item) => ({
-      household_id: householdId,
-      label: item.name.trim(),
-      quantity: item.quantity ?? null,
-      unit: item.unit || null,
-    }));
-
-  if (rows.length > 0) await supabase.from('shopping_manual_item').insert(rows);
   revalidatePath('/courses');
-  redirect('/courses');
+  return { added: rows.length };
 }
 
 export async function saveGeneratedRecipeAction(formData: FormData): Promise<void> {
