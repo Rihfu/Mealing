@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getAuthContext } from '@/lib/auth';
-import { aggregatePeriodNutrition, getNutritionProfile } from '@/lib/core';
+import { aggregatePeriodNutrition, getNutritionProfile, listFacets } from '@/lib/core';
 import { addDays, isoDate, mondayOf } from '@/lib/dates';
 import { Onboarding } from './onboarding';
 
@@ -19,11 +19,15 @@ export default async function ActivateNutritionPage() {
 
   const from = isoDate(mondayOf());
   const to = isoDate(addDays(mondayOf(), 6));
-  const week = await aggregatePeriodNutrition(supabase, { householdId, profileId, from, to });
+  const [week, facets] = await Promise.all([
+    aggregatePeriodNutrition(supabase, { householdId, profileId, from, to }),
+    listFacets(supabase),
+  ]);
   const { mealsCovered, mealsTotal, ingredientsWithData, ingredientsTotal } = week.coverage;
 
   return (
     <Onboarding
+      facets={facets.map((f) => ({ key: f.key, label: f.label, groupe: f.groupe }))}
       coveragePct={mealsTotal > 0 ? Math.round((mealsCovered / mealsTotal) * 100) : null}
       ingredientsWithData={ingredientsWithData}
       ingredientsTotal={ingredientsTotal}

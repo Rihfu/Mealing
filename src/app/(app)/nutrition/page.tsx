@@ -1,10 +1,16 @@
 import { getAuthContext } from '@/lib/auth';
-import { aggregatePeriodNutrition, getNutritionProfile, getNutritionSettings, personaById } from '@/lib/core';
+import {
+  aggregatePeriodNutrition,
+  countHabitOccurrences,
+  getNutritionProfile,
+  getNutritionSettings,
+  getProfileHabits,
+} from '@/lib/core';
 import { addDays, isoDate, mondayOf } from '@/lib/dates';
 import { NutritionDashboard } from './dashboard';
 import { ActivationHero, NoPlanningState } from './states';
 import { ChildNutrition } from './child';
-import type { DayData, DayStatus, NutrientCard, NutritionSnapshot } from './view-types';
+import type { DayData, DayStatus, HabitCardData, NutrientCard, NutritionSnapshot } from './view-types';
 
 const WEEKDAYS = ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim'];
 const MONTHS = [
@@ -35,8 +41,7 @@ export default async function NutritionPage() {
     return <ActivationHero />;
   }
 
-  const persona = personaById(nutritionProfile.persona);
-  const childMode = persona?.child === true;
+  const childMode = nutritionProfile.isChild;
 
   // 7 agrégations quotidiennes EN PARALLÈLE ; la semaine = somme des jours (pas
   // d'appel supplémentaire), le détail par jour est disponible gratuitement.
@@ -108,6 +113,44 @@ export default async function NutritionPage() {
     };
   });
 
+  // Cartes d'HABITUDE réelles : occurrences comptées depuis le planning (hors enfant,
+  // qui a sa propre vue de variété).
+  let habitCards: HabitCardData[] = [];
+  if (!childMode) {
+    const profileHabits = (await getProfileHabits(supabase, profileId)).filter((h) => h.enabled);
+    if (profileHabits.length > 0) {
+      const counts = await countHabitOccurrences(supabase, {
+        householdId,
+        profileId,
+        weekStart: dayDates[0],
+        weekEnd: dayDates[6],
+        today: todayIso,
+        habits: profileHabits.map((h) => ({
+          key: h.id,
+          matchTags: h.matchTags,
+          matchFoodIds: h.matchFoodIds,
+          distinctMode: h.distinctMode,
+        })),
+      });
+      habitCards = profileHabits.map((h) => {
+        const c = counts.get(h.id);
+        const done = h.period === 'day' ? (c?.todayDone ?? 0) : (c?.weekDone ?? 0);
+        const upcoming = h.period === 'day' ? 0 : (c?.weekUpcoming ?? 0);
+        return {
+          name: h.label,
+          code: h.habitKey ?? 'custom',
+          direction: h.direction,
+          target: h.targetCount,
+          period: h.period,
+          done,
+          upcoming,
+          coveragePct: 100,
+          upcomingLabel: c?.nextLabel ?? undefined,
+        } satisfies HabitCardData;
+      });
+    }
+  }
+
   const weekEnd = addDays(monday, 6);
   const weekLabel =
     monday.getMonth() === weekEnd.getMonth()
@@ -122,6 +165,7 @@ export default async function NutritionPage() {
     weekReal,
     weekPlanned,
     cards,
+    habitCards,
     coverage: {
       pct: coverage.mealsTotal > 0 ? Math.round((coverage.mealsCovered / coverage.mealsTotal) * 100) : null,
       ...coverage,

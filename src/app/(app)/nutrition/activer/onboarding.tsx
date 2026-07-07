@@ -1,30 +1,28 @@
 'use client';
 
 /**
- * États 2/3 du handoff — onboarding facettes.
+ * États 2/3 du handoff — onboarding FACETTES (branché sur le moteur réel, N1.5).
  *
- * ⚠️ Le pivot « facettes → règles curées → suivis » (N1.5) n'a pas encore de
- * backend : les chips de facettes et les recommandations d'HABITUDES sont VISUELLES
- * (démo). L'activation, elle, est RÉELLE : elle crée un profil nutrition fonctionnel
- * (persona « équilibre » par défaut + infos corporelles optionnelles + objectifs
- * calculés via référence ANSES/formule), pour que hero → onboarding → dashboard
- * marche de bout en bout. N1.5 remplacera le persona par le moteur de facettes.
+ * Facettes réelles (table `facet`) → moteur de recommandation curé (`tracking_rule`)
+ * → plan de suivi appliqué (facettes + nutriments + habitudes). Aucune valeur
+ * inventée (n°3) : les zones proposées viennent de la référence/formule, les
+ * habitudes de la table curée. Tout est refusable et réglable.
  */
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Check, ChevronUp, Lock, Percent } from 'lucide-react';
-import { personaById, type Sex } from '@/lib/core/nutrition-profile';
-import { applyNutritionSetupAction, computeTargetsAction, repairNutritionDataAction } from '../actions';
-import { FACET_GROUPS, DEMO_RECOMMENDATIONS, DEMO_SELECTED_FACETS } from '../demo-data';
-
-const TINT_BG = { sage: 'bg-sage-tint', butter: 'bg-butter-tint', clay: 'bg-clay-tint' } as const;
+import type { Sex } from '@/lib/core/nutrition-profile';
+import { applyFacetPlanAction, recommendAction, repairNutritionDataAction, type EnrichedSuggestion } from '../actions';
+import { FACET_ICON, GROUP_TITLE, type FacetOption } from '../facet-icons';
 
 export function Onboarding({
+  facets,
   coveragePct,
   ingredientsWithData,
   ingredientsTotal,
 }: {
+  facets: FacetOption[];
   coveragePct: number | null;
   ingredientsWithData: number;
   ingredientsTotal: number;
@@ -34,50 +32,69 @@ export function Onboarding({
   const [step, setStep] = useState<'A' | 'B' | 'C'>('A');
   const [error, setError] = useState<string | null>(null);
 
-  const [facets, setFacets] = useState<Set<string>>(new Set(DEMO_SELECTED_FACETS));
-  const [affiner, setAffiner] = useState(true);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [affiner, setAffiner] = useState(false);
   const [birthYear, setBirthYear] = useState('');
   const [sex, setSex] = useState<Sex | ''>('');
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
 
-  const [keptRecs, setKeptRecs] = useState<Set<string>>(new Set(DEMO_RECOMMENDATIONS.map((r) => r.id)));
-  const [proteinMin, setProteinMin] = useState('110');
-  const [proteinMax, setProteinMax] = useState('150');
+  const [suggestions, setSuggestions] = useState<EnrichedSuggestion[]>([]);
+  const [keptNutrients, setKeptNutrients] = useState<Set<string>>(new Set());
+  const [keptHabits, setKeptHabits] = useState<Set<string>>(new Set());
+  const [zones, setZones] = useState<Record<string, { min: string; max: string }>>({});
 
-  const toggleFacet = (id: string) =>
-    setFacets((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const groups = ['activite', 'alimentation', 'objectif'].map((g) => ({
+    key: g,
+    facets: facets.filter((f) => f.groupe === g),
+  }));
 
   const num = (s: string) => {
     const n = Number(s.replace(',', '.'));
     return s.trim() !== '' && !Number.isNaN(n) && n > 0 ? n : null;
   };
+  const body = () => ({ birthYear: num(birthYear), sex: sex || null, weightKg: num(weight), heightCm: num(height) });
 
-  const activate = (goToFin: boolean) => {
+  const toggleFacet = (key: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const loadRecommendations = () => {
     setError(null);
     start(async () => {
       try {
-        const body = { birthYear: num(birthYear), sex: sex || null, weightKg: num(weight), heightCm: num(height) };
-        const zones = await computeTargetsAction({ persona: 'equilibre', ...body, activityLevel: null });
-        const tracked = personaById('equilibre')?.tracked ?? ['protein', 'fiber'];
-        const proteinKept = keptRecs.has('proteines');
-        const targets = zones.map((z) =>
-          z.code === 'protein' && proteinKept
-            ? { code: 'protein', min: num(proteinMin), max: num(proteinMax) }
-            : { code: z.code, min: z.min, max: z.max },
+        const b = body();
+        const recs = await recommendAction({ facets: Array.from(selected), ...b, isChild: false });
+        setSuggestions(recs);
+        setKeptNutrients(new Set(recs.filter((r) => r.kind === 'nutrient').map((r) => r.code)));
+        setKeptHabits(new Set(recs.filter((r) => r.kind === 'habit').map((r) => r.code)));
+        setZones(
+          Object.fromEntries(
+            recs
+              .filter((r) => r.kind === 'nutrient')
+              .map((r) => [r.code, { min: r.proposedMin != null ? String(r.proposedMin) : '', max: r.proposedMax != null ? String(r.proposedMax) : '' }]),
+          ),
         );
-        const res = await applyNutritionSetupAction({
-          persona: 'equilibre',
-          ...body,
-          activityLevel: null,
-          targets,
-          tracked,
-        });
+        setStep('B');
+      } catch {
+        setError('Impossible de charger les recommandations — réessaie.');
+      }
+    });
+  };
+
+  const apply = (goToFin: boolean) => {
+    setError(null);
+    start(async () => {
+      try {
+        const nutrientTargets = suggestions
+          .filter((r) => r.kind === 'nutrient' && keptNutrients.has(r.code))
+          .map((r) => ({ code: r.code, min: num(zones[r.code]?.min ?? ''), max: num(zones[r.code]?.max ?? '') }));
+        const habitKeys = suggestions.filter((r) => r.kind === 'habit' && keptHabits.has(r.code)).map((r) => r.code);
+        const res = await applyFacetPlanAction({ facets: Array.from(selected), ...body(), isChild: false, nutrientTargets, habitKeys });
         if (!res.ok) throw new Error();
         if (goToFin) setStep('C');
         else router.push('/nutrition');
@@ -86,6 +103,8 @@ export function Onboarding({
       }
     });
   };
+
+  const keptCount = keptNutrients.size + keptHabits.size;
 
   return (
     <div className="mx-auto max-w-lg">
@@ -96,29 +115,30 @@ export function Onboarding({
               <span className="h-1.5 w-[22px] rounded-full bg-green" />
               <span className="h-1.5 w-[22px] rounded-full bg-line" />
             </div>
-            <button type="button" onClick={() => setStep('B')} className="text-sm font-bold text-ink-soft">
+            <button type="button" onClick={loadRecommendations} disabled={pending} className="text-sm font-bold text-ink-soft disabled:opacity-50">
               Passer
             </button>
           </div>
           <h1 className="font-display text-[27px] font-semibold leading-tight tracking-tight">Parle-nous de toi</h1>
           <div className="mb-4 font-hand text-lg text-sage-deep">tout est optionnel, promis</div>
 
-          {FACET_GROUPS.map((g) => (
+          {groups.map((g) => (
             <div key={g.key} className="mb-5">
-              <div className="mb-2.5 text-xs font-extrabold uppercase tracking-wide text-ink-soft">{g.title}</div>
+              <div className="mb-2.5 text-xs font-extrabold uppercase tracking-wide text-ink-soft">{GROUP_TITLE[g.key]}</div>
               <div className="flex flex-wrap gap-2">
                 {g.facets.map((f) => {
-                  const on = facets.has(f.id);
+                  const on = selected.has(f.key);
+                  const Icon = FACET_ICON[f.key];
                   return (
                     <button
-                      key={f.id}
+                      key={f.key}
                       type="button"
-                      onClick={() => toggleFacet(f.id)}
+                      onClick={() => toggleFacet(f.key)}
                       className={`inline-flex h-[42px] items-center gap-1.5 rounded-full px-3.5 text-[13.5px] transition-colors ${
                         on ? 'border-[1.5px] border-green bg-sage-tint font-bold' : 'border border-line bg-surface font-semibold'
                       }`}
                     >
-                      <f.Icon className={`h-4 w-4 ${on ? 'text-green-strong' : 'text-sage-deep'}`} strokeWidth={1.75} />
+                      {Icon && <Icon className={`h-4 w-4 ${on ? 'text-green-strong' : 'text-sage-deep'}`} strokeWidth={1.75} />}
                       {f.label}
                       {on && <Check className="h-3.5 w-3.5 text-green-strong" strokeWidth={1.75} />}
                     </button>
@@ -162,9 +182,10 @@ export function Onboarding({
             )}
           </div>
 
-          <button type="button" onClick={() => setStep('B')} className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-green-strong text-base font-bold text-white" style={{ boxShadow: 'var(--shadow-md)' }}>
-            Voir mes recommandations
-            <ArrowRight className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          {error && <p className="mb-2 text-sm text-red-strong">{error}</p>}
+          <button type="button" onClick={loadRecommendations} disabled={pending} className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-green-strong text-base font-bold text-white disabled:opacity-60" style={{ boxShadow: 'var(--shadow-md)' }}>
+            {pending ? 'Calcul…' : 'Voir mes recommandations'}
+            {!pending && <ArrowRight className="h-[18px] w-[18px]" strokeWidth={1.75} />}
           </button>
         </section>
       )}
@@ -176,68 +197,77 @@ export function Onboarding({
               <span className="h-1.5 w-[22px] rounded-full bg-green" />
               <span className="h-1.5 w-[22px] rounded-full bg-green" />
             </div>
-            <button type="button" onClick={() => activate(false)} disabled={pending} className="text-sm font-bold text-ink-soft disabled:opacity-50">
+            <button type="button" onClick={() => apply(false)} disabled={pending} className="text-sm font-bold text-ink-soft disabled:opacity-50">
               Passer
             </button>
           </div>
           <h1 className="font-display text-[27px] font-semibold leading-tight tracking-tight">Ton plan de suivi</h1>
           <p className="mb-4 text-sm leading-relaxed text-ink-soft">
-            Des idées d’après ce que tu as coché. Tu gardes la main sur tout, tout le temps.
+            {suggestions.length} idée{suggestions.length > 1 ? 's' : ''} d’après ce que tu as coché. Tu gardes la main sur tout, tout le temps.
           </p>
 
-          {DEMO_RECOMMENDATIONS.map((rec) => {
-            const kept = keptRecs.has(rec.id);
+          {suggestions.length === 0 && (
+            <div className="mb-4 rounded-2xl border border-dashed border-line bg-surface p-6 text-center text-sm text-ink-soft">
+              Aucune reco spécifique — le socle « fruits & légumes » et les fibres restent proposés. Tu pourras tout
+              ajouter depuis « Mes suivis ».
+            </div>
+          )}
+
+          {suggestions.map((rec) => {
+            const isNutrient = rec.kind === 'nutrient';
+            const kept = isNutrient ? keptNutrients.has(rec.code) : keptHabits.has(rec.code);
+            const toggle = (on: boolean) => {
+              const setter = isNutrient ? setKeptNutrients : setKeptHabits;
+              setter((prev) => {
+                const next = new Set(prev);
+                if (on) next.add(rec.code);
+                else next.delete(rec.code);
+                return next;
+              });
+            };
             return (
-              <div key={rec.id} className={`mb-3 rounded-2xl border-[1.5px] bg-surface p-4 ${kept ? 'border-sage' : 'border-line'}`} style={{ boxShadow: 'var(--shadow-sm)' }}>
+              <div key={`${rec.kind}:${rec.code}`} className={`mb-3 rounded-2xl border-[1.5px] bg-surface p-4 ${kept ? 'border-sage' : 'border-line'}`} style={{ boxShadow: 'var(--shadow-sm)' }}>
                 <div className="mb-2 flex items-center gap-2.5">
-                  <span className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] ${TINT_BG[rec.tint]} text-sage-deep`}>
-                    <rec.Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                  <div className="text-[15.5px] font-bold">{rec.label}</div>
+                  <span className="ml-auto rounded-full bg-butter-tint px-2.5 py-1 text-[11.5px] font-bold">
+                    {isNutrient ? 'zone quotidienne' : `${rec.habit?.targetCount}× / ${rec.habit?.period === 'week' ? 'semaine' : 'jour'}`}
                   </span>
-                  <div className="text-[15.5px] font-bold">{rec.name}</div>
-                  <span className="ml-auto rounded-full bg-butter-tint px-2.5 py-1 text-[11.5px] font-bold">{rec.badge}</span>
                 </div>
-                <p className="mb-2.5 text-[13px] leading-relaxed">
-                  <b>Recommandé parce que tu as coché</b>{' '}
-                  {rec.because.map((b, i) => (
-                    <span key={b}>
-                      <span className="rounded-full bg-sage-tint px-2 py-[1px] font-bold">{b}</span>
-                      {i < rec.because.length - 1 ? ' + ' : '. '}
-                    </span>
-                  ))}
-                  {rec.reason}
-                </p>
-                {rec.zone && kept && (
+                <p className="mb-2.5 text-[13px] leading-relaxed text-ink">{rec.why}</p>
+                {isNutrient && kept && (
                   <div className="mb-3 flex flex-wrap items-center gap-2.5">
                     <span className="text-[13px] font-bold text-ink-soft">Ta zone :</span>
-                    <input value={proteinMin} onChange={(e) => setProteinMin(e.target.value)} inputMode="numeric" className="field-input w-[76px] py-2 text-center font-bold" />
+                    <input
+                      value={zones[rec.code]?.min ?? ''}
+                      onChange={(e) => setZones((z) => ({ ...z, [rec.code]: { min: e.target.value, max: z[rec.code]?.max ?? '' } }))}
+                      inputMode="decimal"
+                      placeholder="min"
+                      className="field-input w-[76px] py-2 text-center font-bold"
+                    />
                     <span className="text-[13px] font-semibold text-ink-soft">à</span>
-                    <input value={proteinMax} onChange={(e) => setProteinMax(e.target.value)} inputMode="numeric" className="field-input w-[76px] py-2 text-center font-bold" />
-                    <span className="text-[13px] font-semibold text-ink-soft">{rec.zone.unit}</span>
+                    <input
+                      value={zones[rec.code]?.max ?? ''}
+                      onChange={(e) => setZones((z) => ({ ...z, [rec.code]: { min: z[rec.code]?.min ?? '', max: e.target.value } }))}
+                      inputMode="decimal"
+                      placeholder="max"
+                      className="field-input w-[76px] py-2 text-center font-bold"
+                    />
+                    <span className="text-[13px] font-semibold text-ink-soft">{rec.unit} / jour</span>
                   </div>
                 )}
                 <div className="flex gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setKeptRecs((p) => new Set(p).add(rec.id))}
-                    className={`flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl text-[14.5px] font-bold ${
-                      kept ? 'bg-green-strong text-white' : 'border border-line bg-surface text-ink-soft'
-                    }`}
+                    onClick={() => toggle(true)}
+                    className={`flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl text-[14.5px] font-bold ${kept ? 'bg-green-strong text-white' : 'border border-line bg-surface text-ink-soft'}`}
                   >
                     <Check className="h-4 w-4" strokeWidth={1.75} />
                     {kept ? 'Suivi' : 'Suivre'}
                   </button>
                   <button
                     type="button"
-                    onClick={() =>
-                      setKeptRecs((p) => {
-                        const n = new Set(p);
-                        n.delete(rec.id);
-                        return n;
-                      })
-                    }
-                    className={`h-11 flex-1 rounded-xl text-[14.5px] font-bold ${
-                      kept ? 'border border-line bg-surface text-ink-soft' : 'bg-ink text-white'
-                    }`}
+                    onClick={() => toggle(false)}
+                    className={`h-11 flex-1 rounded-xl text-[14.5px] font-bold ${kept ? 'border border-line bg-surface text-ink-soft' : 'bg-ink text-white'}`}
                   >
                     Non merci
                   </button>
@@ -247,8 +277,8 @@ export function Onboarding({
           })}
 
           {error && <p className="mb-2 text-sm text-red-strong">{error}</p>}
-          <button type="button" onClick={() => activate(true)} disabled={pending} className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-green-strong text-base font-bold text-white disabled:opacity-60" style={{ boxShadow: 'var(--shadow-md)' }}>
-            {pending ? 'Activation…' : `C’est parti — ${keptRecs.size} suivi${keptRecs.size > 1 ? 's' : ''}`}
+          <button type="button" onClick={() => apply(true)} disabled={pending} className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-green-strong text-base font-bold text-white disabled:opacity-60" style={{ boxShadow: 'var(--shadow-md)' }}>
+            {pending ? 'Activation…' : `C’est parti — ${keptCount} suivi${keptCount > 1 ? 's' : ''}`}
             {!pending && <ArrowRight className="h-[18px] w-[18px]" strokeWidth={1.75} />}
           </button>
         </section>

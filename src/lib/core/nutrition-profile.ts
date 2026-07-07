@@ -87,6 +87,7 @@ export const ACTIVITY_LEVELS: Array<{ id: ActivityLevel; label: string; factor: 
 
 export interface NutritionProfileData {
   persona: PersonaId | null;
+  isChild: boolean;
   birthYear: number | null;
   sex: Sex | null;
   weightKg: number | null;
@@ -100,13 +101,14 @@ export async function getNutritionProfile(db: DB, profileId: string): Promise<Nu
   // maybeSingle SANS unwrap (règle projet) : l'absence de ligne est un cas normal.
   const { data, error } = await db
     .from('nutrition_profile')
-    .select('persona, birth_year, sex, weight_kg, height_cm, activity_level, onboarded_at')
+    .select('persona, is_child, birth_year, sex, weight_kg, height_cm, activity_level, onboarded_at')
     .eq('profile_id', profileId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
   return {
     persona: (data.persona as PersonaId | null) ?? null,
+    isChild: (data as { is_child?: boolean }).is_child ?? false,
     birthYear: data.birth_year,
     sex: (data.sex as Sex | null) ?? null,
     weightKg: data.weight_kg != null ? Number(data.weight_kg) : null,
@@ -271,7 +273,10 @@ export async function computeNutritionTargets(db: DB, input: ComputeTargetsInput
 /* ------------------------------ Application ------------------------------ */
 
 export interface NutritionSetupInput {
-  persona: PersonaId;
+  /** Legacy (pivot facettes) : persona optionnel — conservé pour les cibles g/kg. */
+  persona?: PersonaId | null;
+  /** Pivot N1.5 : mode enfant porté par le profil (remplace persona='enfant'). */
+  isChild?: boolean;
   birthYear?: number | null;
   sex?: Sex | null;
   weightKg?: number | null;
@@ -291,18 +296,20 @@ export interface NutritionSetupInput {
  * Un persona « enfant » ne peut NI suivre NI cibler l'énergie (imposé ici).
  */
 export async function applyNutritionSetup(db: DB, profileId: string, input: NutritionSetupInput): Promise<void> {
-  const persona = personaById(input.persona);
-  if (!persona) throw new Error('Persona inconnu.');
+  // Mode enfant : porté par `isChild` (pivot N1.5) ou déduit du persona legacy.
+  const child = input.isChild === true || personaById(input.persona)?.child === true;
 
-  const tracked = persona.child ? input.tracked.filter((c) => c !== 'energy_kcal') : input.tracked;
-  const targets = (persona.child ? input.targets.filter((t) => t.code !== 'energy_kcal') : input.targets).filter(
+  // Éthique enfant : ni suivi ni cible énergie (imposé serveur, pas seulement à l'UI).
+  const tracked = child ? input.tracked.filter((c) => c !== 'energy_kcal') : input.tracked;
+  const targets = (child ? input.targets.filter((t) => t.code !== 'energy_kcal') : input.targets).filter(
     (t) => t.min != null || t.max != null,
   );
 
   const up = await db.from('nutrition_profile').upsert(
     {
       profile_id: profileId,
-      persona: input.persona,
+      persona: input.persona ?? null,
+      is_child: child,
       birth_year: input.birthYear ?? null,
       sex: input.sex ?? null,
       weight_kg: input.weightKg ?? null,

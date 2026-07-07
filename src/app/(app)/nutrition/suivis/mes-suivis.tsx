@@ -1,34 +1,31 @@
 'use client';
 
 /**
- * États 5 + 6 du handoff — « Mes suivis » (onglets Suivis / Profil) et la feuille
- * « Mon repère à moi ».
+ * États 5 + 6 du handoff — « Mes suivis » (onglets Suivis / Profil) + « Mon repère
+ * à moi », branchés sur le moteur réel (N1.5).
  *
- * Branché sur du RÉEL : la liste des nutriments actifs (activer/mettre en pause,
- * éditer la zone, retirer) et les infos corporelles du profil (recalcul à
- * l'enregistrement) passent par applyNutritionSetupAction. Le CATALOGUE de repères
- * et le constructeur d'HABITUDE sont VISUELS (backend facettes/habitudes = N1.5).
+ * Suivis : nutriments actifs (activer/pause/éditer zone/retirer) ET habitudes
+ * actives (retirer) ; catalogue = habitudes du référentiel non encore suivies
+ * (+ badge « recommandé pour toi ») ; constructeur = habitude custom persistée.
+ * Profil : facettes réelles re-modifiables (recalcul) + infos corporelles.
+ * Tout passe par des server actions → fonctions core.
  */
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  ChevronLeft,
-  Check,
-  Minus,
-  Pencil,
-  Plus,
-  Repeat,
-  Search,
-  Sparkles,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { ChevronLeft, Check, Minus, Pencil, Plus, Repeat, Search, Sparkles, Trash2, X } from 'lucide-react';
 import { IconTile, nutrientVisual, zoneLabel } from '../ui';
-import { FACET_GROUPS, DEMO_CATALOGUE, DEMO_SELECTED_FACETS, DEMO_BUILDER_TOPICS } from '../demo-data';
-import { applyNutritionSetupAction, computeTargetsAction } from '../actions';
-import type { PersonaId, Sex, ActivityLevel } from '@/lib/core/nutrition-profile';
+import { FACET_ICON, GROUP_TITLE, type FacetOption } from '../facet-icons';
+import {
+  addCustomHabitAction,
+  addHabitAction,
+  applyNutritionSetupAction,
+  computeTargetsAction,
+  removeHabitAction,
+  setFacetsAction,
+} from '../actions';
+import type { Sex, ActivityLevel } from '@/lib/core/nutrition-profile';
 
 interface ActiveItem {
   code: string;
@@ -38,7 +35,6 @@ interface ActiveItem {
   max: number | null;
   on: boolean;
 }
-
 interface BodyInfo {
   birthYear: number | null;
   sex: Sex | null;
@@ -46,17 +42,49 @@ interface BodyInfo {
   heightCm: number | null;
   activityLevel: ActivityLevel | null;
 }
+interface ActiveHabit {
+  id: string;
+  code: string | null;
+  label: string;
+  direction: 'min' | 'max';
+  targetCount: number;
+  period: 'day' | 'week';
+}
+interface CatalogueHabit {
+  key: string;
+  label: string;
+  description: string;
+  recommended: boolean;
+}
 
-const TINT_BG = { sage: 'bg-sage-tint', butter: 'bg-butter-tint', clay: 'bg-clay-tint' } as const;
+const BUILDER_TOPICS = [
+  { label: 'Fermentés', tag: 'fermente' },
+  { label: 'Légumes', tag: 'legume' },
+  { label: 'Fruits', tag: 'fruit' },
+  { label: 'Noix & graines', tag: 'noix_graine' },
+  { label: 'Poisson gras', tag: 'poisson_gras' },
+  { label: 'Légumineuses', tag: 'legumineuse' },
+];
+
+const habitLabel = (h: ActiveHabit) =>
+  `${h.direction === 'min' ? 'au moins' : 'au plus'} ${h.targetCount}× / ${h.period === 'week' ? 'semaine' : 'jour'}`;
 
 export function MesSuivis({
-  persona,
+  isChild,
   body,
   actives,
+  habits,
+  catalogue,
+  facets,
+  selectedFacets,
 }: {
-  persona: string;
+  isChild: boolean;
   body: BodyInfo;
   actives: Array<Omit<ActiveItem, 'on'>>;
+  habits: ActiveHabit[];
+  catalogue: CatalogueHabit[];
+  facets: FacetOption[];
+  selectedFacets: string[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<'suivis' | 'profil'>('suivis');
@@ -65,24 +93,22 @@ export function MesSuivis({
   const [editing, setEditing] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
 
-  // Infos corporelles (onglet Profil).
   const [birthYear, setBirthYear] = useState(body.birthYear?.toString() ?? '');
   const [sex, setSex] = useState<Sex | ''>(body.sex ?? '');
   const [weight, setWeight] = useState(body.weightKg?.toString() ?? '');
   const [height, setHeight] = useState(body.heightCm?.toString() ?? '');
-  const [facets, setFacets] = useState<Set<string>>(new Set(DEMO_SELECTED_FACETS));
+  const [facetSet, setFacetSet] = useState<Set<string>>(new Set(selectedFacets));
 
   const num = (s: string) => {
     const n = Number(s.replace(',', '.'));
     return s.trim() !== '' && !Number.isNaN(n) && n > 0 ? n : null;
   };
 
-  /** Persiste la liste de suivis courante (tracked + zones) sans toucher au corps. */
   const persist = (next: ActiveItem[]) => {
     setItems(next);
     start(async () => {
       await applyNutritionSetupAction({
-        persona: persona as PersonaId,
+        isChild,
         birthYear: num(birthYear),
         sex: sex || null,
         weightKg: num(weight),
@@ -97,24 +123,37 @@ export function MesSuivis({
 
   const saveProfile = () => {
     start(async () => {
-      const b = { birthYear: num(birthYear), sex: sex || null, weightKg: num(weight), heightCm: num(height), activityLevel: body.activityLevel };
-      // Recalcule les zones proposées à partir des nouvelles infos (garde les suivis actifs).
-      const zones = await computeTargetsAction({ persona: persona as PersonaId, ...b });
+      const b = { birthYear: num(birthYear), sex: sex || null, weightKg: num(weight), heightCm: num(height) };
+      // Recalcule les zones depuis les nouvelles infos (base équilibre — jamais inventé).
+      const zones = await computeTargetsAction({ persona: 'equilibre', ...b, activityLevel: body.activityLevel });
       const zoneByCode = new Map(zones.map((z) => [z.code, z]));
       const next = items.map((i) => {
         const z = zoneByCode.get(i.code);
         return z ? { ...i, min: z.min, max: z.max } : i;
       });
       setItems(next);
+      await setFacetsAction(Array.from(facetSet));
       await applyNutritionSetupAction({
-        persona: persona as PersonaId,
+        isChild,
         ...b,
+        activityLevel: body.activityLevel,
         tracked: next.filter((i) => i.on).map((i) => i.code),
         targets: next.filter((i) => i.on).map((i) => ({ code: i.code, min: i.min, max: i.max })),
       });
       router.refresh();
     });
   };
+
+  const addHabit = (key: string) =>
+    start(async () => {
+      await addHabitAction(key);
+      router.refresh();
+    });
+  const removeHabit = (id: string) =>
+    start(async () => {
+      await removeHabitAction(id);
+      router.refresh();
+    });
 
   return (
     <div className="mx-auto max-w-lg">
@@ -128,12 +167,7 @@ export function MesSuivis({
 
       <div className="mb-4 flex rounded-full border border-line bg-surface p-[3px]">
         {(['suivis', 'profil'] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={`flex-1 rounded-full py-2 text-center text-sm font-bold ${tab === t ? 'bg-sage-tint text-ink' : 'text-ink-soft'}`}
-          >
+          <button key={t} type="button" onClick={() => setTab(t)} className={`flex-1 rounded-full py-2 text-center text-sm font-bold ${tab === t ? 'bg-sage-tint text-ink' : 'text-ink-soft'}`}>
             {t === 'suivis' ? 'Suivis' : 'Profil'}
           </button>
         ))}
@@ -142,8 +176,9 @@ export function MesSuivis({
       {tab === 'suivis' ? (
         <>
           <div className="mb-2.5 text-xs font-extrabold uppercase tracking-wide text-ink-soft">
-            Actifs · {items.filter((i) => i.on).length}
+            Actifs · {items.filter((i) => i.on).length + habits.length}
           </div>
+          {/* Nutriments actifs */}
           <div className="flex flex-col gap-2.5">
             {items.map((item) => {
               const { Icon, tint } = nutrientVisual(item.code);
@@ -166,43 +201,43 @@ export function MesSuivis({
                     <button type="button" onClick={() => persist(items.filter((i) => i.code !== item.code))} aria-label="Retirer" className="text-ink-soft hover:text-ink">
                       <Trash2 className="h-[17px] w-[17px]" strokeWidth={1.75} />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => persist(items.map((i) => (i.code === item.code ? { ...i, on: !i.on } : i)))}
-                      aria-label={item.on ? 'Mettre en pause' : 'Réactiver'}
-                      className={`relative h-7 w-[46px] shrink-0 rounded-full ${item.on ? 'bg-green' : 'bg-line'}`}
-                    >
+                    <button type="button" onClick={() => persist(items.map((i) => (i.code === item.code ? { ...i, on: !i.on } : i)))} aria-label={item.on ? 'Mettre en pause' : 'Réactiver'} className={`relative h-7 w-[46px] shrink-0 rounded-full ${item.on ? 'bg-green' : 'bg-line'}`}>
                       <span className={`absolute top-[3px] h-[22px] w-[22px] rounded-full bg-white transition-all ${item.on ? 'right-[3px]' : 'left-[3px]'}`} />
                     </button>
                   </div>
                   {isEditing && item.on && (
                     <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
                       <span className="text-xs font-bold text-ink-soft">Zone</span>
-                      <input
-                        value={item.min?.toString() ?? ''}
-                        onChange={(e) => setItems(items.map((i) => (i.code === item.code ? { ...i, min: num(e.target.value) } : i)))}
-                        inputMode="decimal"
-                        placeholder="min"
-                        className="field-input w-20 py-1.5 text-center"
-                      />
+                      <input value={item.min?.toString() ?? ''} onChange={(e) => setItems(items.map((i) => (i.code === item.code ? { ...i, min: num(e.target.value) } : i)))} inputMode="decimal" placeholder="min" className="field-input w-20 py-1.5 text-center" />
                       <span className="text-ink-soft">–</span>
-                      <input
-                        value={item.max?.toString() ?? ''}
-                        onChange={(e) => setItems(items.map((i) => (i.code === item.code ? { ...i, max: num(e.target.value) } : i)))}
-                        inputMode="decimal"
-                        placeholder="max"
-                        className="field-input w-20 py-1.5 text-center"
-                      />
+                      <input value={item.max?.toString() ?? ''} onChange={(e) => setItems(items.map((i) => (i.code === item.code ? { ...i, max: num(e.target.value) } : i)))} inputMode="decimal" placeholder="max" className="field-input w-20 py-1.5 text-center" />
                       <span className="text-xs text-ink-soft">{item.unit}</span>
-                      <button type="button" onClick={() => { setEditing(null); persist(items); }} className="ml-auto btn-primary px-3 py-1.5 text-xs">
-                        OK
-                      </button>
+                      <button type="button" onClick={() => { setEditing(null); persist(items); }} className="ml-auto btn-primary px-3 py-1.5 text-xs">OK</button>
                     </div>
                   )}
                 </div>
               );
             })}
-            {items.length === 0 && <p className="text-sm text-ink-soft">Aucun suivi actif — ajoute un repère du catalogue ci-dessous.</p>}
+            {/* Habitudes actives */}
+            {habits.map((h) => {
+              const { Icon, tint } = nutrientVisual(h.code ?? 'custom');
+              return (
+                <div key={h.id} className="rounded-2xl border border-line bg-surface p-3.5" style={{ boxShadow: 'var(--shadow-sm)' }}>
+                  <div className="flex items-center gap-3">
+                    <IconTile Icon={Icon} tint={tint} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[14.5px] font-bold">{h.label}</div>
+                      <div className="text-xs font-semibold text-sage-deep">{habitLabel(h)}</div>
+                    </div>
+                    <span className="rounded-full bg-sage-tint px-2 py-[3px] text-[10px] font-bold text-sage-deep">habitude</span>
+                    <button type="button" onClick={() => removeHabit(h.id)} aria-label="Retirer" className="text-ink-soft hover:text-ink">
+                      <Trash2 className="h-[17px] w-[17px]" strokeWidth={1.75} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {items.length === 0 && habits.length === 0 && <p className="text-sm text-ink-soft">Aucun suivi actif — ajoute un repère du catalogue ci-dessous.</p>}
           </div>
 
           <div className="mb-2.5 mt-6 text-xs font-extrabold uppercase tracking-wide text-ink-soft">Catalogue</div>
@@ -210,25 +245,27 @@ export function MesSuivis({
             <Search className="h-[17px] w-[17px]" strokeWidth={1.75} />
             Chercher un repère…
           </div>
-          {DEMO_CATALOGUE.map((c) => (
-            <div key={c.id} className="mb-2.5 rounded-2xl border border-line bg-surface p-3.5" style={{ boxShadow: 'var(--shadow-sm)' }}>
-              <div className="flex items-center gap-3">
-                <span className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] ${TINT_BG[c.tint]} text-sage-deep`}>
-                  <c.Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 text-[14.5px] font-bold">
-                    {c.name}
-                    {c.recommended && <span className="rounded-full bg-butter-tint px-2 py-[2px] text-[10px] font-bold">recommandé pour toi</span>}
+          {catalogue.length === 0 && <p className="mb-2.5 text-sm text-ink-soft">Toutes les habitudes proposées sont déjà suivies.</p>}
+          {catalogue.map((c) => {
+            const { Icon, tint } = nutrientVisual(c.key);
+            return (
+              <div key={c.key} className="mb-2.5 rounded-2xl border border-line bg-surface p-3.5" style={{ boxShadow: 'var(--shadow-sm)' }}>
+                <div className="flex items-center gap-3">
+                  <IconTile Icon={Icon} tint={tint} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 text-[14.5px] font-bold">
+                      {c.label}
+                      {c.recommended && <span className="rounded-full bg-butter-tint px-2 py-[2px] text-[10px] font-bold">recommandé pour toi</span>}
+                    </div>
+                    <div className="text-xs leading-snug text-ink-soft">{c.description}</div>
                   </div>
-                  <div className="text-xs leading-snug text-ink-soft">{c.description}</div>
+                  <button type="button" onClick={() => addHabit(c.key)} aria-label="Ajouter" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-[1.5px] border-sage bg-surface text-green-strong">
+                    <Plus className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                  </button>
                 </div>
-                <button type="button" onClick={() => setBuilderOpen(true)} aria-label="Ajouter" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-[1.5px] border-sage bg-surface text-green-strong">
-                  <Plus className="h-[18px] w-[18px]" strokeWidth={1.75} />
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <Link href="/assistant" className="mb-2.5 flex items-center gap-3 rounded-2xl border border-dashed border-line bg-paper p-3.5">
             <Sparkles className="h-[19px] w-[19px] shrink-0 text-sage-deep" strokeWidth={1.75} />
             <div className="flex-1 text-[13px] font-semibold leading-snug">
@@ -245,31 +282,30 @@ export function MesSuivis({
         <>
           <div className="mb-4 flex items-center gap-2.5 rounded-xl bg-butter-tint px-3.5 py-2.5 text-[12.5px] font-semibold leading-snug">
             <Repeat className="h-[15px] w-[15px] shrink-0 text-sage-deep" strokeWidth={1.75} />
-            Modifie tes réponses — tes recommandations se recalculent aussitôt.
+            Modifie tes réponses puis « Enregistrer » — tes repères se recalculent.
           </div>
-          {FACET_GROUPS.filter((g) => g.key !== 'alimentation').map((g) => (
-            <div key={g.key} className="mb-4">
-              <div className="mb-2.5 text-xs font-extrabold uppercase tracking-wide text-ink-soft">{g.title}</div>
+          {['activite', 'objectif', 'alimentation'].map((groupe) => (
+            <div key={groupe} className="mb-4">
+              <div className="mb-2.5 text-xs font-extrabold uppercase tracking-wide text-ink-soft">{GROUP_TITLE[groupe]}</div>
               <div className="flex flex-wrap gap-2">
-                {g.facets.map((f) => {
-                  const on = facets.has(f.id);
+                {facets.filter((f) => f.groupe === groupe).map((f) => {
+                  const on = facetSet.has(f.key);
+                  const Icon = FACET_ICON[f.key];
                   return (
                     <button
-                      key={f.id}
+                      key={f.key}
                       type="button"
                       onClick={() =>
-                        setFacets((prev) => {
+                        setFacetSet((prev) => {
                           const n = new Set(prev);
-                          if (n.has(f.id)) n.delete(f.id);
-                          else n.add(f.id);
+                          if (n.has(f.key)) n.delete(f.key);
+                          else n.add(f.key);
                           return n;
                         })
                       }
-                      className={`inline-flex h-[42px] items-center gap-1.5 rounded-full px-3.5 text-[13.5px] ${
-                        on ? 'border-[1.5px] border-green bg-sage-tint font-bold' : 'border border-line bg-surface font-semibold'
-                      }`}
+                      className={`inline-flex h-[42px] items-center gap-1.5 rounded-full px-3.5 text-[13.5px] ${on ? 'border-[1.5px] border-green bg-sage-tint font-bold' : 'border border-line bg-surface font-semibold'}`}
                     >
-                      <f.Icon className={`h-4 w-4 ${on ? 'text-green-strong' : 'text-sage-deep'}`} strokeWidth={1.75} />
+                      {Icon && <Icon className={`h-4 w-4 ${on ? 'text-green-strong' : 'text-sage-deep'}`} strokeWidth={1.75} />}
                       {f.label}
                       {on && <Check className="h-3.5 w-3.5 text-green-strong" strokeWidth={1.75} />}
                     </button>
@@ -309,7 +345,7 @@ export function MesSuivis({
         </>
       )}
 
-      {builderOpen && <HabitBuilderSheet onClose={() => setBuilderOpen(false)} />}
+      {builderOpen && <HabitBuilderSheet onClose={() => setBuilderOpen(false)} onAdded={() => { setBuilderOpen(false); router.refresh(); }} />}
     </div>
   );
 }
@@ -325,22 +361,27 @@ function ProfileField({ label, children }: { label: string; children: React.Reac
 
 /* --------------------- État 6 — constructeur d'habitude --------------------- */
 
-function HabitBuilderSheet({ onClose }: { onClose: () => void }) {
+function HabitBuilderSheet({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const [pending, start] = useTransition();
   const [dir, setDir] = useState<'min' | 'max'>('min');
   const [count, setCount] = useState(3);
   const [period, setPeriod] = useState<'week' | 'day'>('week');
-  const [topic, setTopic] = useState(DEMO_BUILDER_TOPICS[0]);
-  const [added, setAdded] = useState(false);
+  const [topic, setTopic] = useState(BUILDER_TOPICS[0]);
+  const [error, setError] = useState<string | null>(null);
 
-  const preview = `${topic}, ${dir === 'min' ? 'au moins' : 'au plus'} ${count} fois par ${period === 'week' ? 'semaine' : 'jour'}`;
+  const preview = `${topic.label}, ${dir === 'min' ? 'au moins' : 'au plus'} ${count} fois par ${period === 'week' ? 'semaine' : 'jour'}`;
+
+  const submit = () =>
+    start(async () => {
+      setError(null);
+      const res = await addCustomHabitAction({ label: topic.label, direction: dir, targetCount: count, period, matchTags: [topic.tag] });
+      if (res.ok) onAdded();
+      else setError('Impossible d’ajouter — réessaie.');
+    });
 
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-ink/30 p-0 sm:items-center sm:p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-lg rounded-t-3xl bg-paper p-6 sm:rounded-3xl"
-        style={{ boxShadow: 'var(--shadow-lg)' }}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="w-full max-w-lg rounded-t-3xl bg-paper p-6 sm:rounded-3xl" style={{ boxShadow: 'var(--shadow-lg)' }} onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mb-4 h-[5px] w-11 rounded-full bg-line sm:hidden" />
         <div className="mb-1 flex items-center justify-between">
           <div className="font-display text-[23px] font-semibold tracking-tight">Mon repère à moi</div>
@@ -350,72 +391,54 @@ function HabitBuilderSheet({ onClose }: { onClose: () => void }) {
         </div>
         <p className="mb-4 text-[13.5px] leading-snug text-ink-soft">Compté automatiquement depuis ton planning, comme les autres.</p>
 
-        {added ? (
-          <div className="rounded-2xl border border-line bg-surface p-5 text-center">
-            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-sage-tint text-green-strong">
-              <Check className="h-6 w-6" strokeWidth={1.75} />
-            </div>
-            <p className="font-display text-lg font-semibold">Bientôt disponible</p>
-            <p className="mx-auto mt-1 max-w-xs text-[13px] leading-relaxed text-ink-soft">
-              Les suivis d’habitudes arrivent avec la prochaine mise à jour — ton repère « {preview} » sera compté
-              automatiquement depuis ton planning.
-            </p>
-            <button type="button" onClick={onClose} className="btn-primary mt-4 w-full py-2.5">
-              Compris
+        <div className="mb-2 text-[13px] font-bold text-ink-soft">1 · Plutôt…</div>
+        <div className="mb-4 flex rounded-full border border-line bg-surface p-[3px]">
+          {(['min', 'max'] as const).map((d) => (
+            <button key={d} type="button" onClick={() => setDir(d)} className={`flex-1 rounded-full py-2.5 text-sm font-bold ${dir === d ? 'bg-sage-tint text-ink' : 'text-ink-soft'}`}>
+              {d === 'min' ? 'Au moins' : 'Au plus'}
             </button>
+          ))}
+        </div>
+
+        <div className="mb-2 text-[13px] font-bold text-ink-soft">2 · Combien de fois</div>
+        <div className="mb-4 flex items-center gap-3.5">
+          <button type="button" onClick={() => setCount((c) => Math.max(1, c - 1))} className="flex h-[46px] w-[46px] items-center justify-center rounded-xl border border-line bg-surface">
+            <Minus className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          </button>
+          <span className="min-w-9 text-center font-display text-[30px] font-semibold">{count}</span>
+          <button type="button" onClick={() => setCount((c) => c + 1)} className="flex h-[46px] w-[46px] items-center justify-center rounded-xl border border-line bg-surface">
+            <Plus className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          </button>
+          <div className="flex flex-1 rounded-full border border-line bg-surface p-[3px]">
+            {(['week', 'day'] as const).map((p) => (
+              <button key={p} type="button" onClick={() => setPeriod(p)} className={`flex-1 rounded-full py-2.5 text-[13px] font-bold ${period === p ? 'bg-sage-tint text-ink' : 'text-ink-soft'}`}>
+                {p === 'week' ? 'par semaine' : 'par jour'}
+              </button>
+            ))}
           </div>
-        ) : (
-          <>
-            <div className="mb-2 text-[13px] font-bold text-ink-soft">1 · Plutôt…</div>
-            <div className="mb-4 flex rounded-full border border-line bg-surface p-[3px]">
-              {(['min', 'max'] as const).map((d) => (
-                <button key={d} type="button" onClick={() => setDir(d)} className={`flex-1 rounded-full py-2.5 text-sm font-bold ${dir === d ? 'bg-sage-tint text-ink' : 'text-ink-soft'}`}>
-                  {d === 'min' ? 'Au moins' : 'Au plus'}
-                </button>
-              ))}
-            </div>
+        </div>
 
-            <div className="mb-2 text-[13px] font-bold text-ink-soft">2 · Combien de fois</div>
-            <div className="mb-4 flex items-center gap-3.5">
-              <button type="button" onClick={() => setCount((c) => Math.max(1, c - 1))} className="flex h-[46px] w-[46px] items-center justify-center rounded-xl border border-line bg-surface">
-                <Minus className="h-[18px] w-[18px]" strokeWidth={1.75} />
+        <div className="mb-2 text-[13px] font-bold text-ink-soft">3 · Ce qui compte</div>
+        <div className="mb-4 flex flex-wrap gap-2">
+          {BUILDER_TOPICS.map((t) => {
+            const on = topic.tag === t.tag;
+            return (
+              <button key={t.tag} type="button" onClick={() => setTopic(t)} className={`inline-flex h-[42px] items-center gap-1.5 rounded-full px-3.5 text-[13.5px] ${on ? 'border-[1.5px] border-green bg-sage-tint font-bold' : 'border border-line bg-surface font-semibold'}`}>
+                {t.label}
+                {on && <Check className="h-3.5 w-3.5 text-green-strong" strokeWidth={1.75} />}
               </button>
-              <span className="min-w-9 text-center font-display text-[30px] font-semibold">{count}</span>
-              <button type="button" onClick={() => setCount((c) => c + 1)} className="flex h-[46px] w-[46px] items-center justify-center rounded-xl border border-line bg-surface">
-                <Plus className="h-[18px] w-[18px]" strokeWidth={1.75} />
-              </button>
-              <div className="flex flex-1 rounded-full border border-line bg-surface p-[3px]">
-                {(['week', 'day'] as const).map((p) => (
-                  <button key={p} type="button" onClick={() => setPeriod(p)} className={`flex-1 rounded-full py-2.5 text-[13px] font-bold ${period === p ? 'bg-sage-tint text-ink' : 'text-ink-soft'}`}>
-                    {p === 'week' ? 'par semaine' : 'par jour'}
-                  </button>
-                ))}
-              </div>
-            </div>
+            );
+          })}
+        </div>
 
-            <div className="mb-2 text-[13px] font-bold text-ink-soft">3 · Ce qui compte</div>
-            <div className="mb-2 flex flex-wrap gap-2">
-              {DEMO_BUILDER_TOPICS.map((t) => {
-                const on = topic === t;
-                return (
-                  <button key={t} type="button" onClick={() => setTopic(t)} className={`inline-flex h-[42px] items-center gap-1.5 rounded-full px-3.5 text-[13.5px] ${on ? 'border-[1.5px] border-green bg-sage-tint font-bold' : 'border border-line bg-surface font-semibold'}`}>
-                    {t}
-                    {on && <Check className="h-3.5 w-3.5 text-green-strong" strokeWidth={1.75} />}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mb-4 text-[12.5px] font-semibold text-ink-soft">yaourt, kéfir, choucroute, miso…</p>
-
-            <div className="mb-4 flex items-center gap-2.5 rounded-2xl bg-butter-tint px-4 py-3">
-              <Check className="h-[17px] w-[17px] shrink-0 text-sage-deep" strokeWidth={1.75} />
-              <span className="font-hand text-[21px] text-ink">{preview}</span>
-            </div>
-            <button type="button" onClick={() => setAdded(true)} className="flex h-[52px] w-full items-center justify-center rounded-xl bg-green-strong text-base font-bold text-white" style={{ boxShadow: 'var(--shadow-md)' }}>
-              Ajouter à mes suivis
-            </button>
-          </>
-        )}
+        <div className="mb-4 flex items-center gap-2.5 rounded-2xl bg-butter-tint px-4 py-3">
+          <Check className="h-[17px] w-[17px] shrink-0 text-sage-deep" strokeWidth={1.75} />
+          <span className="font-hand text-[21px] text-ink">{preview}</span>
+        </div>
+        {error && <p className="mb-2 text-sm text-red-strong">{error}</p>}
+        <button type="button" onClick={submit} disabled={pending} className="flex h-[52px] w-full items-center justify-center rounded-xl bg-green-strong text-base font-bold text-white disabled:opacity-60" style={{ boxShadow: 'var(--shadow-md)' }}>
+          {pending ? 'Ajout…' : 'Ajouter à mes suivis'}
+        </button>
       </div>
     </div>
   );

@@ -23,6 +23,8 @@ const USDA_NUTRIENT_MAP: Record<string, string> = {
   '301': 'calcium', // Calcium, Ca (mg)
   '328': 'vitamin_d', // Vitamin D (D2 + D3) (µg)
   '418': 'vitamin_b12', // Vitamin B-12 (µg)
+  '304': 'magnesium', // Magnesium, Mg (mg)
+  '309': 'zinc', // Zinc, Zn (mg)
 };
 
 /** Normalise les unités USDA ('KCAL','G','MG','UG') vers les nôtres. */

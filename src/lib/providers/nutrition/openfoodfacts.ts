@@ -38,6 +38,8 @@ const OFF_NUTRIENT_MAP: OffNutrientMapEntry[] = [
   { offKey: 'calcium', code: 'calcium', factor: 1000, unit: 'mg' }, // OFF en g -> mg
   { offKey: 'vitamin-d', code: 'vitamin_d', factor: 1_000_000, unit: 'µg' }, // OFF en g -> µg
   { offKey: 'vitamin-b12', code: 'vitamin_b12', factor: 1_000_000, unit: 'µg' }, // OFF en g -> µg
+  { offKey: 'magnesium', code: 'magnesium', factor: 1000, unit: 'mg' }, // OFF en g -> mg
+  { offKey: 'zinc', code: 'zinc', factor: 1000, unit: 'mg' }, // OFF en g -> mg
 ];
 
 interface OffProduct {

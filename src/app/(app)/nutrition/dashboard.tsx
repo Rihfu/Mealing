@@ -22,7 +22,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { GaugeCard, HabitCard, ObservationCard, type GaugeCardData } from './ui';
-import { DEMO_HABITS } from './demo-data';
 import { repairNutritionDataAction } from './actions';
 import type { DayData, NutrientCard, NutritionSnapshot } from './view-types';
 
@@ -81,7 +80,7 @@ export function NutritionDashboard({ snapshot }: { snapshot: NutritionSnapshot }
             {gaugeCards.map((c) => (
               <GaugeCard key={c.code} data={weekGaugeData(c, snapshot, eatingDays)} />
             ))}
-            {DEMO_HABITS.map((h) => (
+            {snapshot.habitCards.map((h) => (
               <HabitCard key={h.name} data={h} />
             ))}
             {observationCards.map((c) => (

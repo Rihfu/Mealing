@@ -11,6 +11,8 @@ export * from './recipe-image';
 export * from './recipe-stats';
 export * from './nutrition';
 export * from './nutrition-profile';
+export * from './facets';
+export * from './habits';
 export * from './shopping';
 export * from './shopping-history';
 export * from './shopping-stats';

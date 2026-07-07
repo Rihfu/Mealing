@@ -15,7 +15,9 @@
 import type { ComponentType } from 'react';
 import {
   Activity,
+  Bean,
   Beef,
+  Carrot,
   Check,
   Clock,
   Droplet,
@@ -23,10 +25,15 @@ import {
   Fish,
   Flame,
   Milk,
+  Salad,
+  Soup,
   Stethoscope,
   TrendingUp,
   Wheat,
 } from 'lucide-react';
+import type { HabitCardData } from './view-types';
+
+export type { HabitCardData };
 
 type TintKey = 'sage' | 'butter' | 'clay';
 
@@ -54,8 +61,14 @@ const NUTRIENT_VISUAL: Record<string, NutrientVisual> = {
   calcium: { Icon: Milk, tint: 'sage' },
   vitamin_b12: { Icon: Activity, tint: 'sage' },
   magnesium: { Icon: Activity, tint: 'sage' },
-  // Codes d'HABITUDE de démo (non-nutriments) — icône dédiée.
+  // Codes d'HABITUDE (habit_key) — icône dédiée.
   fish: { Icon: Fish, tint: 'butter' },
+  poisson_gras: { Icon: Fish, tint: 'butter' },
+  legumineuse: { Icon: Bean, tint: 'sage' },
+  collagene: { Icon: Soup, tint: 'clay' },
+  fruits_legumes: { Icon: Salad, tint: 'sage' },
+  noix: { Icon: Bean, tint: 'butter' },
+  variete_legumes: { Icon: Carrot, tint: 'sage' },
 };
 
 export function nutrientVisual(code: string): NutrientVisual {
@@ -239,23 +252,6 @@ export function GaugeCard({ data }: { data: GaugeCardData }) {
 }
 
 /* ----------------------------- Habitude ----------------------------- */
-
-export interface HabitCardData {
-  name: string;
-  code: string;
-  /** « au moins » (minimum) ou « au plus » (limite). */
-  direction: 'min' | 'max';
-  target: number;
-  period: 'week' | 'day';
-  done: number;
-  /** Occurrences déjà planifiées mais pas encore passées. */
-  upcoming: number;
-  coveragePct: number | null;
-  /** Détail de la prochaine occurrence à venir (« saumon planifié vendredi »). */
-  upcomingLabel?: string;
-  /** Ligne d'état quand tout est passé (« pile sur le repère — tout va bien »). */
-  doneLabel?: string;
-}
 
 /** Carte de suivi d'HABITUDE — occurrences comptées depuis le planning vers un repère. */
 export function HabitCard({ data }: { data: HabitCardData }) {

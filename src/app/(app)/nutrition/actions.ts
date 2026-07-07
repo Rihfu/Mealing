@@ -7,9 +7,16 @@ import {
   completeMissingFoodNutrition,
   computeNutritionTargets,
   applyNutritionSetup,
+  recommendTracking,
+  setProfileFacets,
+  addProfileHabit,
+  addCustomHabit,
+  removeProfileHabit,
   type ComputeTargetsInput,
   type NutritionSetupInput,
   type TargetZone,
+  type TrackingSuggestion,
+  type Sex,
 } from '@/lib/core';
 
 /** Calcule les cibles PROPOSÉES pour l'écran 3 du wizard (référence curée / formule — jamais l'IA). */
@@ -67,3 +74,134 @@ export async function repairNutritionDataAction(): Promise<RepairNutritionResult
 
 // NB : l'ancienne `setGoalsAction` (formulaire manuel, max/jour uniquement) a été
 // remplacée par le wizard N1 (`applyNutritionSetupAction` : zones min/max + suivis).
+
+/* ----------------------- N1.5 — flux facettes ----------------------- */
+
+const ageFromYear = (birthYear: number | null) =>
+  birthYear ? Math.max(1, new Date().getFullYear() - birthYear) : null;
+
+/** Une suggestion enrichie d'une zone proposée (éditable) pour les nutriments. */
+export type EnrichedSuggestion = TrackingSuggestion & { proposedMin?: number | null; proposedMax?: number | null };
+
+export interface RecommendActionInput {
+  facets: string[];
+  birthYear: number | null;
+  sex: Sex | null;
+  weightKg: number | null;
+  heightCm: number | null;
+  isChild: boolean;
+  excludeNutrients?: string[];
+  excludeHabits?: string[];
+}
+
+/**
+ * Recommande un plan de suivi depuis les facettes (moteur curé) et attache aux
+ * suggestions NUTRIMENT une zone proposée (référence/formule — jamais inventée).
+ */
+export async function recommendAction(input: RecommendActionInput): Promise<EnrichedSuggestion[]> {
+  const { supabase, userId } = await getAuthContext();
+  if (!userId) return [];
+
+  const suggestions = await recommendTracking(supabase, {
+    facets: input.facets,
+    age: ageFromYear(input.birthYear),
+    sex: input.sex,
+    isChild: input.isChild,
+    excludeNutrients: input.excludeNutrients,
+    excludeHabits: input.excludeHabits,
+  });
+
+  // Zones proposées pour les nutriments : base « équilibre » (référence/formule).
+  const zones = await computeNutritionTargets(supabase, {
+    persona: 'equilibre',
+    birthYear: input.birthYear,
+    sex: input.sex,
+    weightKg: input.weightKg,
+    heightCm: input.heightCm,
+    activityLevel: null,
+  });
+  const zoneByCode = new Map(zones.map((z) => [z.code, z]));
+
+  return suggestions.map((s) =>
+    s.kind === 'nutrient'
+      ? { ...s, proposedMin: zoneByCode.get(s.code)?.min ?? null, proposedMax: zoneByCode.get(s.code)?.max ?? null }
+      : s,
+  );
+}
+
+export interface ApplyFacetPlanInput {
+  facets: string[];
+  birthYear: number | null;
+  sex: Sex | null;
+  weightKg: number | null;
+  heightCm: number | null;
+  isChild: boolean;
+  /** Nutriments retenus + leurs zones finales (éditées ou non). */
+  nutrientTargets: Array<{ code: string; min: number | null; max: number | null }>;
+  /** Clés d'habitudes retenues. */
+  habitKeys: string[];
+}
+
+/** Applique un plan de suivi issu des facettes : facettes + nutriments + habitudes. */
+export async function applyFacetPlanAction(input: ApplyFacetPlanInput): Promise<{ ok: boolean }> {
+  const { supabase, userId } = await getAuthContext();
+  if (!userId) return { ok: false };
+
+  await setProfileFacets(supabase, userId, input.facets);
+  await applyNutritionSetup(supabase, userId, {
+    isChild: input.isChild,
+    birthYear: input.birthYear,
+    sex: input.sex,
+    weightKg: input.weightKg,
+    heightCm: input.heightCm,
+    activityLevel: null,
+    tracked: input.nutrientTargets.map((t) => t.code),
+    targets: input.nutrientTargets,
+  });
+  for (const key of input.habitKeys) await addProfileHabit(supabase, userId, key);
+
+  revalidatePath('/nutrition');
+  return { ok: true };
+}
+
+/** Met à jour les facettes (onglet Profil) sans toucher aux suivis existants. */
+export async function setFacetsAction(facets: string[]): Promise<{ ok: boolean }> {
+  const { supabase, userId } = await getAuthContext();
+  if (!userId) return { ok: false };
+  await setProfileFacets(supabase, userId, facets);
+  revalidatePath('/nutrition');
+  return { ok: true };
+}
+
+/** Ajoute une habitude référencée au plan de suivi. */
+export async function addHabitAction(habitKey: string): Promise<{ ok: boolean }> {
+  const { supabase, userId } = await getAuthContext();
+  if (!userId) return { ok: false };
+  await addProfileHabit(supabase, userId, habitKey);
+  revalidatePath('/nutrition');
+  return { ok: true };
+}
+
+/** Retire une habitude du plan de suivi (par id). */
+export async function removeHabitAction(id: string): Promise<{ ok: boolean }> {
+  const { supabase, userId } = await getAuthContext();
+  if (!userId) return { ok: false };
+  await removeProfileHabit(supabase, userId, id);
+  revalidatePath('/nutrition');
+  return { ok: true };
+}
+
+/** Crée une habitude 100 % custom (constructeur « Mon repère à moi »). */
+export async function addCustomHabitAction(input: {
+  label: string;
+  direction: 'min' | 'max';
+  targetCount: number;
+  period: 'day' | 'week';
+  matchTags: string[];
+}): Promise<{ ok: boolean }> {
+  const { supabase, userId } = await getAuthContext();
+  if (!userId) return { ok: false };
+  await addCustomHabit(supabase, userId, input);
+  revalidatePath('/nutrition');
+  return { ok: true };
+}

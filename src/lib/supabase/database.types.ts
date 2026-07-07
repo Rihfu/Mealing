@@ -122,6 +122,27 @@ export type Database = {
           },
         ]
       }
+      facet: {
+        Row: {
+          groupe: string
+          key: string
+          label: string
+          ordre: number
+        }
+        Insert: {
+          groupe: string
+          key: string
+          label: string
+          ordre?: number
+        }
+        Update: {
+          groupe?: string
+          key?: string
+          label?: string
+          ordre?: number
+        }
+        Relationships: []
+      }
       food: {
         Row: {
           barcode: string | null
@@ -187,6 +208,21 @@ export type Database = {
           },
         ]
       }
+      food_group: {
+        Row: {
+          label: string
+          tag: string
+        }
+        Insert: {
+          label: string
+          tag: string
+        }
+        Update: {
+          label?: string
+          tag?: string
+        }
+        Relationships: []
+      }
       food_package: {
         Row: {
           created_at: string
@@ -227,6 +263,69 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      food_tag: {
+        Row: {
+          food_id: string
+          tag: string
+        }
+        Insert: {
+          food_id: string
+          tag: string
+        }
+        Update: {
+          food_id?: string
+          tag?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_tag_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: false
+            referencedRelation: "food"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "food_tag_tag_fkey"
+            columns: ["tag"]
+            isOneToOne: false
+            referencedRelation: "food_group"
+            referencedColumns: ["tag"]
+          },
+        ]
+      }
+      habit_type: {
+        Row: {
+          description: string | null
+          distinct_mode: boolean
+          key: string
+          label: string
+          match_tags: string[]
+          ordre: number
+          period: string
+          target_count: number
+        }
+        Insert: {
+          description?: string | null
+          distinct_mode?: boolean
+          key: string
+          label: string
+          match_tags?: string[]
+          ordre?: number
+          period: string
+          target_count?: number
+        }
+        Update: {
+          description?: string | null
+          distinct_mode?: boolean
+          key?: string
+          label?: string
+          match_tags?: string[]
+          ordre?: number
+          period?: string
+          target_count?: number
+        }
+        Relationships: []
       }
       household: {
         Row: {
@@ -631,6 +730,7 @@ export type Database = {
           activity_level: string | null
           birth_year: number | null
           height_cm: number | null
+          is_child: boolean
           onboarded_at: string | null
           persona: string | null
           profile_id: string
@@ -642,6 +742,7 @@ export type Database = {
           activity_level?: string | null
           birth_year?: number | null
           height_cm?: number | null
+          is_child?: boolean
           onboarded_at?: string | null
           persona?: string | null
           profile_id: string
@@ -653,6 +754,7 @@ export type Database = {
           activity_level?: string | null
           birth_year?: number | null
           height_cm?: number | null
+          is_child?: boolean
           onboarded_at?: string | null
           persona?: string | null
           profile_id?: string
@@ -821,6 +923,36 @@ export type Database = {
           },
         ]
       }
+      profile_facet: {
+        Row: {
+          facet_key: string
+          profile_id: string
+        }
+        Insert: {
+          facet_key: string
+          profile_id: string
+        }
+        Update: {
+          facet_key?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_facet_facet_key_fkey"
+            columns: ["facet_key"]
+            isOneToOne: false
+            referencedRelation: "facet"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "profile_facet_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profile_goal: {
         Row: {
           created_at: string
@@ -862,6 +994,66 @@ export type Database = {
           },
           {
             foreignKeyName: "profile_goal_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profile_habit_tracking: {
+        Row: {
+          created_at: string
+          custom_label: string | null
+          direction: string
+          distinct_mode: boolean
+          enabled: boolean
+          habit_key: string | null
+          id: string
+          match_food_ids: string[]
+          match_tags: string[]
+          period: string
+          profile_id: string
+          target_count: number
+        }
+        Insert: {
+          created_at?: string
+          custom_label?: string | null
+          direction?: string
+          distinct_mode?: boolean
+          enabled?: boolean
+          habit_key?: string | null
+          id?: string
+          match_food_ids?: string[]
+          match_tags?: string[]
+          period?: string
+          profile_id: string
+          target_count?: number
+        }
+        Update: {
+          created_at?: string
+          custom_label?: string | null
+          direction?: string
+          distinct_mode?: boolean
+          enabled?: boolean
+          habit_key?: string | null
+          id?: string
+          match_food_ids?: string[]
+          match_tags?: string[]
+          period?: string
+          profile_id?: string
+          target_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_habit_tracking_habit_key_fkey"
+            columns: ["habit_key"]
+            isOneToOne: false
+            referencedRelation: "habit_type"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "profile_habit_tracking_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profile"
@@ -1690,6 +1882,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      tracking_rule: {
+        Row: {
+          age_max: number | null
+          age_min: number | null
+          child_only: boolean
+          habit_key: string | null
+          id: string
+          kind: string
+          nutrient_code: string | null
+          priority: number
+          required_facets: string[]
+          sex: string | null
+          why_text: string
+        }
+        Insert: {
+          age_max?: number | null
+          age_min?: number | null
+          child_only?: boolean
+          habit_key?: string | null
+          id?: string
+          kind: string
+          nutrient_code?: string | null
+          priority?: number
+          required_facets?: string[]
+          sex?: string | null
+          why_text: string
+        }
+        Update: {
+          age_max?: number | null
+          age_min?: number | null
+          child_only?: boolean
+          habit_key?: string | null
+          id?: string
+          kind?: string
+          nutrient_code?: string | null
+          priority?: number
+          required_facets?: string[]
+          sex?: string | null
+          why_text?: string
+        }
+        Relationships: []
       }
     }
     Views: {

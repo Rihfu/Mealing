@@ -28,6 +28,21 @@ export interface NutrientCard {
   kind: 'gauge' | 'observation';
 }
 
+/** Carte de suivi d'HABITUDE (occurrences comptées depuis le planning). */
+export interface HabitCardData {
+  name: string;
+  /** Clé pour l'icône (habitKey ou code) + provenance. */
+  code: string;
+  direction: 'min' | 'max';
+  target: number;
+  period: 'week' | 'day';
+  done: number;
+  upcoming: number;
+  coveragePct: number | null;
+  upcomingLabel?: string;
+  doneLabel?: string;
+}
+
 export interface CoverageInfo {
   pct: number | null;
   mealsCovered: number;
@@ -45,6 +60,7 @@ export interface NutritionSnapshot {
   weekReal: Record<string, number>;
   weekPlanned: Record<string, number>;
   cards: NutrientCard[];
+  habitCards: HabitCardData[];
   coverage: CoverageInfo;
   daysInZone: number;
   daysWithMeals: number;
