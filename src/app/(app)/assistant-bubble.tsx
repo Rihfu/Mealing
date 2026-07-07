@@ -3,14 +3,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { askAgentAction, executeAgentAction, createConversationAction } from './assistant/actions';
+import {
+  askAgentAction,
+  executeAgentAction,
+  createConversationAction,
+  listConversationsAction,
+  getConversationAction,
+  startNewConversationWithBriefAction,
+} from './assistant/actions';
 import { transcribeTextAction } from './voice-actions';
 import { useAudioRecorder, audioExt } from '@/components/use-audio-recorder';
 import type { ProposedAction } from '@/lib/ai/agent';
+import type { ConversationSummary } from '@/lib/core/conversations';
 
 interface Msg {
   role: 'user' | 'assistant';
   content: string;
+}
+
+/** Date relative courte pour la liste des conversations. */
+function relDate(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const days = Math.floor((today.setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86_400_000);
+  if (days <= 0) return 'aujourd’hui';
+  if (days === 1) return 'hier';
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
 
 const POS_KEY = 'mealing:assistant-bubble:pos';
@@ -47,6 +65,13 @@ export function AssistantBubble() {
   const [plan, setPlan] = useState<ProposedAction[] | null>(null);
   const [autoSend, setAutoSend] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  // Parité avec la section Assistant (#3/#4) : conversations multiples + limite.
+  const [showList, setShowList] = useState(false);
+  const [convList, setConvList] = useState<ConversationSummary[] | null>(null);
+  const [limit, setLimit] = useState(30); // affiné par getConversationAction au chargement
+  const count = messages.length;
+  const limitReached = count >= limit;
+  const ratio = limit > 0 ? count / limit : 0;
 
   const posRef = useRef(pos);
   const topSafeRef = useRef(72);
@@ -220,6 +245,54 @@ export function AssistantBubble() {
     setMessages([]);
     setPlan(null);
     setInput('');
+    setShowList(false);
+  }
+
+  /** Ouvre/ferme la liste des conversations (chargée à l'ouverture). */
+  function toggleList() {
+    setShowList((s) => {
+      const next = !s;
+      if (next) {
+        setConvList(null);
+        listConversationsAction().then(setConvList).catch(() => setConvList([]));
+      }
+      return next;
+    });
+  }
+
+  /** Bascule sur une conversation existante (messages + limite rechargés). */
+  async function openConversation(id: string) {
+    setShowList(false);
+    setPlan(null);
+    setPending(true);
+    try {
+      const d = await getConversationAction(id);
+      setConversationId(id);
+      setMessages(d.messages.map((m) => ({ role: m.role, content: m.content })));
+      setLimit(d.limit);
+    } catch {
+      setMessages((m) => [...m, { role: 'assistant', content: 'Impossible de charger cette conversation.' }]);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  /** Au seuil : nouvelle conversation amorcée par un BRIEF de l'ancienne (#4). */
+  async function continueInNew() {
+    if (!conversationId || pending) return;
+    setPending(true);
+    try {
+      const r = await startNewConversationWithBriefAction(conversationId);
+      if (r) {
+        setConversationId(r.id);
+        setMessages(r.messages.map((m) => ({ role: m.role, content: m.content })));
+        setPlan(null);
+      }
+    } catch {
+      /* silencieux — l'utilisateur peut réessayer */
+    } finally {
+      setPending(false);
+    }
   }
 
   if (!mounted || pathname === '/assistant') return null;
@@ -276,8 +349,27 @@ export function AssistantBubble() {
                 </svg>
               </span>
               <span className="font-display text-sm font-semibold text-ink">Assistant</span>
+              {count > 0 && (
+                <span
+                  title="Messages de cette conversation — au seuil, l'assistant propose d'en ouvrir une nouvelle."
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    limitReached ? 'bg-clay-tint text-[#c2774f]' : ratio >= 0.8 ? 'bg-orange/20 text-orange' : 'bg-sage-tint text-green-strong'
+                  }`}
+                >
+                  {count}/{limit}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={toggleList}
+                title="Mes conversations"
+                aria-label="Mes conversations"
+                className={`flex h-8 w-8 items-center justify-center rounded-full hover:bg-sage-tint hover:text-green-strong ${showList ? 'bg-sage-tint text-green-strong' : 'text-ink-soft'}`}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
+              </button>
               <button
                 type="button"
                 onClick={newConversation}
@@ -310,7 +402,40 @@ export function AssistantBubble() {
             </div>
           </div>
 
-          {/* Fil */}
+          {/* Liste des conversations (parité section) — remplace le fil quand ouverte. */}
+          {showList ? (
+            <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3.5 py-3">
+              <button
+                type="button"
+                onClick={newConversation}
+                className="flex items-center gap-2 rounded-xl border border-dashed border-sage bg-sage-tint/40 px-3 py-2.5 text-left text-sm font-bold text-green-strong"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                Nouvelle conversation
+              </button>
+              {convList === null ? (
+                <p className="px-1 py-3 text-center text-xs text-ink-soft">Chargement…</p>
+              ) : convList.length === 0 ? (
+                <p className="px-1 py-3 text-center text-xs text-ink-soft">Aucune conversation encore.</p>
+              ) : (
+                convList.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => openConversation(c.id)}
+                    className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-sm ${
+                      c.id === conversationId ? 'border-green bg-sage-tint/60' : 'border-line bg-surface hover:bg-sage-tint/30'
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1 truncate font-semibold text-ink">{c.title?.trim() || 'Conversation'}</span>
+                    <span className="flex-none text-[11px] text-ink-soft">
+                      {relDate(c.updatedAt)} · {c.messageCount} msg
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 py-3">
             {messages.length === 0 && !plan && (
               <div className="flex flex-col gap-2.5">
@@ -368,9 +493,18 @@ export function AssistantBubble() {
             )}
             <div ref={bottomRef} />
           </div>
+          )}
 
           {/* Saisie */}
           <div className="border-t border-line">
+            {limitReached && !showList && (
+              <div className="mx-3 mt-2 flex items-center justify-between gap-2 rounded-xl border border-orange/50 bg-[#fdf0e3] p-2 text-[11px]">
+                <span className="text-ink">Discussion longue ({count}/{limit}) — continue dans une nouvelle, je garde le fil.</span>
+                <button type="button" onClick={continueInNew} disabled={pending} className="btn-primary flex-none px-2 py-1 text-[11px] disabled:opacity-50">
+                  Nouvelle
+                </button>
+              </div>
+            )}
             <div className="flex items-center justify-between gap-2 px-3 pt-2">
               {recorder.error ? <span className="truncate text-xs text-clay">{recorder.error}</span> : <span />}
               <button

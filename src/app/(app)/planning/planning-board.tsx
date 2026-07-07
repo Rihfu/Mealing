@@ -1235,7 +1235,8 @@ export function PlanningBoard(props: BoardProps) {
         {isMobile ? null : weekControls()}
       </div>
       {isMobile ? null : toolbar()}
-      <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={onMealDragEnd}>
+      {/* id stable → ids d'accessibilité déterministes (sinon warning d'hydratation SSR). */}
+      <DndContext id="planning-meals-dnd" sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={onMealDragEnd}>
         {renderBoard()}
       </DndContext>
       {renderOverlay()}
