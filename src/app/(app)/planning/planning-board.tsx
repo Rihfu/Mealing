@@ -18,6 +18,7 @@ import {
   reassignLeftoverAction,
   setMealLeftoverAction,
   copyWeekAction,
+  reconductMealsAction,
   suggestRecipesAction,
   type PastMeal,
   type RecipeSuggestion,
@@ -30,8 +31,8 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Tuile repas déplaçable (le clic normal reste possible grâce aux contraintes d'activation). */
-function DragMeal({ mealId, children }: { mealId: string; children: ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `meal:${mealId}` });
+function DragMeal({ mealId, disabled, children }: { mealId: string; disabled?: boolean; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `meal:${mealId}`, disabled });
   const style: CSSProperties = {
     touchAction: 'manipulation',
     ...(transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : {}),
@@ -412,6 +413,47 @@ export function PlanningBoard(props: BoardProps) {
   }
   const [flash, setFlash] = useState<string | null>(null);
   const showFlash = (msg: string) => { setFlash(msg); window.setTimeout(() => setFlash(null), 3200); };
+
+  // ----- Sélection de tuiles → reconduire en lot (lendemain / +7 j / date choisie). -----
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [reconductDate, setReconductDate] = useState('');
+  const toggleSelect = (id: string) =>
+    setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const exitSelect = () => { setSelectMode(false); setSelected(new Set()); };
+  function doReconduct(target: { days: number } | { date: string }) {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    const where = 'days' in target
+      ? target.days === 1 ? 'au lendemain' : 'à la semaine suivante'
+      : `au ${new Date(`${target.date}T00:00:00`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'short' })}`;
+    exitSelect();
+    run(async () => {
+      const n = await reconductMealsAction(ids, target);
+      showFlash(n > 0 ? `${n} repas reconduit${n > 1 ? 's' : ''} ${where}.` : 'Rien à reconduire.');
+    });
+  }
+
+  // ----- Copier une tuile → la coller sur n'importe quel créneau. -----
+  const [clipboard, setClipboard] = useState<{ recipeId: string | null; name: string; serves: number } | null>(null);
+  function copyMeal(meal: MealView) {
+    setClipboard({ recipeId: meal.recipeId, name: meal.name, serves: meal.serves });
+    showFlash(`« ${meal.name} » copié — un bouton « Coller » apparaît sur chaque créneau.`);
+  }
+  function pasteAt(d: number, slot: SlotKey) {
+    const c = clipboard;
+    if (!c) return;
+    run(async () => {
+      await addMealAction({
+        date: dateFor(d),
+        slot: SLOT_TO_DB[slot],
+        recipeId: c.recipeId ?? undefined,
+        freeText: c.recipeId ? undefined : c.name,
+        servings: c.serves || undefined,
+      });
+      showFlash(`« ${c.name} » collé — ${DAY_FULL[d]} (${SLOT_META[slot].label.toLowerCase()}).`);
+    });
+  }
   // Confirmation EN PLACE (DA) — plus de window.confirm natif (P3) : si la semaine
   // a déjà des repas, le 1er clic arme la confirmation, le 2ᵉ copie (auto-désarmé).
   const [confirmCopy, setConfirmCopy] = useState(false);
@@ -489,6 +531,9 @@ export function PlanningBoard(props: BoardProps) {
         <button type="button" onClick={openHistory} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 11, border: '1px solid #E7E0D2', background: '#FFFDFA', color: '#6F6B61', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FF_SANS, minHeight: 42 }}>
           <Ic name="clock" size={16} color="#8A8472" />Historique des plats
         </button>
+        <button type="button" onClick={() => (selectMode ? exitSelect() : setSelectMode(true))} title="Sélectionner des repas pour les reconduire" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 11, border: `1px solid ${selectMode ? '#2F8049' : '#E7E0D2'}`, background: selectMode ? '#DCE8D4' : '#FFFDFA', color: selectMode ? '#2F5A2A' : '#6F6B61', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FF_SANS, minHeight: 42 }}>
+          <Ic name="check" size={16} color={selectMode ? '#2F8049' : '#8A8472'} />{selectMode ? 'Annuler la sélection' : 'Sélectionner'}
+        </button>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: '#9A958A', fontSize: 12.5 }}>
           <Ic name="info" size={14} color="#B8B1A4" />Un repas prévu = mangé tel quel. Tu n’agis qu’en cas d’écart.
@@ -510,8 +555,18 @@ export function PlanningBoard(props: BoardProps) {
     if (meal.leftover) badges.push(<Pill key="lo" label={meal.replannedCount > 0 ? `Reste · ${meal.replannedCount} replanifié${meal.replannedCount > 1 ? 's' : ''}` : 'Produit un reste'} bg="#E6F0DF" color="#2F8049" icon="repeat" is={12} />);
     if (meal.individual) badges.push(<Pill key="iv" label={`pour ${meal.individual}`} bg="#F3E2D7" color="#9A5638" icon="user" is={12} />);
     const ps = big ? 46 : 38;
+    const isSel = selected.has(meal.id);
     return (
-      <div key={meal.id} style={{ position: 'relative', background: '#FFFDFA', border: '1px solid #E7E0D2', borderLeft: `3px solid ${sm.bar}`, borderRadius: 12, padding: '11px 12px', display: 'flex', gap: 11, alignItems: 'flex-start', boxShadow: '0 1px 2px rgba(52,50,44,.05)' }}>
+      <div
+        key={meal.id}
+        onClick={selectMode ? () => toggleSelect(meal.id) : undefined}
+        style={{ position: 'relative', background: isSel ? '#F0F6EC' : '#FFFDFA', border: `1px solid ${isSel ? '#7FAE76' : '#E7E0D2'}`, borderLeft: `3px solid ${isSel ? '#2F8049' : sm.bar}`, borderRadius: 12, padding: '11px 12px', display: 'flex', gap: 11, alignItems: 'flex-start', boxShadow: isSel ? '0 2px 8px rgba(47,128,73,.14)' : '0 1px 2px rgba(52,50,44,.05)', cursor: selectMode ? 'pointer' : 'default' }}
+      >
+        {selectMode ? (
+          <span aria-hidden style={{ position: 'absolute', top: 8, right: 8, width: 20, height: 20, borderRadius: 6, border: `2px solid ${isSel ? '#2F8049' : '#C7BFAF'}`, background: isSel ? '#2F8049' : '#FFFDFA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {isSel ? <Ic name="check" size={13} color="#fff" /> : null}
+          </span>
+        ) : null}
         <div style={{ width: ps, height: ps, borderRadius: 10, background: meal.imageUrl ? '#E2ECDB' : '#E2ECDB', flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FF_DISPLAY, fontWeight: 600, fontSize: big ? 19 : 16, color: '#6F6B61', opacity: skipped ? 0.5 : 1, overflow: 'hidden' }}>
           {meal.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- URL signée éphémère (bucket privé)
@@ -526,7 +581,7 @@ export function PlanningBoard(props: BoardProps) {
           </div>
           {skipped ? <div style={{ marginTop: 7 }}><Pill label="Sauté" bg="#FBE4DF" color="#C23E2E" icon="ban" is={12} /></div> : null}
           {diff ? <div style={{ marginTop: 7, display: 'flex', alignItems: 'center', gap: 6, color: '#B5641F', fontSize: 13, fontWeight: 600 }}><Ic name="ar" size={13} color="#EF8A3C" />À la place :&nbsp;<span style={{ color: '#9A5012' }}>{meal.diff}</span></div> : null}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
+          <div style={{ display: selectMode ? 'none' : 'flex', alignItems: 'center', gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
             {meal.leftover ? (
               <button type="button" onClick={() => openReplan(meal.id, meal.name)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 8, border: '1px solid #C9D9C1', background: '#fff', color: '#2F8049', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FF_SANS }}><Ic name="replan" size={13} color="#2F8049" />Replanifier le reste</button>
             ) : null}
@@ -538,6 +593,7 @@ export function PlanningBoard(props: BoardProps) {
             ) : (
               <button type="button" onClick={() => setOverlay({ type: 'ecart', d: meal.dayIndex, mealId: meal.id, name: meal.name })} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 8, border: '1px solid #E7E0D2', background: '#fff', color: '#6F6B61', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FF_SANS }}><Ic name="alert" size={13} color="#9A958A" />Signaler un écart</button>
             )}
+            <IconBtn name="copy" onClick={() => copyMeal(meal)} size={30} title="Copier (coller sur un autre créneau)" />
             <IconBtn name="grip" onClick={() => openMove(meal)} size={30} title="Déplacer vers un autre jour / créneau" />
             <IconBtn name="trash" onClick={() => removeMeal(meal.id)} size={30} title="Supprimer" color="#B0867C" border="#EEDFD8" />
           </div>
@@ -556,6 +612,17 @@ export function PlanningBoard(props: BoardProps) {
     );
   }
 
+  /** Bouton « Coller » d'un créneau — visible dès qu'une tuile est en presse-papiers. */
+  function pasteBtn(d: number, slot: SlotKey, compact?: boolean) {
+    if (!clipboard || isOff(d)) return null;
+    const name = clipboard.name.length > 24 ? `${clipboard.name.slice(0, 23)}…` : clipboard.name;
+    return (
+      <button type="button" onClick={() => pasteAt(d, slot)} title={`Coller « ${clipboard.name} » ici`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', minHeight: compact ? 28 : 38, border: '1.5px dashed #9CBE96', background: '#EFF5EA', color: '#2F8049', borderRadius: compact ? 8 : 11, fontSize: compact ? 12 : 13, fontWeight: 700, cursor: 'pointer', fontFamily: FF_SANS }}>
+        <Ic name="copy" size={compact ? 12 : 14} color="#2F8049" />{compact ? 'Coller' : `Coller « ${name} »`}
+      </button>
+    );
+  }
+
   function slotColumn(d: number, slot: SlotKey) {
     const sm = SLOT_META[slot];
     const ms = mealsAt(d, slot);
@@ -566,11 +633,12 @@ export function PlanningBoard(props: BoardProps) {
           <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.03em', textTransform: 'uppercase', color: '#8A8472' }}>{sm.label}</span>
         </div>
         {ms.map((m) => (
-          <DragMeal key={m.id} mealId={m.id}>
+          <DragMeal key={m.id} mealId={m.id} disabled={selectMode}>
             {mealCard(m)}
           </DragMeal>
         ))}
         {addSlotBtn(d, slot, { strong: ms.length === 0, label: ms.length ? 'Ajouter' : sm.label.toLowerCase() })}
+        {pasteBtn(d, slot)}
       </DropCell>
     );
   }
@@ -652,8 +720,9 @@ export function PlanningBoard(props: BoardProps) {
     const cellChip = (m: MealView) => {
       const sm = SLOT_META[m.slot as SlotKey];
       const skipped = m.status === 'skipped';
+      const isSel = selected.has(m.id);
       return (
-        <div key={m.id} onClick={() => { setView('jour'); setFocusDay(m.dayIndex); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 8, background: '#FFFDFA', border: '1px solid #ECE5D7', borderLeft: `3px solid ${sm.bar}`, cursor: 'pointer', minWidth: 0 }}>
+        <div key={m.id} onClick={() => { if (selectMode) { toggleSelect(m.id); return; } setView('jour'); setFocusDay(m.dayIndex); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 8, background: isSel ? '#F0F6EC' : '#FFFDFA', border: `1px solid ${isSel ? '#7FAE76' : '#ECE5D7'}`, borderLeft: `3px solid ${isSel ? '#2F8049' : sm.bar}`, cursor: 'pointer', minWidth: 0 }}>
           <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: skipped ? '#A89F8E' : '#34322C', textDecoration: skipped ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</span>
           {m.leftover ? <Ic name="repeat" size={12} color="#7CA875" /> : null}
           <span style={{ fontSize: 11.5, fontWeight: 700, color: '#A89F8E', flex: '0 0 auto' }}>×{m.serves}</span>
@@ -683,11 +752,12 @@ export function PlanningBoard(props: BoardProps) {
                 return (
                   <DropCell key={d} d={d} slot={slot} style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0, padding: 2 }}>
                     {ms.map((m) => (
-                      <DragMeal key={m.id} mealId={m.id}>
+                      <DragMeal key={m.id} mealId={m.id} disabled={selectMode}>
                         {cellChip(m)}
                       </DragMeal>
                     ))}
                     {ms.length === 0 ? <button type="button" onClick={() => openAdd(d, slot)} style={{ minHeight: 30, border: '1.5px dashed #DAD2C2', background: 'transparent', borderRadius: 8, color: '#B0A99B', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic name="plus" size={14} color="#B0A99B" /></button> : null}
+                    {pasteBtn(d, slot, true)}
                   </DropCell>
                 );
               })}
@@ -716,7 +786,7 @@ export function PlanningBoard(props: BoardProps) {
               {ms.length ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                   {ms.map((m) => (
-                    <DragMeal key={m.id} mealId={m.id}>
+                    <DragMeal key={m.id} mealId={m.id} disabled={selectMode}>
                       {mealCard(m, true)}
                     </DragMeal>
                   ))}
@@ -724,6 +794,7 @@ export function PlanningBoard(props: BoardProps) {
               ) : (
                 addSlotBtn(d, slot, { strong: true, label: `Ajouter un ${sm.label.toLowerCase()}`, h: 48 })
               )}
+              {clipboard && !isOff(d) ? <div style={{ marginTop: 9 }}>{pasteBtn(d, slot)}</div> : null}
             </DropCell>
           );
         })}
@@ -861,6 +932,7 @@ export function PlanningBoard(props: BoardProps) {
             <IconBtn name="cr" onClick={() => goWeek(nextWeek)} border="transparent" bg="transparent" size={30} />
           </div>
           <IconBtn name="clock" onClick={openHistory} size={38} title="Historique des plats" />
+          <IconBtn name="check" onClick={() => (selectMode ? exitSelect() : setSelectMode(true))} size={38} title={selectMode ? 'Annuler la sélection' : 'Sélectionner des repas'} bg={selectMode ? '#DCE8D4' : '#FFFDFA'} border={selectMode ? '#2F8049' : '#E7E0D2'} color={selectMode ? '#2F8049' : '#6F6B61'} />
           {todayIndex < 0 ? <Btn label="Auj." onClick={() => goWeek(thisWeek)} v="soft" pad="8px 11px" minH={38} fs={13} /> : <Btn label={copyLabel} onClick={duplicatePrev} v={confirmCopy ? 'primary' : 'soft'} pad="8px 11px" minH={38} fs={13} icon="copy" is={14} disabled={copyPending} />}
         </div>
         <div style={{ display: 'flex', gap: 2, background: '#F1EBDD', border: '1px solid #E7E0D2', borderRadius: 11, padding: 3, marginBottom: 12 }}>{seg('Jour', 'sun', 'jour')}{seg('Semaine', 'list', 'semaine')}</div>
@@ -1220,7 +1292,7 @@ export function PlanningBoard(props: BoardProps) {
 
   // =========================================================================
   function renderBoard() {
-    if (isMobile) return <>{renderMobile()}{emptyWeek ? null : mobileAddBar()}</>;
+    if (isMobile) return <>{renderMobile()}{emptyWeek || selectMode ? null : mobileAddBar()}</>;
     if (emptyWeek) return renderEmpty();
     if (view === 'agenda') return renderAgenda();
     if (view === 'grid') return renderGrid();
@@ -1244,6 +1316,31 @@ export function PlanningBoard(props: BoardProps) {
         {renderBoard()}
       </DndContext>
       {renderOverlay()}
+      {clipboard ? (
+        <div style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: selectMode ? 128 : 72, zIndex: 55, display: 'flex', alignItems: 'center', gap: 8, background: '#FFFDFA', border: '1px solid #C9D9C1', color: '#3C5A36', borderRadius: 999, padding: '7px 8px 7px 14px', fontSize: 13, fontWeight: 700, boxShadow: '0 10px 28px rgba(52,50,44,.18)', maxWidth: '92vw' }}>
+          <Ic name="copy" size={14} color="#2F8049" />
+          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>« {clipboard.name} » — clique « Coller » sur un créneau</span>
+          <IconBtn name="x" onClick={() => setClipboard(null)} size={26} title="Vider le presse-papiers" />
+        </div>
+      ) : null}
+      {selectMode ? (
+        <div style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 18, zIndex: 56, display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', justifyContent: 'center', background: '#34322C', color: '#FBF7EF', borderRadius: 16, padding: '10px 14px', boxShadow: '0 14px 34px rgba(52,50,44,.32)', maxWidth: '94vw' }}>
+          <span style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            {selected.size > 0 ? `${selected.size} repas` : 'Touche les repas à reconduire'}
+          </span>
+          {selected.size > 0 ? (
+            <>
+              <span style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,.16)' }} />
+              <span style={{ fontSize: 12.5, color: '#CFC9BC', fontWeight: 600, whiteSpace: 'nowrap' }}>Reconduire :</span>
+              <button type="button" onClick={() => doReconduct({ days: 1 })} style={{ background: 'rgba(255,255,255,.10)', color: '#FBF7EF', border: '1px solid rgba(255,255,255,.18)', borderRadius: 10, padding: '7px 11px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FF_SANS, whiteSpace: 'nowrap' }}>Lendemain</button>
+              <button type="button" onClick={() => doReconduct({ days: 7 })} style={{ background: 'rgba(255,255,255,.10)', color: '#FBF7EF', border: '1px solid rgba(255,255,255,.18)', borderRadius: 10, padding: '7px 11px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FF_SANS, whiteSpace: 'nowrap' }}>Semaine suivante</button>
+              <input type="date" value={reconductDate} onChange={(e) => setReconductDate(e.target.value)} aria-label="Reconduire à cette date" style={{ background: '#FBF7EF', color: '#34322C', border: 'none', borderRadius: 9, padding: '6px 8px', fontFamily: FF_SANS, fontSize: 13, fontWeight: 600 }} />
+              <button type="button" disabled={!reconductDate} onClick={() => reconductDate && doReconduct({ date: reconductDate })} style={{ background: reconductDate ? '#2F8049' : 'rgba(255,255,255,.10)', color: '#FBF7EF', border: '1px solid rgba(255,255,255,.18)', borderRadius: 10, padding: '7px 11px', fontSize: 13, fontWeight: 700, cursor: reconductDate ? 'pointer' : 'default', opacity: reconductDate ? 1 : 0.55, fontFamily: FF_SANS, whiteSpace: 'nowrap' }}>Cette date</button>
+            </>
+          ) : null}
+          <IconBtn name="x" onClick={exitSelect} size={30} title="Annuler la sélection" color="#FBF7EF" border="rgba(255,255,255,.25)" bg="transparent" />
+        </div>
+      ) : null}
       {flash ? (
         <div style={{ position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 70, background: '#34322C', color: '#FBF7EF', padding: '11px 18px', borderRadius: 999, fontSize: 13.5, fontWeight: 600, boxShadow: '0 10px 28px rgba(52,50,44,.28)', maxWidth: '90vw' }}>{flash}</div>
       ) : null}

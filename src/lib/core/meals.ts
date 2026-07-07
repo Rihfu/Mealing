@@ -114,6 +114,53 @@ export async function copyPlannedWeek(
 }
 
 /**
+ * Reconduit (COPIE) des repas existants vers une autre date : décalage en jours
+ * (lendemain = 1, semaine suivante = 7) OU date fixe — le créneau est conservé.
+ * Les copies repartent propres : ni lien de reste, ni écart. @returns nb copiés.
+ */
+export async function reconductPlannedMeals(
+  db: DB,
+  params: { householdId: string; mealIds: string[]; offsetDays?: number; date?: string },
+): Promise<number> {
+  if (params.mealIds.length === 0) return 0;
+  if (params.date && !/^\d{4}-\d{2}-\d{2}$/.test(params.date)) throw new Error('Date invalide.');
+  if (!params.date && !params.offsetDays) return 0;
+
+  const meals = (unwrap(
+    await db
+      .from('planned_meal')
+      .select('meal_date, slot, recipe_id, free_text, servings, produces_leftover, is_individual, individual_profile_id')
+      .eq('household_id', params.householdId)
+      .in('id', params.mealIds),
+  ) ?? []) as Array<{
+    meal_date: string;
+    slot: MealSlot;
+    recipe_id: string | null;
+    free_text: string | null;
+    servings: number | null;
+    produces_leftover: boolean;
+    is_individual: boolean;
+    individual_profile_id: string | null;
+  }>;
+
+  const rows = meals.map((m) => ({
+    household_id: params.householdId,
+    meal_date: params.date ?? isoDate(addDays(new Date(`${m.meal_date}T00:00:00`), params.offsetDays ?? 0)),
+    slot: m.slot,
+    recipe_id: m.recipe_id,
+    free_text: m.free_text,
+    servings: m.servings,
+    produces_leftover: m.produces_leftover,
+    is_individual: m.is_individual,
+    individual_profile_id: m.individual_profile_id,
+  }));
+  if (rows.length === 0) return 0;
+  const { error } = await db.from('planned_meal').insert(rows);
+  if (error) throw new Error(error.message);
+  return rows.length;
+}
+
+/**
  * Réassigne un reste à un nouveau créneau, sans nouvelle recette ni nouveau besoin
  * de courses pour la part « reste » (specs 3.1). Le repas créé pointe vers le repas
  * d'origine (`leftover_source_meal_id`) et n'a PAS de `recipe_id` → exclu de la liste

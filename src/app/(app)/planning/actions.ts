@@ -9,6 +9,7 @@ import {
   reassignLeftover,
   setMealLeftover,
   copyPlannedWeek,
+  reconductPlannedMeals,
   loadRecipeStockScores,
   loadRecipeImagePaths,
   signRecipeImageUrls,
@@ -196,6 +197,25 @@ export async function setMealLeftoverAction(mealId: string, value: boolean): Pro
   const { supabase } = await requireContext();
   await setMealLeftover(supabase, mealId, value);
   revalidatePath('/planning');
+}
+
+/**
+ * Reconduit (copie) une SÉLECTION de repas vers le lendemain (+1 j), la semaine
+ * suivante (+7 j) ou une date choisie — créneau conservé. @returns nb copiés.
+ */
+export async function reconductMealsAction(
+  mealIds: string[],
+  target: { days: number } | { date: string },
+): Promise<number> {
+  const { supabase, householdId } = await requireContext();
+  const n = await reconductPlannedMeals(supabase, {
+    householdId,
+    mealIds,
+    offsetDays: 'days' in target ? target.days : undefined,
+    date: 'date' in target ? target.date : undefined,
+  });
+  revalidatePath('/planning');
+  return n;
 }
 
 /** Duplique une semaine vers une autre (réutilisation, anti-feuille-blanche). @returns nb copiés. */
