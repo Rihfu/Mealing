@@ -82,14 +82,19 @@ function useToggle(onOptimistic?: (key: string) => void) {
     setAnimating((s) => new Set(s).add(line.key));
     startTransition(async () => {
       onOptimistic?.(line.key); // disparaît tout de suite (réconcilié à la révalidation)
-      // État coché unifié par identité de ligne (cf. fusion inter-sources).
-      const fd = new FormData();
-      fd.set('checked', String(checked));
-      fd.set('item_key', line.key);
-      await toggleCheckAction(fd);
+      try {
+        // État coché unifié par identité de ligne (cf. fusion inter-sources).
+        const fd = new FormData();
+        fd.set('checked', String(checked));
+        fd.set('item_key', line.key);
+        await toggleCheckAction(fd);
+      } catch {
+        // Réseau/serveur indisponible : ne PAS crasher la liste — la révalidation
+        // ci-dessous ramène l'état réel (la coche optimiste se réconcilie seule).
+      }
       // Recharge l'instantané AVANT de clore la transition → l'état optimiste se
       // réconcilie avec les données fraîches sans clignotement.
-      await refresh();
+      await refresh().catch(() => undefined);
       setAnimating((s) => {
         const n = new Set(s);
         n.delete(line.key);

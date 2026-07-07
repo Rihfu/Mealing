@@ -6,6 +6,7 @@ import {
   generateRecipeAction,
   saveGeneratedRecipeAction,
   type GenerateState,
+  type SaveDraftState,
 } from './actions';
 import type { RecipeDraft } from '@/lib/ai/generate-recipe';
 
@@ -81,6 +82,11 @@ export function GenerateForm() {
   const [edited, setEdited] = useState<EditableDraft | null>(null);
   const [shopPending, startShop] = useTransition();
   const [shopDone, setShopDone] = useState<string | null>(null);
+  // Enregistrement À ÉTAT : une erreur revient ici (brouillon intact), pas d'écran d'erreur.
+  const [saveState, saveAction, savePending] = useActionState<SaveDraftState | undefined, FormData>(
+    saveGeneratedRecipeAction,
+    undefined,
+  );
 
   // Nouveau brouillon généré → on repart de sa version éditable (ajustement de
   // state PENDANT le rendu, pattern React officiel — pas d'effet en cascade).
@@ -322,10 +328,11 @@ export function GenerateForm() {
               du stock). Tu pourras ajuster les liens en modifiant la recette.
             </p>
 
-            <form action={saveGeneratedRecipeAction}>
+            <form action={saveAction}>
               <input type="hidden" name="draft" value={JSON.stringify(savableDraft)} />
-              <button disabled={!canSave} className="btn-primary py-3 disabled:opacity-50">
-                Enregistrer cette recette
+              {saveState?.error && <p className="mb-2 text-sm font-semibold text-clay">{saveState.error}</p>}
+              <button disabled={!canSave || savePending} className="btn-primary py-3 disabled:opacity-50">
+                {savePending ? 'Enregistrement…' : 'Enregistrer cette recette'}
               </button>
             </form>
           </div>

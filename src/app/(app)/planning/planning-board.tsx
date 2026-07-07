@@ -175,7 +175,18 @@ export function PlanningBoard(props: BoardProps) {
   const start0 = new Date(`${weekStart}T00:00:00`);
   const dateFor = (d: number) => isoDate(addDays(start0, d));
   const refresh = () => router.refresh();
-  const run = (fn: () => Promise<unknown>) => startT(async () => { await fn(); refresh(); });
+  // Une action qui échoue (réseau, 429…) ne doit PAS crasher tout le planning vers
+  // l'error boundary : on informe via le toast existant et on réconcilie l'affichage.
+  const run = (fn: () => Promise<unknown>) =>
+    startT(async () => {
+      try {
+        await fn();
+      } catch {
+        showFlash('Action impossible (connexion instable ?) — réessaie.');
+      } finally {
+        refresh();
+      }
+    });
 
   const [view, setView] = useState<'agenda' | 'grid' | 'jour'>('agenda');
   const [focusDay, setFocusDay] = useState(todayIndex >= 0 ? todayIndex : 0);
@@ -287,9 +298,14 @@ export function PlanningBoard(props: BoardProps) {
   const duplicatePrev = () => {
     if (meals.length > 0 && !window.confirm('Cette semaine contient déjà des repas. Copier ceux de la semaine précédente par-dessus ?')) return;
     startCopy(async () => {
-      const n = await copyWeekAction(prevWeek, weekStart);
-      refresh();
-      showFlash(n > 0 ? `${n} repas copiés depuis la semaine précédente.` : 'Rien à copier dans la semaine précédente.');
+      try {
+        const n = await copyWeekAction(prevWeek, weekStart);
+        showFlash(n > 0 ? `${n} repas copiés depuis la semaine précédente.` : 'Rien à copier dans la semaine précédente.');
+      } catch {
+        showFlash('Copie impossible (connexion instable ?) — réessaie.');
+      } finally {
+        refresh();
+      }
     });
   };
   function openAi() {

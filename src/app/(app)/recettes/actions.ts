@@ -95,7 +95,14 @@ export async function createRecipeAction(
   const { supabase, userId } = await getAuthContext();
   if (!userId) redirect('/login');
 
-  const id = await createRecipe(supabase, parsed.input);
+  // Échec d'écriture (réseau/BDD) → erreur RENDUE au formulaire, jamais l'error
+  // boundary : l'utilisateur garde toute sa saisie. redirect() reste HORS du try.
+  let id: string;
+  try {
+    id = await createRecipe(supabase, parsed.input);
+  } catch {
+    return { error: 'Enregistrement impossible (connexion ?). Ta saisie est conservée — réessaie.' };
+  }
   // N0 : complète la nutrition des aliments nouvellement liés (best-effort, borné) —
   // la section Nutrition devient calculable sans autre geste. Jamais l'IA (n°3).
   try {
@@ -126,7 +133,12 @@ export async function updateRecipeAction(
   const { supabase, userId } = await getAuthContext();
   if (!userId) redirect('/login');
 
-  await updateRecipe(supabase, recipeId, parsed.input);
+  // Même protection que la création : l'échec préserve la saisie.
+  try {
+    await updateRecipe(supabase, recipeId, parsed.input);
+  } catch {
+    return { error: 'Enregistrement impossible (connexion ?). Ta saisie est conservée — réessaie.' };
+  }
   // N0 : complétion nutrition best-effort (cf. createRecipeAction).
   try {
     await completeRecipeNutrition(supabase, recipeId);

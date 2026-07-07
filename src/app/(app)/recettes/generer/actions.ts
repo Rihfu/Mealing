@@ -92,7 +92,19 @@ export async function addMissingToShoppingAction(
   return { added: rows.length };
 }
 
-export async function saveGeneratedRecipeAction(formData: FormData): Promise<void> {
+export interface SaveDraftState {
+  error?: string;
+}
+
+/**
+ * Enregistre le brouillon (édité) en vraie recette. Action À ÉTAT : tout échec
+ * (brouillon invalide, écriture BDD) revient au formulaire SANS navigation —
+ * le brouillon reste à l'écran, rien n'est perdu. redirect() hors des try.
+ */
+export async function saveGeneratedRecipeAction(
+  _prevState: SaveDraftState | undefined,
+  formData: FormData,
+): Promise<SaveDraftState> {
   const { supabase, userId } = await getAuthContext();
   if (!userId) redirect('/login');
 
@@ -100,10 +112,15 @@ export async function saveGeneratedRecipeAction(formData: FormData): Promise<voi
   try {
     draft = parseDraft(JSON.parse(String(formData.get('draft') ?? '{}')));
   } catch {
-    redirect('/recettes/generer?error=1');
+    return { error: 'Brouillon invalide — vérifie le nom et les ingrédients.' };
   }
 
-  const id = await createRecipe(supabase, draftToCreateInput(draft));
+  let id: string;
+  try {
+    id = await createRecipe(supabase, draftToCreateInput(draft));
+  } catch {
+    return { error: 'Enregistrement impossible (connexion ?). Le brouillon reste ici — réessaie.' };
+  }
   revalidatePath('/recettes');
   redirect(`/recettes/${id}`);
 }
