@@ -152,7 +152,8 @@ const ICONS: Record<string, string> = {
   more: '<circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/>',
   cal: '<rect x="3" y="5" width="18" height="16" rx="2.4"/><path d="M3 9.5h18M8 3v4M16 3v4"/>',
   pencil: '<path d="M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19z"/>',
-  grip: '<circle cx="9" cy="6" r="1.1"/><circle cx="15" cy="6" r="1.1"/><circle cx="9" cy="12" r="1.1"/><circle cx="15" cy="12" r="1.1"/><circle cx="9" cy="18" r="1.1"/><circle cx="15" cy="18" r="1.1"/>',
+  // Poignée ⠿ pleine — mêmes points que la poignée de glissement de Courses/Stock.
+  grip: '<circle cx="9" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.5" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.5" fill="currentColor" stroke="none"/>',
   replan: '<path d="M5 4v6.5A2.5 2.5 0 0 0 7.5 13H17"/><path d="M13 9l4 4-4 4"/>',
   info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11.5v5M12 8h.01"/>',
   bowl: '<path d="M3 11h18a9 9 0 0 1-18 0z"/><path d="M12 7c-1-2 .5-3.5 1.5-3-.5 1.5.5 2.5 1.5 2"/>',
@@ -537,7 +538,7 @@ export function PlanningBoard(props: BoardProps) {
             ) : (
               <button type="button" onClick={() => setOverlay({ type: 'ecart', d: meal.dayIndex, mealId: meal.id, name: meal.name })} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 8, border: '1px solid #E7E0D2', background: '#fff', color: '#6F6B61', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FF_SANS }}><Ic name="alert" size={13} color="#9A958A" />Signaler un écart</button>
             )}
-            <IconBtn name="replan" onClick={() => openMove(meal)} size={30} title="Déplacer vers un autre jour / créneau" />
+            <IconBtn name="grip" onClick={() => openMove(meal)} size={30} title="Déplacer vers un autre jour / créneau" />
             <IconBtn name="trash" onClick={() => removeMeal(meal.id)} size={30} title="Supprimer" color="#B0867C" border="#EEDFD8" />
           </div>
         </div>
