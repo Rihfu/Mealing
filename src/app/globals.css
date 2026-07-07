@@ -49,6 +49,15 @@
   --shadow-card: 0 4px 12px rgba(52, 50, 44, 0.08);
 }
 
+/* Échelle d'ombres alignée sur le design system (effects.css du handoff) —
+   variables `var()` seulement (référencées en style inline), sans clobberer les
+   utilitaires Tailwind `shadow-*`. shadow-sm == soft, shadow-md == card. */
+:root {
+  --shadow-sm: 0 1px 2px rgba(52, 50, 44, 0.06);
+  --shadow-md: 0 4px 12px rgba(52, 50, 44, 0.08);
+  --shadow-lg: 0 10px 28px rgba(52, 50, 44, 0.1);
+}
+
 @layer base {
   html {
     color-scheme: light;

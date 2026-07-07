@@ -1,144 +1,139 @@
 import { getAuthContext } from '@/lib/auth';
 import { aggregatePeriodNutrition, getNutritionProfile, getNutritionSettings, personaById } from '@/lib/core';
 import { addDays, isoDate, mondayOf } from '@/lib/dates';
-import { CoverageCard } from './coverage-card';
-import { ProfilePanel } from './setup-wizard';
+import { NutritionDashboard } from './dashboard';
+import { ActivationHero, NoPlanningState } from './states';
+import { ChildNutrition } from './child';
+import type { DayData, DayStatus, NutrientCard, NutritionSnapshot } from './view-types';
 
-const r1 = (n: number) => Math.round(n * 10) / 10;
+const WEEKDAYS = ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim'];
+const MONTHS = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+];
+
+/** Statut d'une valeur vis-à-vis de sa zone (répliqué serveur, cf. ui.tsx). */
+function statusOf(real: number, min: number | null, max: number | null): 'under' | 'in' | 'over' {
+  if (max != null && real > max) return 'over';
+  if (min != null && real < min) return 'under';
+  return 'in';
+}
 
 export default async function NutritionPage() {
   const { supabase, userId, profile } = await getAuthContext();
   const householdId = profile?.household_id as string;
   const profileId = userId as string;
 
-  const today = isoDate(new Date());
-  const weekStart = isoDate(mondayOf());
-  const weekEnd = isoDate(addDays(mondayOf(), 6));
-
-  const [dayAgg, weekAgg, { data: baseTypes }, nutritionProfile, settings] = await Promise.all([
-    aggregatePeriodNutrition(supabase, { householdId, profileId, from: today, to: today }),
-    aggregatePeriodNutrition(supabase, { householdId, profileId, from: weekStart, to: weekEnd }),
-    supabase.from('nutrient_type').select('code, name, unit, category').eq('is_base', true),
+  const [nutritionProfile, settings, { data: baseTypes }] = await Promise.all([
     getNutritionProfile(supabase, profileId),
     getNutritionSettings(supabase, profileId),
+    supabase.from('nutrient_type').select('code, name, unit, category').eq('is_base', true),
   ]);
 
-  const persona = personaById(nutritionProfile?.persona);
+  // Non activé → hero d'activation (jamais un tableau de zéros).
+  if (!nutritionProfile?.onboardedAt) {
+    return <ActivationHero />;
+  }
+
+  const persona = personaById(nutritionProfile.persona);
   const childMode = persona?.child === true;
 
-  const order = ['energy', 'macro', 'micro'];
-  const allTypes = (baseTypes ?? []).slice().sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
-  // Nutriments AFFICHÉS : les suivis quand ils existent (profile_nutrient_tracking,
-  // enfin branchée), sinon tous les nutriments de base. Mode enfant : JAMAIS l'énergie.
-  const trackedSet = new Set(settings.tracked);
-  const types = allTypes
-    .filter((t) => (trackedSet.size > 0 ? trackedSet.has(t.code) : true))
-    .filter((t) => !(childMode && t.code === 'energy_kcal'));
-
-  const goalByCode = new Map(settings.goals.map((g) => [g.code, g]));
-  const zoneLabel = (code: string) => {
-    const g = goalByCode.get(code);
-    if (!g) return '—';
-    if (g.min != null && g.max != null) return `${g.min}–${g.max}`;
-    if (g.min != null) return `≥ ${g.min}`;
-    if (g.max != null) return `≤ ${g.max}`;
-    return '—';
-  };
-  const overMax = (code: string, value: number) => {
-    const g = goalByCode.get(code);
-    return g?.max != null && value > g.max;
-  };
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-display text-2xl font-semibold tracking-tight">Nutrition</h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          {childMode
-            ? 'Variété et équilibre au fil du planning — sans comptage de calories.'
-            : 'Planifié, réel estimé et objectifs personnels. Ton suivi reste privé par défaut.'}
-        </p>
-      </div>
-
-      <CoverageCard coverage={weekAgg.coverage} />
-
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
-        <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-1">
-          <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
-            <div className="mb-3">
-              <h2 className="font-display text-lg font-semibold">Aujourd’hui</h2>
-              <p className="text-xs text-ink-soft">{today} · tient compte des écarts signalés.</p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-sm">
-                <thead>
-                  <tr className="text-left text-xs font-extrabold uppercase tracking-wide text-ink-soft">
-                    <th className="py-2">Nutriment</th>
-                    <th className="py-2 text-right">Planifié</th>
-                    <th className="py-2 text-right">Réel estimé</th>
-                    <th className="py-2 text-right">Objectif/j</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {types.map((t) => {
-                    const planned = dayAgg.planned[t.code] ?? 0;
-                    const real = dayAgg.real[t.code] ?? 0;
-                    const over = overMax(t.code, real);
-                    return (
-                      <tr key={t.code} className="border-t border-line">
-                        <td className="py-2">
-                          {t.name} <span className="text-ink-soft">({t.unit})</span>
-                        </td>
-                        <td className="py-2 text-right text-ink-soft">{r1(planned)}</td>
-                        <td className={`py-2 text-right font-bold ${over ? 'text-red-strong' : ''}`}>{r1(real)}</td>
-                        <td className="py-2 text-right text-ink-soft">{zoneLabel(t.code)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
-            <div className="mb-3">
-              <h2 className="font-display text-lg font-semibold">Cette semaine</h2>
-              <p className="text-xs text-ink-soft">
-                {weekStart} → {weekEnd}
-              </p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[460px] text-sm">
-                <thead>
-                  <tr className="text-left text-xs font-extrabold uppercase tracking-wide text-ink-soft">
-                    <th className="py-2">Nutriment</th>
-                    <th className="py-2 text-right">Planifié</th>
-                    <th className="py-2 text-right">Réel estimé</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {types.map((t) => (
-                    <tr key={t.code} className="border-t border-line">
-                      <td className="py-2">
-                        {t.name} <span className="text-ink-soft">({t.unit})</span>
-                      </td>
-                      <td className="py-2 text-right text-ink-soft">{r1(weekAgg.planned[t.code] ?? 0)}</td>
-                      <td className="py-2 text-right font-bold">{r1(weekAgg.real[t.code] ?? 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </div>
-
-        <ProfilePanel
-          profile={nutritionProfile}
-          goals={settings.goals}
-          tracked={settings.tracked}
-          types={allTypes.filter((t) => !(childMode && t.code === 'energy_kcal'))}
-        />
-      </div>
-    </div>
+  // 7 agrégations quotidiennes EN PARALLÈLE ; la semaine = somme des jours (pas
+  // d'appel supplémentaire), le détail par jour est disponible gratuitement.
+  const monday = mondayOf();
+  const dayDates = Array.from({ length: 7 }, (_, i) => isoDate(addDays(monday, i)));
+  const dailyAggs = await Promise.all(
+    dayDates.map((d) => aggregatePeriodNutrition(supabase, { householdId, profileId, from: d, to: d })),
   );
+
+  const weekReal: Record<string, number> = {};
+  const weekPlanned: Record<string, number> = {};
+  const coverage = { mealsCovered: 0, mealsTotal: 0, ingredientsWithData: 0, ingredientsTotal: 0 };
+  for (const agg of dailyAggs) {
+    for (const [k, v] of Object.entries(agg.real)) weekReal[k] = (weekReal[k] ?? 0) + v;
+    for (const [k, v] of Object.entries(agg.planned)) weekPlanned[k] = (weekPlanned[k] ?? 0) + v;
+    coverage.mealsCovered += agg.coverage.mealsCovered;
+    coverage.mealsTotal += agg.coverage.mealsTotal;
+    coverage.ingredientsWithData += agg.coverage.ingredientsWithData;
+    coverage.ingredientsTotal += agg.coverage.ingredientsTotal;
+  }
+
+  // Rien de planifié cette semaine → invitation vers le planning.
+  if (coverage.mealsTotal === 0) {
+    return <NoPlanningState />;
+  }
+
+  // Nutriments suivis → cartes. Avec objectif = jauge, sinon = observation.
+  const goalByCode = new Map(settings.goals.map((g) => [g.code, g]));
+  const order = ['energy', 'macro', 'micro'];
+  const allTypes = (baseTypes ?? [])
+    .slice()
+    .sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
+  const trackedSet = new Set(settings.tracked);
+  const cards: NutrientCard[] = allTypes
+    .filter((t) => (trackedSet.size > 0 ? trackedSet.has(t.code) : true))
+    .filter((t) => !(childMode && t.code === 'energy_kcal'))
+    .map((t) => {
+      const g = goalByCode.get(t.code);
+      const hasZone = g != null && (g.min != null || g.max != null);
+      return {
+        code: t.code,
+        name: t.name,
+        unit: t.unit,
+        category: t.category,
+        min: g?.min ?? null,
+        max: g?.max ?? null,
+        kind: hasZone ? 'gauge' : 'observation',
+      } satisfies NutrientCard;
+    });
+
+  const gaugeCards = cards.filter((c) => c.kind === 'gauge');
+  const todayIso = isoDate(new Date());
+
+  const days: DayData[] = dailyAggs.map((agg, i) => {
+    const hasMeals = agg.coverage.mealsTotal > 0;
+    let status: DayStatus = 'empty';
+    if (hasMeals) {
+      const evals = gaugeCards.map((c) => statusOf(agg.real[c.code] ?? 0, c.min, c.max));
+      status = evals.includes('over') ? 'over' : evals.every((s) => s === 'in') ? 'in' : 'under';
+    }
+    return {
+      date: dayDates[i],
+      weekdayShort: WEEKDAYS[i],
+      dayNum: addDays(monday, i).getDate(),
+      hasMeals,
+      status,
+      real: agg.real,
+      planned: agg.planned,
+    };
+  });
+
+  const weekEnd = addDays(monday, 6);
+  const weekLabel =
+    monday.getMonth() === weekEnd.getMonth()
+      ? `${monday.getDate()} – ${weekEnd.getDate()} ${MONTHS[weekEnd.getMonth()]}`
+      : `${monday.getDate()} ${MONTHS[monday.getMonth()]} – ${weekEnd.getDate()} ${MONTHS[weekEnd.getMonth()]}`;
+
+  const snapshot: NutritionSnapshot = {
+    weekLabel,
+    today: todayIso,
+    todayIndex: dayDates.indexOf(todayIso),
+    days,
+    weekReal,
+    weekPlanned,
+    cards,
+    coverage: {
+      pct: coverage.mealsTotal > 0 ? Math.round((coverage.mealsCovered / coverage.mealsTotal) * 100) : null,
+      ...coverage,
+    },
+    daysInZone: days.filter((d) => d.status === 'in').length,
+    daysWithMeals: days.filter((d) => d.hasMeals).length,
+    childMode,
+  };
+
+  if (childMode) {
+    return <ChildNutrition childName={profile?.display_name ?? null} />;
+  }
+
+  return <NutritionDashboard snapshot={snapshot} />;
 }
