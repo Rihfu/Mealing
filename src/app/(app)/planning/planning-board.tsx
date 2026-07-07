@@ -158,6 +158,9 @@ const ICONS: Record<string, string> = {
   bowl: '<path d="M3 11h18a9 9 0 0 1-18 0z"/><path d="M12 7c-1-2 .5-3.5 1.5-3-.5 1.5.5 2.5 1.5 2"/>',
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
+  // Poubelle « bac à couvercle » — même tracé que le TrashIcon partagé des Courses/Stock.
+  trash:
+    '<path d="M3 6h18"/><path d="M9 6V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6"/><path d="M5.6 6 6.8 19.2A2 2 0 0 0 8.8 21h6.4a2 2 0 0 0 2-1.8L18.4 6"/><path d="M10 10.5v6M14 10.5v6"/>',
 };
 
 function Ic({ name, size = 18, color = 'currentColor' }: { name: string; size?: number; color?: string }) {
