@@ -1,9 +1,11 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { useCachedResource } from '@/lib/offline/cache';
+import { getQueue, QUEUE_EVENT } from '@/lib/offline/queue';
 import { getCoursesSnapshotAction, type CoursesSnapshot } from './snapshot';
+import { COURSES_SNAPSHOT_KEY } from './offline-snapshot';
 import { CoursesRefreshProvider } from './courses-refresh';
 import { AddArticle } from './add-article';
 import { VoiceCapture } from '@/components/voice-capture';
@@ -57,9 +59,22 @@ function ClearCheckedButton({ refresh }: { refresh: () => Promise<void> }) {
  */
 export function CoursesView() {
   const { data, loading, refresh } = useCachedResource<CoursesSnapshot | null>(
-    'courses:snapshot',
+    COURSES_SNAPSHOT_KEY,
     getCoursesSnapshotAction,
   );
+
+  // Coches mises en file HORS-LIGNE (cf. useToggle) : quand la file se VIDE (flush du
+  // SyncManager au retour du réseau), on re-télécharge l'instantané — la revalidation
+  // déclenchée par l'événement `online` peut passer AVANT le flush et rester périmée.
+  useEffect(() => {
+    const onQueue = () => {
+      void getQueue().then((q) => {
+        if (q.length === 0) void refresh();
+      });
+    };
+    window.addEventListener(QUEUE_EVENT, onQueue);
+    return () => window.removeEventListener(QUEUE_EVENT, onQueue);
+  }, [refresh]);
 
   if (loading && !data) {
     return <p className="py-16 text-center text-sm text-ink-soft">Chargement de ta liste…</p>;

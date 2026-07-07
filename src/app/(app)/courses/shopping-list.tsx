@@ -13,6 +13,8 @@ import { RangerModal, BulkRangerModal, type CustomCategory } from './category-co
 import { pushErrorToast, pushUndoToast } from './undo-toast';
 import { useCoursesRefresh } from './courses-refresh';
 import { catView } from './rayons';
+import { enqueueOp } from '@/lib/offline/queue';
+import { applyToggleToCachedSnapshot } from './offline-snapshot';
 import {
   toggleCheckAction,
   setFoodCategoryAction,
@@ -82,15 +84,27 @@ function useToggle(onOptimistic?: (key: string) => void) {
     setAnimating((s) => new Set(s).add(line.key));
     startTransition(async () => {
       onOptimistic?.(line.key); // disparaît tout de suite (réconcilié à la révalidation)
-      try {
-        // État coché unifié par identité de ligne (cf. fusion inter-sources).
-        const fd = new FormData();
-        fd.set('checked', String(checked));
-        fd.set('item_key', line.key);
-        await toggleCheckAction(fd);
-      } catch {
-        // Réseau/serveur indisponible : ne PAS crasher la liste — la révalidation
-        // ci-dessous ramène l'état réel (la coche optimiste se réconcilie seule).
+      const online = typeof navigator === 'undefined' || navigator.onLine;
+      let synced = false;
+      if (online) {
+        try {
+          // État coché unifié par identité de ligne (cf. fusion inter-sources).
+          const fd = new FormData();
+          fd.set('checked', String(checked));
+          fd.set('item_key', line.key);
+          await toggleCheckAction(fd);
+          synced = true;
+        } catch {
+          // Serveur injoignable malgré le réseau : on bascule en mode file ci-dessous.
+        }
+      }
+      if (!synced) {
+        // HORS-LIGNE (ou serveur indisponible) : la coche est mise en FILE — rejouée
+        // au retour du réseau par le SyncManager global — et le cache local est
+        // patché pour que la révalidation (qui relit le cache hors-ligne) la reflète.
+        // Même mécanique que le mode magasin : rien n'est perdu, même après reload.
+        await enqueueOp({ kind: 'toggle', key: line.key, checked }).catch(() => undefined);
+        await applyToggleToCachedSnapshot(line.key, checked).catch(() => undefined);
       }
       // Recharge l'instantané AVANT de clore la transition → l'état optimiste se
       // réconcilie avec les données fraîches sans clignotement.

@@ -51,11 +51,17 @@ export function useCachedResource<T>(key: string, loader: () => Promise<T>): Cac
         setOffline(false);
         void idbSet(key, fresh);
       })
-      .catch(() => {
-        if (my !== reqId.current) return;
-        setOffline(true);
-        setLoading(false);
-      });
+      .catch(() =>
+        // Échec réseau alors que `navigator.onLine` disait vrai (serveur injoignable,
+        // wifi captif…) : repli sur le CACHE, comme hors-ligne — il peut avoir été
+        // patché entre-temps (coches mises en file, cf. courses/offline-snapshot).
+        idbGet<T>(key).then((cached) => {
+          if (my !== reqId.current) return;
+          if (cached !== undefined) setData(cached);
+          setOffline(true);
+          setLoading(false);
+        }),
+      );
   }, [key, loader]);
 
   useEffect(() => {
