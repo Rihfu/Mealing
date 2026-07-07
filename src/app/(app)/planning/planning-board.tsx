@@ -295,8 +295,17 @@ export function PlanningBoard(props: BoardProps) {
   const markLeftover = (mealId: string, value: boolean) => run(() => setMealLeftoverAction(mealId, value));
   const [flash, setFlash] = useState<string | null>(null);
   const showFlash = (msg: string) => { setFlash(msg); window.setTimeout(() => setFlash(null), 3200); };
+  // Confirmation EN PLACE (DA) — plus de window.confirm natif (P3) : si la semaine
+  // a déjà des repas, le 1er clic arme la confirmation, le 2ᵉ copie (auto-désarmé).
+  const [confirmCopy, setConfirmCopy] = useState(false);
   const duplicatePrev = () => {
-    if (meals.length > 0 && !window.confirm('Cette semaine contient déjà des repas. Copier ceux de la semaine précédente par-dessus ?')) return;
+    if (meals.length > 0 && !confirmCopy) {
+      setConfirmCopy(true);
+      showFlash('Cette semaine a déjà des repas — reclique « Copier quand même » pour ajouter ceux de la semaine précédente.');
+      window.setTimeout(() => setConfirmCopy(false), 6000);
+      return;
+    }
+    setConfirmCopy(false);
     startCopy(async () => {
       try {
         const n = await copyWeekAction(prevWeek, weekStart);
@@ -308,6 +317,7 @@ export function PlanningBoard(props: BoardProps) {
       }
     });
   };
+  const copyLabel = copyPending ? '…' : confirmCopy ? 'Copier quand même ?' : 'Dupliquer';
   function openAi() {
     setAiList(null);
     setOverlay({ type: 'ai' });
@@ -338,7 +348,7 @@ export function PlanningBoard(props: BoardProps) {
             <IconBtn name="cr" onClick={() => goWeek(nextWeek)} border="transparent" bg="transparent" size={30} title="Semaine suivante" />
           </div>
           {todayIndex < 0 ? <Btn label="Aujourd'hui" onClick={() => goWeek(thisWeek)} v="secondary" pad="9px 13px" minH={40} fs={13.5} icon="cal" is={15} /> : null}
-          <Btn label={copyPending ? '…' : 'Dupliquer'} onClick={duplicatePrev} v="soft" pad="9px 13px" minH={40} fs={13.5} icon="copy" is={15} disabled={copyPending} />
+          <Btn label={copyLabel} onClick={duplicatePrev} v={confirmCopy ? 'primary' : 'soft'} pad="9px 13px" minH={40} fs={13.5} icon="copy" is={15} disabled={copyPending} />
         </div>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: '#F1EBDD', border: '1px solid #E7E0D2', borderRadius: 11, padding: 3 }}>
           {seg('Agenda', 'list', view === 'agenda', () => setView('agenda'))}
@@ -711,7 +721,7 @@ export function PlanningBoard(props: BoardProps) {
             <div style={{ fontFamily: FF_DISPLAY, fontWeight: 600, fontSize: 14.5, padding: '0 6px', whiteSpace: 'nowrap' }}>{weekLabel}</div>
             <IconBtn name="cr" onClick={() => goWeek(nextWeek)} border="transparent" bg="transparent" size={30} />
           </div>
-          {todayIndex < 0 ? <Btn label="Auj." onClick={() => goWeek(thisWeek)} v="soft" pad="8px 11px" minH={38} fs={13} /> : <Btn label={copyPending ? '…' : 'Dupliquer'} onClick={duplicatePrev} v="soft" pad="8px 11px" minH={38} fs={13} icon="copy" is={14} disabled={copyPending} />}
+          {todayIndex < 0 ? <Btn label="Auj." onClick={() => goWeek(thisWeek)} v="soft" pad="8px 11px" minH={38} fs={13} /> : <Btn label={copyLabel} onClick={duplicatePrev} v={confirmCopy ? 'primary' : 'soft'} pad="8px 11px" minH={38} fs={13} icon="copy" is={14} disabled={copyPending} />}
         </div>
         <div style={{ display: 'flex', gap: 2, background: '#F1EBDD', border: '1px solid #E7E0D2', borderRadius: 11, padding: 3, marginBottom: 12 }}>{seg('Jour', 'sun', 'jour')}{seg('Semaine', 'list', 'semaine')}</div>
         <div style={{ display: 'flex', gap: 9, marginBottom: 14, overflowX: 'auto', padding: '0 0 2px' }}>

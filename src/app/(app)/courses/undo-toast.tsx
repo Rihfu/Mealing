@@ -11,18 +11,25 @@ import { useEffect, useState, useTransition } from 'react';
 interface Toast {
   id: number;
   message: string;
-  onUndo: () => Promise<void>;
+  /** Optionnel : sans onUndo, le toast est un simple message (info/erreur). */
+  onUndo?: () => Promise<void>;
+  tone?: 'default' | 'error';
 }
 
 let emit: ((t: Toast) => void) | null = null;
 let seq = 0;
-function pushToast(message: string, onUndo: () => Promise<void>) {
-  emit?.({ id: ++seq, message, onUndo });
+function pushToast(message: string, onUndo?: () => Promise<void>, tone: Toast['tone'] = 'default') {
+  emit?.({ id: ++seq, message, onUndo, tone });
 }
 
 /** Émet un toast « … · Annuler » depuis n'importe quel composant client (hôte unique monté). */
 export function pushUndoToast(message: string, onUndo: () => Promise<void>) {
   pushToast(message, onUndo);
+}
+
+/** Toast d'ERREUR (P1) : une mutation qui échoue ne doit être ni un crash ni un silence. */
+export function pushErrorToast(message: string) {
+  pushToast(message, undefined, 'error');
 }
 
 export function UndoToastHost() {
@@ -46,21 +53,27 @@ export function UndoToastHost() {
 
   return (
     <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2">
-      <div className="flex items-center gap-4 rounded-full border border-line bg-surface px-4 py-2 text-sm shadow-soft">
+      <div
+        className={`flex items-center gap-4 rounded-full border px-4 py-2 text-sm shadow-soft ${
+          toast.tone === 'error' ? 'border-clay bg-clay-tint text-ink' : 'border-line bg-surface'
+        }`}
+      >
         <span>{toast.message}</span>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() =>
-            startTransition(async () => {
-              await toast.onUndo();
-              setToast(null);
-            })
-          }
-          className="font-bold text-green-strong disabled:opacity-60"
-        >
-          {pending ? '…' : 'Annuler'}
-        </button>
+        {toast.onUndo && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                await toast.onUndo?.();
+                setToast(null);
+              })
+            }
+            className="font-bold text-green-strong disabled:opacity-60"
+          >
+            {pending ? '…' : 'Annuler'}
+          </button>
+        )}
       </div>
     </div>
   );

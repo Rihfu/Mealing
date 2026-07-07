@@ -82,6 +82,10 @@ export function GenerateForm() {
   const [edited, setEdited] = useState<EditableDraft | null>(null);
   const [shopPending, startShop] = useTransition();
   const [shopDone, setShopDone] = useState<string | null>(null);
+  // Champ CONTRÔLÉ : React 19 réinitialise les formulaires non contrôlés après une
+  // action — la demande serait perdue, alors qu'on veut pouvoir la retoucher
+  // (« pareil mais sans lait ») et régénérer sans tout retaper.
+  const [request, setRequest] = useState('');
   // Enregistrement À ÉTAT : une erreur revient ici (brouillon intact), pas d'écran d'erreur.
   const [saveState, saveAction, savePending] = useActionState<SaveDraftState | undefined, FormData>(
     saveGeneratedRecipeAction,
@@ -135,6 +139,8 @@ export function GenerateForm() {
             name="request"
             rows={8}
             required
+            value={request}
+            onChange={(e) => setRequest(e.target.value)}
             placeholder="Ex. un curry de pois chiches rapide pour 4, végétarien, sans noix"
             className="field-input resize-none text-sm"
           />

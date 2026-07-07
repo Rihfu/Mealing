@@ -10,7 +10,7 @@ import { useDndSensors } from '@/components/sortable';
 import { ProductIcon, ProvenanceBadge, type ProvenanceKey } from '@/lib/product-assets';
 import { UNIT_OPTIONS } from '@/lib/units';
 import { RangerModal, BulkRangerModal, type CustomCategory } from './category-controls';
-import { pushUndoToast } from './undo-toast';
+import { pushErrorToast, pushUndoToast } from './undo-toast';
 import { useCoursesRefresh } from './courses-refresh';
 import { catView } from './rayons';
 import {
@@ -292,10 +292,15 @@ function Row({
   const isEssential = line.sources.includes('recurring') || justPinned;
   const refresh = useCoursesRefresh();
   function pin() {
+    if (pinning) return; // anti double-clic (P6) : un 2ᵉ clic créerait un doublon d'essentiel.
     startPin(async () => {
-      await promoteToEssentialAction({ label: line.name, foodId: line.foodId, quantity: line.quantity, unit: line.unit });
-      setJustPinned(true);
-      await refresh();
+      try {
+        await promoteToEssentialAction({ label: line.name, foodId: line.foodId, quantity: line.quantity, unit: line.unit });
+        setJustPinned(true);
+        await refresh();
+      } catch {
+        pushErrorToast('Épinglage impossible (connexion ?) — réessaie.');
+      }
     });
   }
 
@@ -307,13 +312,17 @@ function Row({
   function saveQty() {
     const n = q.trim() === '' ? null : Number(q);
     startSave(async () => {
-      await updateManualItemAction({
-        id: line.manualId as string,
-        quantity: n != null && !Number.isNaN(n) ? n : null,
-        unit: u || null,
-      });
-      setEditing(false);
-      await refresh();
+      try {
+        await updateManualItemAction({
+          id: line.manualId as string,
+          quantity: n != null && !Number.isNaN(n) ? n : null,
+          unit: u || null,
+        });
+        setEditing(false);
+        await refresh();
+      } catch {
+        pushErrorToast('Modification impossible (connexion ?) — réessaie.');
+      }
     });
   }
 
@@ -775,21 +784,29 @@ export function ShoppingList({
     const inputs = lines.map((l) => ({ key: l.key, manualIds: l.manualIds, dismiss: !l.manualOnly }));
     const label = lines.length === 1 ? `« ${lines[0].name} » retiré` : `${lines.length} articles retirés`;
     startRemove(async () => {
-      const data = await removeLinesAction(inputs);
-      pushUndoToast(label, async () => {
-        await undoRemoveLinesAction(data);
+      try {
+        const data = await removeLinesAction(inputs);
+        pushUndoToast(label, async () => {
+          await undoRemoveLinesAction(data);
+          await refresh();
+        });
         await refresh();
-      });
-      await refresh();
+      } catch {
+        pushErrorToast('Retrait impossible (connexion ?) — rien n’a été retiré, réessaie.');
+      }
     });
   }
 
   function bulkEssentials() {
     const items = selectedLines.map((l) => ({ label: l.name, foodId: l.foodId, quantity: l.quantity, unit: l.unit }));
     startBulk(async () => {
-      await bulkPromoteEssentialsAction(items);
-      exitSelect();
-      await refresh();
+      try {
+        await bulkPromoteEssentialsAction(items);
+        exitSelect();
+        await refresh();
+      } catch {
+        pushErrorToast('Épinglage impossible (connexion ?) — réessaie.');
+      }
     });
   }
   function bulkDelete() {
@@ -799,9 +816,13 @@ export function ShoppingList({
   }
   async function bulkMove(categoryKey: string) {
     const items = selectedLines.map((l) => ({ label: l.name, foodId: l.foodId, iconSlug: l.iconSlug }));
-    await bulkSetCategoryAction(items, categoryKey);
-    exitSelect();
-    await refresh();
+    try {
+      await bulkSetCategoryAction(items, categoryKey);
+      exitSelect();
+      await refresh();
+    } catch {
+      pushErrorToast('Rangement impossible (connexion ?) — réessaie.');
+    }
   }
 
   // ----- Glisser-déposer @dnd-kit (parité Stock) : réordre d'une ligne dans son rayon,
@@ -868,7 +889,15 @@ export function ShoppingList({
             (idx.has(b.key) ? (idx.get(b.key) as number) : b.key === OTHER_KEY ? 2e9 : 1e9),
         ),
       );
-      startReorder(async () => { await reorderRayonsAction(newKeys); await refresh(); });
+      startReorder(async () => {
+        try {
+          await reorderRayonsAction(newKeys);
+        } catch {
+          pushErrorToast('Réordonnancement impossible (connexion ?) — réessaie.');
+        } finally {
+          await refresh().catch(() => undefined); // réconcilie l'affichage optimiste
+        }
+      });
       return;
     }
 
@@ -892,11 +921,16 @@ export function ShoppingList({
     const movedCategory = dragFromRayon.current != null && dragFromRayon.current !== rayonKey;
     dragFromRayon.current = null;
     startReorder(async () => {
-      if (movedCategory && line && rayonKey !== OTHER_KEY) {
-        await setFoodCategoryAction({ label: line.name, foodId: line.foodId, categoryKey: rayonKey, iconSlug: line.iconSlug });
+      try {
+        if (movedCategory && line && rayonKey !== OTHER_KEY) {
+          await setFoodCategoryAction({ label: line.name, foodId: line.foodId, categoryKey: rayonKey, iconSlug: line.iconSlug });
+        }
+        await reorderShoppingLinesAction(orderedKeys);
+      } catch {
+        pushErrorToast('Déplacement impossible (connexion ?) — réessaie.');
+      } finally {
+        await refresh().catch(() => undefined); // réconcilie l'affichage optimiste
       }
-      await reorderShoppingLinesAction(orderedKeys);
-      await refresh();
     });
   }
 

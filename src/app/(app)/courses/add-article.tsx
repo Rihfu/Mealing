@@ -34,8 +34,18 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
   const [quantity, setQuantity] = useState('');
   const [unit, setUnit] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Feedback après ajout (P4) : confirmer visiblement — sur mobile la liste mise à
+  // jour est souvent hors écran, sans message l'utilisateur doute que ça a marché.
+  const [feedback, setFeedback] = useState<{ text: string; ok: boolean } | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const refresh = useCoursesRefresh();
+
+  function flashFeedback(text: string, ok: boolean) {
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    setFeedback({ text, ok });
+    feedbackTimer.current = setTimeout(() => setFeedback(null), ok ? 2600 : 5000);
+  }
 
   // Anti-doublon / anti-surplus (G) : avertir si l'article est déjà sur la liste ou en stock.
   const warning = useMemo(() => {
@@ -115,7 +125,8 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
   }
 
   async function handleSubmit(formData: FormData) {
-    if (!String(formData.get('label') ?? '').trim()) return;
+    const label = String(formData.get('label') ?? '').trim();
+    if (!label) return;
     // Verrou : on fige la liste de suggestions avant de soumettre, pour qu'un
     // résultat tardif ne change pas la sélection / ne décale pas le clic.
     setSubmitting(true);
@@ -124,7 +135,11 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
     try {
       await addManualAction(formData);
       reset();
+      flashFeedback(`« ${label} » ajouté à la liste ✓`, true);
       await refresh();
+    } catch {
+      // Échec (réseau ?) : la saisie reste dans le formulaire — on informe, pas de crash.
+      flashFeedback('Ajout impossible (connexion ?) — ta saisie est conservée, réessaie.', false);
     } finally {
       setSubmitting(false);
     }
@@ -277,6 +292,16 @@ export function AddArticle({ onList = [], inStock = [] }: { onList?: ListRef[]; 
       <button className="btn-primary py-2.5 disabled:opacity-60" disabled={submitting}>
         {submitting ? 'Ajout…' : 'Ajouter à la liste'}
       </button>
+      {feedback && (
+        <p
+          role="status"
+          className={`rounded-xl px-3 py-2 text-xs font-bold ${
+            feedback.ok ? 'bg-sage-tint text-sage-deep' : 'bg-clay-tint text-ink'
+          }`}
+        >
+          {feedback.text}
+        </p>
+      )}
     </form>
   );
 }

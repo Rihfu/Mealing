@@ -10,6 +10,7 @@ import { VoiceCapture } from '@/components/voice-capture';
 import { transcribeTextAction, parseDictationAction } from '../voice-actions';
 import { addManualBulkAction } from './voice-actions';
 import { PurchaseCheckout } from './purchase-checkout';
+import { pushErrorToast } from './undo-toast';
 
 const COURSES_VOICE_TEXTS = {
   trigger: 'Dicter mes courses',
@@ -32,8 +33,12 @@ function ClearCheckedButton({ refresh }: { refresh: () => Promise<void> }) {
       disabled={pending}
       onClick={() =>
         start(async () => {
-          await clearCheckedAction();
-          await refresh();
+          try {
+            await clearCheckedAction();
+            await refresh();
+          } catch {
+            pushErrorToast('Décochage impossible (connexion ?) — réessaie.');
+          }
         })
       }
       className="text-xs font-bold text-green-strong disabled:opacity-60"

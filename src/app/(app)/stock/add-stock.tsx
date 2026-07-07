@@ -23,8 +23,17 @@ export function AddStock({ locationOptions }: { locationOptions: Array<{ key: st
   const [location, setLocation] = useState('');
   const [mode, setMode] = useState<Mode>('quantity');
   const [submitting, setSubmitting] = useState(false);
+  // Feedback après ajout (P4) : confirmation visible + erreur non-crashante.
+  const [feedback, setFeedback] = useState<{ text: string; ok: boolean } | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const refresh = useStockRefresh();
+
+  function flashFeedback(text: string, ok: boolean) {
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    setFeedback({ text, ok });
+    feedbackTimer.current = setTimeout(() => setFeedback(null), ok ? 2600 : 5000);
+  }
 
   useEffect(() => {
     if (selected || submitting || query.trim().length < 2) return;
@@ -75,16 +84,21 @@ export function AddStock({ locationOptions }: { locationOptions: Array<{ key: st
     formRef.current?.reset();
   }
   async function handleSubmit(formData: FormData) {
-    if (!String(formData.get('label') ?? '').trim()) return;
+    const label = String(formData.get('label') ?? '').trim();
+    if (!label) return;
     setSubmitting(true);
     setOpen(false);
     setSuggestions([]);
     try {
       const stockId = await addStockAction(formData);
       reset();
+      flashFeedback(`« ${label} » ajouté au stock ✓`, true);
       await refresh();
       // Lieu choisi → estimation auto de conservation en arrière-plan (best-effort, auto-gardée).
       if (stockId) estimateItemConservationAction(stockId).then((r) => { if (r.status === 'estimated') void refresh(); }).catch(() => {});
+    } catch {
+      // Échec (réseau ?) : la saisie reste — on informe, pas de crash (P4).
+      flashFeedback('Ajout impossible (connexion ?) — ta saisie est conservée, réessaie.', false);
     } finally {
       setSubmitting(false);
     }
@@ -196,6 +210,16 @@ export function AddStock({ locationOptions }: { locationOptions: Array<{ key: st
       <button type="submit" disabled={submitting} className="btn-primary py-2.5 disabled:opacity-60">
         {submitting ? 'Ajout…' : 'Ajouter au stock'}
       </button>
+      {feedback && (
+        <p
+          role="status"
+          className={`rounded-xl px-3 py-2 text-xs font-bold ${
+            feedback.ok ? 'bg-sage-tint text-sage-deep' : 'bg-clay-tint text-ink'
+          }`}
+        >
+          {feedback.text}
+        </p>
+      )}
     </form>
   );
 }
