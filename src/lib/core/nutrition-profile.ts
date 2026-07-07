@@ -357,6 +357,62 @@ export async function applyNutritionSetup(db: DB, profileId: string, input: Nutr
   }
 }
 
+/**
+ * Suit UN nutriment (ajout ciblé — ne touche pas aux autres suivis) avec une zone
+ * quotidienne optionnelle. Utilisé par l'agent IA (N3) : il CONFIGURE, il ne
+ * remplace pas tout le plan. Un profil enfant ne peut pas suivre l'énergie.
+ */
+export async function trackNutrient(
+  db: DB,
+  profileId: string,
+  input: { code: string; min?: number | null; max?: number | null },
+): Promise<void> {
+  if (input.code === 'energy_kcal') {
+    const { data } = await db.from('nutrition_profile').select('is_child').eq('profile_id', profileId).maybeSingle();
+    if ((data as { is_child?: boolean } | null)?.is_child) throw new Error('Pas de suivi calories pour un profil enfant.');
+  }
+  const { data: nt } = await db.from('nutrient_type').select('id').eq('code', input.code).maybeSingle();
+  if (!nt?.id) throw new Error(`Nutriment inconnu : ${input.code}`);
+
+  const up = await db
+    .from('profile_nutrient_tracking')
+    .upsert({ profile_id: profileId, nutrient_type_id: nt.id }, { onConflict: 'profile_id,nutrient_type_id', ignoreDuplicates: true });
+  if (up.error) throw new Error(up.error.message);
+
+  if (input.min != null || input.max != null) {
+    const del = await db
+      .from('profile_goal')
+      .delete()
+      .eq('profile_id', profileId)
+      .eq('nutrient_type_id', nt.id)
+      .eq('period', 'daily');
+    if (del.error) throw new Error(del.error.message);
+    const ins = await db.from('profile_goal').insert({
+      profile_id: profileId,
+      nutrient_type_id: nt.id,
+      period: 'daily',
+      target_min: input.min ?? null,
+      target_max: input.max ?? null,
+    });
+    if (ins.error) throw new Error(ins.error.message);
+  }
+}
+
+/** Arrête de suivre UN nutriment (retrait ciblé : suivi + objectif quotidien). */
+export async function untrackNutrient(db: DB, profileId: string, code: string): Promise<void> {
+  const { data: nt } = await db.from('nutrient_type').select('id').eq('code', code).maybeSingle();
+  if (!nt?.id) throw new Error(`Nutriment inconnu : ${code}`);
+  const delT = await db.from('profile_nutrient_tracking').delete().eq('profile_id', profileId).eq('nutrient_type_id', nt.id);
+  if (delT.error) throw new Error(delT.error.message);
+  const delG = await db
+    .from('profile_goal')
+    .delete()
+    .eq('profile_id', profileId)
+    .eq('nutrient_type_id', nt.id)
+    .eq('period', 'daily');
+  if (delG.error) throw new Error(delG.error.message);
+}
+
 /** Objectif quotidien courant d'un profil (zone min/max par code de nutriment). */
 export interface GoalZone {
   code: string;

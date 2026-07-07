@@ -58,6 +58,21 @@ import {
   updateRecipeFields,
   editRecipeIngredients,
   deleteRecipe,
+  // nutrition (N3 — l'agent CONFIGURE les suivis, ne calcule jamais une valeur)
+  listFacets,
+  getProfileFacets,
+  setProfileFacets,
+  getNutritionProfile,
+  getNutritionSettings,
+  recommendTracking,
+  getProfileHabits,
+  listHabitTypes,
+  addProfileHabit,
+  addCustomHabit,
+  removeProfileHabit,
+  trackNutrient,
+  untrackNutrient,
+  addFoodExtra,
 } from '@/lib/core';
 import { categoryDef, categoryLabel, CATEGORY_ORDER } from '@/lib/product-assets';
 import { isoDate, mondayOf, addDays } from '@/lib/dates';
@@ -149,6 +164,20 @@ const WRITE_SCHEMAS = {
     update: z.array(z.object({ name: z.string().min(1), quantity: z.number().optional(), unit: z.string().optional(), newName: z.string().optional() })).optional(),
   }),
   delete_recipe: z.object({ recipeName: z.string().min(1) }),
+  // nutrition (N3) — l'agent configure, jamais il ne calcule une valeur (n°3).
+  set_facets: z.object({ facets: z.array(z.string().min(1)) }),
+  track_nutrient: z.object({ code: z.string().min(1), min: z.number().optional(), max: z.number().optional() }),
+  untrack_nutrient: z.object({ code: z.string().min(1) }),
+  add_habit: z.object({ habitKey: z.string().min(1) }),
+  add_custom_habit: z.object({
+    label: z.string().min(1),
+    direction: z.enum(['min', 'max']),
+    targetCount: z.number().int().positive(),
+    period: z.enum(['day', 'week']),
+    matchTags: z.array(z.enum(['poisson_gras', 'legumineuse', 'fruit', 'legume', 'noix_graine', 'source_collagene', 'fermente'])).min(1),
+  }),
+  remove_habit: z.object({ idOrLabel: z.string().min(1) }),
+  log_extra: z.object({ label: z.string().min(1), quantity: z.number().positive() }),
 } as const;
 
 type WriteName = keyof typeof WRITE_SCHEMAS;
@@ -194,6 +223,7 @@ const READ_TOOLS: ToolDefinition[] = [
   { name: 'get_recipe', description: 'Détail d’une recette (par nom) : ingrédients + couverture stock (en stock / insuffisant / absent).', parameters: obj({ recipeName: str() }, ['recipeName']) },
   { name: 'list_recipe_groups', description: 'Groupes de recettes du foyer (nom + nombre de recettes).', parameters: obj({}) },
   { name: 'get_planning', description: 'Repas planifiés d’une semaine avec leur `id` (pour agir : déplacer/retirer/écart/reste). weekStart optionnel (YYYY-MM-DD, un jour de la semaine voulue) — défaut = semaine en cours. Renvoie aussi les jours hors-plan.', parameters: obj({ weekStart: str('YYYY-MM-DD (optionnel)') }) },
+  { name: 'get_tracking_plan', description: 'Plan de suivi NUTRITION personnel de l’utilisateur : facettes cochées, nutriments suivis (avec zones), habitudes suivies (avec id), habitudes disponibles au catalogue et recommandations non suivies (avec leur pourquoi). À lire AVANT de configurer un suivi.', parameters: obj({}) },
 ];
 
 const WRITE_TOOLS: ToolDefinition[] = [
@@ -233,6 +263,13 @@ const WRITE_TOOLS: ToolDefinition[] = [
   { name: 'save_recipe', description: 'Enregistre une NOUVELLE recette dans la bibliothèque (ex. une suggestion à partir du stock). Fournis nom + ingredients [{name, quantity, unit}] + steps. Les ingrédients sont reliés au catalogue ; la nutrition est calculée depuis la base — n’invente JAMAIS de valeurs nutritionnelles.', parameters: obj({ name: str(), description: str(), servings: num(), prepTimeMin: num(), cookTimeMin: num(), ingredients: { type: 'array', items: obj({ name: str(), quantity: num(), unit: str() }, ['name']) }, steps: { type: 'array', items: str() }, tags: { type: 'array', items: str() } }, ['name', 'ingredients']) },
   { name: 'edit_recipe_ingredients', description: 'Modifie les INGRÉDIENTS d’une recette existante (sans tout remplacer) : `add` [{name,quantity,unit}], `remove` [noms], `update` [{name, quantity, unit, newName}]. Cible chaque ingrédient par son NOM. Les ajouts/renommages sont reliés au catalogue.', parameters: obj({ recipeName: str(), add: { type: 'array', items: obj({ name: str(), quantity: num(), unit: str() }, ['name']) }, remove: { type: 'array', items: str() }, update: { type: 'array', items: obj({ name: str(), quantity: num(), unit: str(), newName: str() }, ['name']) } }, ['recipeName']) },
   { name: 'delete_recipe', description: 'SUPPRIME définitivement une recette (par nom). Action destructive → toujours confirmée par l’utilisateur. Les repas déjà planifiés conservent leur nom (recipe_id passe à null).', parameters: obj({ recipeName: str() }, ['recipeName']) },
+  { name: 'set_facets', description: 'Remplace les facettes du profil nutrition (clés de get_tracking_plan). Les recommandations se recalculent.', parameters: obj({ facets: { type: 'array', items: str() } }, ['facets']) },
+  { name: 'track_nutrient', description: 'Suit un NUTRIMENT (code de get_tracking_plan, ex. protein/fiber/iron) avec une zone quotidienne optionnelle (min/max). N’invente JAMAIS une cible : propose celle des recommandations, ou celle donnée par l’utilisateur (médecin/coach).', parameters: obj({ code: str(), min: num(), max: num() }, ['code']) },
+  { name: 'untrack_nutrient', description: 'Arrête de suivre un nutriment (code de get_tracking_plan).', parameters: obj({ code: str() }, ['code']) },
+  { name: 'add_habit', description: 'Suit une HABITUDE du catalogue (habitKey de get_tracking_plan, ex. poisson_gras/legumineuse).', parameters: obj({ habitKey: str() }, ['habitKey']) },
+  { name: 'add_custom_habit', description: 'Crée une habitude PERSONNALISÉE comptée depuis le planning : direction (min = au moins / max = au plus), N fois par jour/semaine, sur des groupes d’aliments (tags : poisson_gras, legumineuse, fruit, legume, noix_graine, source_collagene, fermente).', parameters: obj({ label: str(), direction: { type: 'string', enum: ['min', 'max'] }, targetCount: num(), period: { type: 'string', enum: ['day', 'week'] }, matchTags: { type: 'array', items: str() } }, ['label', 'direction', 'targetCount', 'period', 'matchTags']) },
+  { name: 'remove_habit', description: 'Retire une habitude suivie (id OU libellé de get_tracking_plan).', parameters: obj({ idOrLabel: str() }, ['idOrLabel']) },
+  { name: 'log_extra', description: 'Enregistre un EXTRA hors-plan mangé par l’utilisateur (aliment + quantité en g/ml) — compté dans son réel estimé. Pour « j’ai mangé un yaourt » / « j’ai grignoté 50 g de chips ».', parameters: obj({ label: str(), quantity: num('quantité en unité de base (g/ml)') }, ['label', 'quantity']) },
 ];
 
 /* --------------------------- Lectures (exécutées) --------------------------- */
@@ -447,6 +484,47 @@ async function runReadTool(ctx: Ctx, name: string, args: Record<string, unknown>
         jours_hors_plan: ((offRes.data ?? []) as Array<{ off_date: string }>).map((o) => o.off_date),
       });
     }
+    case 'get_tracking_plan': {
+      // Plan de suivi PERSONNEL (RLS) — l'agent lit, propose, ne calcule rien (n°3).
+      if (!ctx.profileId) return JSON.stringify({ erreur: 'profil inconnu' });
+      const pid = ctx.profileId;
+      const [facetDefs, selected, nutritionProfile, settings, habits, habitTypes, typesRes] = await Promise.all([
+        listFacets(ctx.db),
+        getProfileFacets(ctx.db, pid),
+        getNutritionProfile(ctx.db, pid),
+        getNutritionSettings(ctx.db, pid),
+        getProfileHabits(ctx.db, pid),
+        listHabitTypes(ctx.db),
+        ctx.db.from('nutrient_type').select('code, name, unit').eq('is_base', true),
+      ]);
+      const types = (typesRes.data ?? []) as Array<{ code: string; name: string; unit: string }>;
+      const typeByCode = new Map(types.map((t) => [t.code, t]));
+      const goalByCode = new Map(settings.goals.map((g) => [g.code, g]));
+      const age = nutritionProfile?.birthYear ? Math.max(1, new Date().getFullYear() - nutritionProfile.birthYear) : null;
+      const recos = await recommendTracking(ctx.db, {
+        facets: selected,
+        age,
+        sex: nutritionProfile?.sex ?? null,
+        isChild: nutritionProfile?.isChild ?? false,
+        excludeNutrients: settings.tracked,
+        excludeHabits: habits.map((h) => h.habitKey ?? '').filter(Boolean),
+      });
+      return JSON.stringify({
+        active: !!nutritionProfile?.onboardedAt,
+        mode_enfant: nutritionProfile?.isChild ?? false,
+        facettes_cochees: selected,
+        facettes_disponibles: facetDefs.map((f) => ({ key: f.key, label: f.label, groupe: f.groupe })),
+        nutriments_suivis: settings.tracked.map((code) => {
+          const g = goalByCode.get(code);
+          const t = typeByCode.get(code);
+          return { code, nom: t?.name ?? code, unite: t?.unit ?? '', zone_min: g?.min ?? null, zone_max: g?.max ?? null };
+        }),
+        nutriments_disponibles: types.map((t) => t.code),
+        habitudes_suivies: habits.map((h) => ({ id: h.id, habitKey: h.habitKey, libelle: h.label, direction: h.direction, cible: h.targetCount, periode: h.period })),
+        habitudes_catalogue: habitTypes.map((h) => ({ habitKey: h.key, libelle: h.label, repere: `${h.target_count}×/${h.period === 'week' ? 'semaine' : 'jour'}` })),
+        recommandations_non_suivies: recos.map((r) => ({ type: r.kind, code: r.code, libelle: r.label, pourquoi: r.why })),
+      });
+    }
     default:
       return JSON.stringify({ erreur: 'outil de lecture inconnu' });
   }
@@ -545,6 +623,23 @@ function summarize(name: WriteName, a: Record<string, unknown>): string {
     }
     case 'delete_recipe':
       return `Supprimer définitivement la recette « ${a.recipeName} »`;
+    case 'set_facets':
+      return `Mettre à jour ton profil nutrition (${(a.facets as string[]).length} facette(s))`;
+    case 'track_nutrient': {
+      const zone =
+        a.min != null && a.max != null ? ` (zone ${a.min}–${a.max})` : a.min != null ? ` (≥ ${a.min})` : a.max != null ? ` (≤ ${a.max})` : '';
+      return `Suivre le nutriment « ${a.code} »${zone}`;
+    }
+    case 'untrack_nutrient':
+      return `Arrêter de suivre « ${a.code} »`;
+    case 'add_habit':
+      return `Suivre l’habitude « ${a.habitKey} »`;
+    case 'add_custom_habit':
+      return `Créer le repère « ${a.label} » (${a.direction === 'min' ? 'au moins' : 'au plus'} ${a.targetCount}× / ${a.period === 'week' ? 'semaine' : 'jour'})`;
+    case 'remove_habit':
+      return `Retirer l’habitude « ${a.idOrLabel} »`;
+    case 'log_extra':
+      return `Noter un extra : « ${a.label} » (${a.quantity} g/ml)`;
   }
 }
 
@@ -560,6 +655,7 @@ Pour « prépare/complète ma liste » : lis la liste + les essentiels + (si dem
 Pour le STOCK : lis get_stock (ids), get_expiring (ce qui périme), list_locations (clés de lieux), puis PROPOSE des écritures : ranger (set_stock_location), marquer entamé (mark_stock_opened), consommer (decrement_stock), ajouter (add_stock_item), estimer la conservation (estimate_conservation). « Jeter » (discard_stock_item) = gâché/périmé → compte dans le GASPILLAGE ; « retirer » (remove_stock_item) = correction/doublon, sans gaspillage — ne les confonds pas.
 Pour les RECETTES : « que puis-je cuisiner ? » → recommend_recipes ne renvoie QUE les recettes DÉJÀ enregistrées (les plus réalisables avec le stock + manquants) ; détail d'une recette → get_recipe. Tu peux AUSSI INVENTER de NOUVELLES recettes qui ne sont pas dans la bibliothèque : lis get_stock, puis propose 1 à 3 idées réalistes en PRIVILÉGIANT les ingrédients disponibles (indique pour chacune les ingrédients à acheter en plus). Si l'utilisateur veut en garder une, utilise save_recipe pour l'enregistrer (nom + ingrédients + étapes ; la nutrition est calculée depuis le catalogue, jamais inventée par toi). Tu peux aussi : créer/renommer/supprimer un groupe (create_recipe_group / rename_recipe_group / delete_recipe_group), ranger une recette dans un groupe (assign_recipe_to_group), modifier les méta d'une recette (update_recipe : nom/portions/temps/description), et modifier ses INGRÉDIENTS (edit_recipe_ingredients : add/remove/update ciblés par nom — lis get_recipe avant pour connaître les ingrédients actuels). Désigne toujours recettes et groupes par leur NOM. Tu peux SUPPRIMER une recette (delete_recipe) — action destructive, mais comme toute écriture elle est confirmée avant d'être appliquée ; ne le fais que si c'est clairement demandé.
 Pour le PLANNING : lis get_planning (ids des repas + jours hors-plan ; weekStart optionnel pour une autre semaine), puis PROPOSE : planifier (add_meal : recette OU description, servings = portions, producesLeftover si batch), déplacer (move_meal), retirer (remove_meal), signaler un écart (set_meal_deviation : sauté / différent+ate) ou l'annuler (clear_meal_deviation), marquer/réactiver une journée hors-plan (mark_day_off / unmark_day_off), gérer les restes (set_meal_leftover puis reassign_leftover : « tel quel » sans name, ou plat improvisé avec name — aucun achat généré), dupliquer une semaine (copy_week). Pour « que planifier cette semaine ? » : croise recommend_recipes (réalisables avec le stock) avec get_planning (créneaux vides) et propose des add_meal. Toute écriture sur un repas précis (déplacer/retirer/écart/reste) exige son \`id\` EXACT renvoyé par get_planning — appelle-le d'abord ; n'invente jamais un id.
+Pour la NUTRITION : lis get_tracking_plan (facettes, nutriments suivis + zones, habitudes suivies, catalogue, recommandations avec leur pourquoi), puis PROPOSE : suivre/arrêter un nutriment (track_nutrient / untrack_nutrient — n'invente JAMAIS une cible chiffrée : reprends celle des recommandations ou celle que l'utilisateur te donne, ex. son médecin), suivre une habitude du catalogue (add_habit), créer un repère personnalisé compté depuis le planning (add_custom_habit : « fermentés au moins 3×/semaine »), retirer une habitude (remove_habit), mettre à jour les facettes (set_facets). Si l'utilisateur dit avoir mangé quelque chose HORS planning (« j'ai pris un yaourt »), propose log_extra (quantité en g/ml — demande-la si absente). Une donnée introuvable (collagène en mg…) : explique honnêtement qu'aucune base ne la couvre et propose l'équivalent en HABITUDE. Le plan de suivi est STRICTEMENT PERSONNEL — n'en parle jamais comme d'une donnée du foyer.
 IMPORTANT : toute écriture visant un article précis du stock (jeter/retirer/ranger/consommer/marquer entamé) exige son \`id\` EXACT (un UUID) renvoyé par get_stock ou get_expiring. Appelle TOUJOURS get_stock juste avant pour récupérer cet id ; n'invente JAMAIS un id et n'utilise pas le nom de l'article comme id.
 N'ÉCRIS JAMAIS l'id (UUID) dans tes réponses à l'utilisateur : il sert uniquement aux appels d'outils, en interne. Dans le chat, désigne toujours les articles par leur NOM (« le saumon »), jamais par leur UUID — c'est plus naturel.
 Réponds en français, de façon concise. Si une action te manque d'info, demande-la plutôt que d'inventer.
@@ -572,7 +668,8 @@ export async function runAgent(
 ): Promise<AgentResult> {
   const provider = getAIProvider();
   if (!provider.chatWithTools) return { type: 'reply', message: "L'agent à outils n'est pas disponible." };
-  const ctx: Ctx = { db, householdId: params.householdId };
+  // profileId : requis par les lectures nutrition (plan de suivi PERSONNEL, RLS).
+  const ctx: Ctx = { db, householdId: params.householdId, profileId: params.profileId };
 
   // Historique SCOPÉ à la conversation courante (#3) : l'agent ne mélange plus toutes les
   // conversations du profil. Borné par la limite de messages de la conversation (#4).
@@ -1045,6 +1142,81 @@ async function executeOne(ctx: Ctx, action: ProposedAction): Promise<string> {
       if (!rec) return `Recette « ${a.recipeName} » introuvable.`;
       await deleteRecipe(db, rec.id);
       return `Recette « ${rec.name} » supprimée.`;
+    }
+
+    /* ------------------------- Nutrition (N3) ------------------------- */
+    // Toutes les écritures nutrition sont PERSONNELLES (profileId requis, RLS perso).
+    case 'set_facets': {
+      if (!ctx.profileId) return 'Profil inconnu — impossible de configurer la nutrition.';
+      const valid = new Set((await listFacets(db)).map((f) => f.key));
+      const keys = (a.facets as string[]).filter((k) => valid.has(k));
+      await setProfileFacets(db, ctx.profileId, keys);
+      return `Profil nutrition mis à jour (${keys.length} facette(s)).`;
+    }
+    case 'track_nutrient': {
+      if (!ctx.profileId) return 'Profil inconnu — impossible de configurer la nutrition.';
+      try {
+        await trackNutrient(db, ctx.profileId, {
+          code: String(a.code),
+          min: (a.min as number | undefined) ?? null,
+          max: (a.max as number | undefined) ?? null,
+        });
+      } catch (e) {
+        return e instanceof Error ? e.message : 'Suivi impossible.';
+      }
+      return `Nutriment « ${a.code} » suivi.`;
+    }
+    case 'untrack_nutrient': {
+      if (!ctx.profileId) return 'Profil inconnu — impossible de configurer la nutrition.';
+      try {
+        await untrackNutrient(db, ctx.profileId, String(a.code));
+      } catch (e) {
+        return e instanceof Error ? e.message : 'Retrait impossible.';
+      }
+      return `Suivi « ${a.code} » retiré.`;
+    }
+    case 'add_habit': {
+      if (!ctx.profileId) return 'Profil inconnu — impossible de configurer la nutrition.';
+      try {
+        await addProfileHabit(db, ctx.profileId, String(a.habitKey));
+      } catch (e) {
+        return e instanceof Error ? e.message : 'Ajout impossible.';
+      }
+      return `Habitude « ${a.habitKey} » suivie.`;
+    }
+    case 'add_custom_habit': {
+      if (!ctx.profileId) return 'Profil inconnu — impossible de configurer la nutrition.';
+      await addCustomHabit(db, ctx.profileId, {
+        label: String(a.label),
+        direction: a.direction as 'min' | 'max',
+        targetCount: a.targetCount as number,
+        period: a.period as 'day' | 'week',
+        matchTags: a.matchTags as string[],
+      });
+      return `Repère « ${a.label} » créé — compté depuis le planning.`;
+    }
+    case 'remove_habit': {
+      if (!ctx.profileId) return 'Profil inconnu — impossible de configurer la nutrition.';
+      const habits = await getProfileHabits(db, ctx.profileId);
+      const q = normName(String(a.idOrLabel));
+      const matches = habits.filter(
+        (h) => h.id === a.idOrLabel || h.habitKey === a.idOrLabel || normName(h.label).includes(q) || q.includes(normName(h.label)),
+      );
+      if (matches.length === 0) return `Habitude « ${a.idOrLabel} » introuvable.`;
+      if (matches.length > 1) return `Plusieurs habitudes correspondent à « ${a.idOrLabel} » — précise laquelle.`;
+      await removeProfileHabit(db, ctx.profileId, matches[0].id);
+      return `Habitude « ${matches[0].label} » retirée.`;
+    }
+    case 'log_extra': {
+      if (!ctx.profileId) return 'Profil inconnu — impossible de noter un extra.';
+      const label = String(a.label);
+      // Résolution catalogue (même chemin que la saisie manuelle) : lien par libellé,
+      // sinon création d'une fiche (nom/rayon/tags IA best-effort — nutrition fournisseur).
+      let foodId = await findCatalogFoodIdByLabel(db, label);
+      if (!foodId) foodId = await getOrCreateCatalogFood(db, { label });
+      if (!foodId) return `Aliment « ${label} » introuvable.`;
+      await addFoodExtra(db, ctx.profileId, { foodId, quantity: a.quantity as number });
+      return `Extra « ${label} » noté (${a.quantity} g/ml) — compté dans ton réel.`;
     }
   }
 }

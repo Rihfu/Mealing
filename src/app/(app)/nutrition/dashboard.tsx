@@ -21,7 +21,9 @@ import {
   Settings2,
   Sparkles,
 } from 'lucide-react';
-import { GaugeCard, HabitCard, ObservationCard, type GaugeCardData } from './ui';
+import { GaugeCard, HabitCard, ObservationCard, gaugeStatus, type GaugeCardData } from './ui';
+import { GapIdeas } from './suggestions';
+import { ExtrasButton } from './extras';
 import { repairNutritionDataAction } from './actions';
 import type { DayData, NutrientCard, NutritionSnapshot } from './view-types';
 
@@ -58,6 +60,7 @@ export function NutritionDashboard({ snapshot }: { snapshot: NutritionSnapshot }
           ))}
         </div>
         <span className="hidden text-sm font-bold text-ink-soft sm:inline">{snapshot.weekLabel}</span>
+        <ExtrasButton />
         <Link
           href="/nutrition/suivis"
           className="inline-flex h-11 items-center gap-2 rounded-xl border-[1.5px] border-sage bg-surface px-4 text-sm font-bold text-sage-deep transition-colors hover:bg-sage-tint/40"
@@ -75,14 +78,29 @@ export function NutritionDashboard({ snapshot }: { snapshot: NutritionSnapshot }
             <CompactCoverageCard snapshot={snapshot} />
           </div>
 
-          {/* Cartes de suivi */}
+          {/* Cartes de suivi — sous une carte « en chemin », des idées actionnables (N3). */}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {gaugeCards.map((c) => (
-              <GaugeCard key={c.code} data={weekGaugeData(c, snapshot, eatingDays)} />
-            ))}
-            {snapshot.habitCards.map((h) => (
-              <HabitCard key={h.name} data={h} />
-            ))}
+            {gaugeCards.map((c) => {
+              const data = weekGaugeData(c, snapshot, eatingDays);
+              const under = gaugeStatus(data.real, data.min, data.max) === 'under';
+              return (
+                <GaugeCard
+                  key={c.code}
+                  data={data}
+                  footer={under ? <GapIdeas kind="nutrient" code={c.code} unit={c.unit} /> : undefined}
+                />
+              );
+            })}
+            {snapshot.habitCards.map((h) => {
+              const missing = h.direction === 'min' && h.done + h.upcoming < h.target;
+              return (
+                <HabitCard
+                  key={h.name}
+                  data={h}
+                  footer={missing && h.habitId ? <GapIdeas kind="habit" habitId={h.habitId} /> : undefined}
+                />
+              );
+            })}
             {observationCards.map((c) => (
               <ObservationCard
                 key={c.code}

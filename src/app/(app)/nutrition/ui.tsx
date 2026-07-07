@@ -199,8 +199,8 @@ export interface GaugeCardData {
   note?: string;
 }
 
-/** Carte de suivi CHIFFRÉ — jauge vers zone cible. */
-export function GaugeCard({ data }: { data: GaugeCardData }) {
+/** Carte de suivi CHIFFRÉ — jauge vers zone cible. `footer` = zone actionnable (N3). */
+export function GaugeCard({ data, footer }: { data: GaugeCardData; footer?: React.ReactNode }) {
   const { Icon, tint } = nutrientVisual(data.code);
   const status = gaugeStatus(data.real, data.min, data.max);
   const valueColor = status === 'in' ? 'text-green-strong' : status === 'over' ? 'text-clay' : '';
@@ -247,6 +247,7 @@ export function GaugeCard({ data }: { data: GaugeCardData }) {
           {data.note ?? 'Au-dessus du repère — ça se lisse sur la semaine, rien à corriger.'}
         </div>
       )}
+      {footer}
     </div>
   );
 }
@@ -254,7 +255,7 @@ export function GaugeCard({ data }: { data: GaugeCardData }) {
 /* ----------------------------- Habitude ----------------------------- */
 
 /** Carte de suivi d'HABITUDE — occurrences comptées depuis le planning vers un repère. */
-export function HabitCard({ data }: { data: HabitCardData }) {
+export function HabitCard({ data, footer }: { data: HabitCardData; footer?: React.ReactNode }) {
   const { Icon, tint } = nutrientVisual(data.code);
   const per = data.period === 'week' ? 'semaine' : 'jour';
   const dirLabel = data.direction === 'min' ? 'au moins' : 'au plus';
@@ -315,6 +316,7 @@ export function HabitCard({ data }: { data: HabitCardData }) {
           {data.upcoming > 0 ? `dont ${data.upcoming} à venir — ${data.upcomingLabel ?? 'planifié'}` : (data.doneLabel ?? 'sur le repère — tout va bien')}
         </span>
       </div>
+      {footer}
     </div>
   );
 }

@@ -12,12 +12,22 @@ import {
   addProfileHabit,
   addCustomHabit,
   removeProfileHabit,
+  getProfileHabits,
+  suggestRecipesForNutrient,
+  suggestRecipesForHabit,
+  searchFoodCatalog,
+  listExtras,
+  addFoodExtra,
+  removeExtra,
   type ComputeTargetsInput,
   type NutritionSetupInput,
   type TargetZone,
   type TrackingSuggestion,
+  type RecipeSuggestion,
+  type ExtraItem,
   type Sex,
 } from '@/lib/core';
+import { isoDate } from '@/lib/dates';
 
 /** Calcule les cibles PROPOSÉES pour l'écran 3 du wizard (référence curée / formule — jamais l'IA). */
 export async function computeTargetsAction(input: ComputeTargetsInput): Promise<TargetZone[]> {
@@ -160,7 +170,9 @@ export async function applyFacetPlanAction(input: ApplyFacetPlanInput): Promise<
   });
   for (const key of input.habitKeys) await addProfileHabit(supabase, userId, key);
 
-  revalidatePath('/nutrition');
+  // PAS de revalidatePath ici : il re-rendrait la route courante (/nutrition/activer),
+  // dont le garde « déjà activé » redirigerait vers /nutrition — la cérémonie de fin
+  // (écran couverture) serait sautée. /nutrition est dynamique : rendu frais au push.
   return { ok: true };
 }
 
@@ -202,6 +214,68 @@ export async function addCustomHabitAction(input: {
   const { supabase, userId } = await getAuthContext();
   if (!userId) return { ok: false };
   await addCustomHabit(supabase, userId, input);
+  revalidatePath('/nutrition');
+  return { ok: true };
+}
+
+/* ----------------- N3 — boucle actionnable & extras ----------------- */
+
+/** Idées de recettes pour combler un GAP de nutriment (riches par portion + stock). */
+export async function suggestForGapAction(nutrientCode: string): Promise<RecipeSuggestion[]> {
+  const { supabase, userId, profile } = await getAuthContext();
+  if (!userId || !profile?.household_id) return [];
+  return suggestRecipesForNutrient(supabase, { householdId: profile.household_id, nutrientCode });
+}
+
+/** Idées de recettes pour remplir une HABITUDE (contenant un aliment taggé). */
+export async function suggestForHabitAction(habitId: string): Promise<RecipeSuggestion[]> {
+  const { supabase, userId, profile } = await getAuthContext();
+  if (!userId || !profile?.household_id) return [];
+  const habit = (await getProfileHabits(supabase, userId)).find((h) => h.id === habitId);
+  if (!habit) return [];
+  return suggestRecipesForHabit(supabase, {
+    householdId: profile.household_id,
+    matchTags: habit.matchTags,
+    matchFoodIds: habit.matchFoodIds,
+  });
+}
+
+/** Recherche d'aliments pour la saisie d'un extra (catalogue LOCAL — rapide).
+ *  L'unité affichée est TOUJOURS g/ml : la quantité est interprétée en unité de
+ *  base (base_amount = 100), comme les ingrédients de recette. */
+export async function searchExtraFoodsAction(
+  query: string,
+): Promise<Array<{ foodId: string; name: string; unit: string }>> {
+  const { userId, supabase } = await getAuthContext();
+  if (!userId) return [];
+  const res = await searchFoodCatalog(supabase, query, { limit: 8, includeExternal: false });
+  return res
+    .filter((s): s is typeof s & { foodId: string } => !!s.foodId)
+    .map((s) => ({ foodId: s.foodId, name: s.name, unit: 'g / ml' }));
+}
+
+/** Extras du jour (liste de la feuille « + Extra »). */
+export async function listTodayExtrasAction(): Promise<ExtraItem[]> {
+  const { supabase, userId } = await getAuthContext();
+  if (!userId) return [];
+  const today = isoDate(new Date());
+  return listExtras(supabase, userId, { from: today, to: today });
+}
+
+/** Ajoute un extra hors-plan (aliment + quantité en unité de base, aujourd'hui). */
+export async function addExtraAction(input: { foodId: string; quantity: number }): Promise<{ ok: boolean }> {
+  const { supabase, userId } = await getAuthContext();
+  if (!userId) return { ok: false };
+  await addFoodExtra(supabase, userId, input);
+  revalidatePath('/nutrition');
+  return { ok: true };
+}
+
+/** Retire un extra. */
+export async function removeExtraAction(id: string): Promise<{ ok: boolean }> {
+  const { supabase, userId } = await getAuthContext();
+  if (!userId) return { ok: false };
+  await removeExtra(supabase, userId, id);
   revalidatePath('/nutrition');
   return { ok: true };
 }

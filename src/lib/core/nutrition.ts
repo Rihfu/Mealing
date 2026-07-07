@@ -1,6 +1,7 @@
 import type { DB } from './types';
 import { unwrap } from './types';
 import { computeRecipeNutrition, type RecipeNutrition } from './recipes';
+import { computeExtrasNutrition } from './nutrition-extras';
 
 /** Couverture des données nutritionnelles d'une période (honnêteté, principe n°2). */
 export interface NutritionCoverage {
@@ -186,6 +187,10 @@ export async function aggregatePeriodNutrition(
     }
     if (nut) addScaled(real, nut.perServing, realPortions);
   }
+
+  // EXTRAS hors-plan (N3) : aliments mangés en dehors du planning — comptés dans
+  // le RÉEL uniquement (le planifié reste le planning, par définition).
+  addScaled(real, await computeExtrasNutrition(db, params.profileId, { from: params.from, to: params.to }), 1);
 
   return { planned, real, coverage };
 }

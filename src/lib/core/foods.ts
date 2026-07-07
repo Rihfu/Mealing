@@ -39,7 +39,7 @@ export async function importFood(db: DB, detail: FoodDetail): Promise<string> {
     // sans marque) et on lui attribue un rayon, par IA (best-effort). La NUTRITION
     // reste celle du fournisseur — garde-fou n°3. Import dynamique pour ne pas
     // coupler tout `core` à la couche IA ; tout échec retombe sur le nom brut.
-    let classified: { name: string; category: string | null } | null = null;
+    let classified: { name: string; category: string | null; tags?: string[] } | null = null;
     try {
       const { classifyImportedFood } = await import('@/lib/ai/categorize-food');
       classified = await classifyImportedFood(detail.name);
@@ -64,6 +64,7 @@ export async function importFood(db: DB, detail: FoodDetail): Promise<string> {
         .single(),
     ) as { id: string };
     foodId = inserted.id;
+    await applyFoodTags(db, foodId, classified?.tags ?? []);
   }
 
   if (detail.nutrients.length === 0) return foodId;
@@ -341,9 +342,9 @@ export async function resolveOrCreateFoodId(
   }
 
   // 4. Toujours pas d'identité → on en CRÉE une (catalogue) : nom générique + rayon
-  // via l'IA (best-effort, liste fermée), nutrition NON touchée (garde-fou n°3).
+  // + tags de groupe via l'IA (best-effort, listes fermées), nutrition NON touchée (n°3).
   if (!foodId && label) {
-    let cls: { name: string; category: string | null } | null = null;
+    let cls: { name: string; category: string | null; tags?: string[] } | null = null;
     try {
       const { classifyImportedFood } = await import('@/lib/ai/categorize-food');
       cls = await classifyImportedFood(label);
@@ -351,9 +352,28 @@ export async function resolveOrCreateFoodId(
       cls = null;
     }
     foodId = await getOrCreateCatalogFood(db, { label, name: cls?.name ?? null, category: cls?.category ?? null });
+    if (foodId) await applyFoodTags(db, foodId, cls?.tags ?? []);
   }
 
   return foodId;
+}
+
+/**
+ * Applique des tags de groupe (`food_tag`) à un aliment — BEST-EFFORT, jamais
+ * bloquant : le tag sert au comptage d'habitudes (N1.5), pas à la nutrition.
+ * Idempotent (doublons ignorés) ; tags inconnus rejetés par la FK vers food_group.
+ */
+export async function applyFoodTags(db: DB, foodId: string, tags: string[]): Promise<void> {
+  const uniq = Array.from(new Set(tags)).filter(Boolean);
+  if (uniq.length === 0) return;
+  try {
+    await db.from('food_tag').upsert(
+      uniq.map((tag) => ({ food_id: foodId, tag })),
+      { onConflict: 'food_id,tag', ignoreDuplicates: true },
+    );
+  } catch {
+    // silencieux — un tag manqué se rattrape par curation, rien ne doit casser ici.
+  }
 }
 
 /**

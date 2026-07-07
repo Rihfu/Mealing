@@ -30,6 +30,8 @@ export interface NutrientCard {
 
 /** Carte de suivi d'HABITUDE (occurrences comptées depuis le planning). */
 export interface HabitCardData {
+  /** Id du suivi (profile_habit_tracking) — pour les suggestions actionnables (N3). */
+  habitId?: string;
   name: string;
   /** Clé pour l'icône (habitKey ou code) + provenance. */
   code: string;

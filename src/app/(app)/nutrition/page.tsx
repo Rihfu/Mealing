@@ -137,6 +137,7 @@ export default async function NutritionPage() {
         const done = h.period === 'day' ? (c?.todayDone ?? 0) : (c?.weekDone ?? 0);
         const upcoming = h.period === 'day' ? 0 : (c?.weekUpcoming ?? 0);
         return {
+          habitId: h.id,
           name: h.label,
           code: h.habitKey ?? 'custom',
           direction: h.direction,

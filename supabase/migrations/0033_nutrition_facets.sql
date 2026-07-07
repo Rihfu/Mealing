@@ -276,6 +276,11 @@ join (values
   ('cat:salade','legume'),('cat:tomate','legume'),('cat:tomate-cerise','legume'),
   ('cat:epinards-surgeles','legume'),('cat:legumes-surgeles','legume'),('cat:petits-pois-surgeles','legume'),
   ('cat:poelee-legumes','legume'),
+  -- Complément de curation (2026-07-07) : aromates-légumes + tomates en conserve
+  -- (le PNNS les compte ; sans eux une bolognaise ne comptait aucun légume).
+  ('cat:oignon','legume'),('cat:oignon-rouge','legume'),('cat:ail','legume'),('cat:echalote','legume'),
+  ('cat:tomates-concassees','legume'),('cat:tomates-concassees-boite','legume'),('cat:tomates-pelees','legume'),
+  ('cat:coulis-tomate','legume'),('cat:mais','legume'),('cat:mais-boite','legume'),
   -- Noix & graines
   ('cat:noix','noix_graine'),('cat:noisettes','noix_graine'),('cat:amandes','noix_graine'),
   ('cat:cacahuetes','noix_graine'),('cat:pignons','noix_graine'),
