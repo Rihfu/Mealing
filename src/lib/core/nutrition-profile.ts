@@ -195,8 +195,10 @@ export async function computeNutritionTargets(db: DB, input: ComputeTargetsInput
   const persona = personaById(input.persona);
   if (!persona) throw new Error('Persona inconnu.');
 
+  // TOUS les nutriments (base + étendus 0035) : les zones des étendus servent la
+  // longue traîne (« Mes suivis » → ajout d'un nutriment caché avec son repère).
   const [typesRes, refsRes] = await Promise.all([
-    db.from('nutrient_type').select('code, name, unit, category').eq('is_base', true),
+    db.from('nutrient_type').select('code, name, unit, category'),
     db
       .from('nutrient_reference')
       .select('sex, age_min, age_max, target_min, target_max, nutrient_type:nutrient_type_id(code)'),
@@ -322,7 +324,9 @@ export async function applyNutritionSetup(db: DB, profileId: string, input: Nutr
   );
   if (up.error) throw new Error(up.error.message);
 
-  const types = (unwrap(await db.from('nutrient_type').select('id, code').eq('is_base', true)) ?? []) as Array<{
+  // Tous les nutriments (pas seulement is_base) : un suivi étendu (longue traîne)
+  // ne doit pas être silencieusement perdu quand on re-persiste la liste.
+  const types = (unwrap(await db.from('nutrient_type').select('id, code')) ?? []) as Array<{
     id: string;
     code: string;
   }>;

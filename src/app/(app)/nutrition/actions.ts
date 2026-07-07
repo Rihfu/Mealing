@@ -13,6 +13,8 @@ import {
   addCustomHabit,
   removeProfileHabit,
   getProfileHabits,
+  getNutritionProfile,
+  trackNutrient,
   suggestRecipesForNutrient,
   suggestRecipesForHabit,
   searchFoodCatalog,
@@ -214,6 +216,29 @@ export async function addCustomHabitAction(input: {
   const { supabase, userId } = await getAuthContext();
   if (!userId) return { ok: false };
   await addCustomHabit(supabase, userId, input);
+  revalidatePath('/nutrition');
+  return { ok: true };
+}
+
+/**
+ * Suit un nutriment depuis la recherche du catalogue (longue traîne § 5 bis) :
+ * zone proposée depuis la RÉFÉRENCE curée (âge/sexe du profil privé) quand elle
+ * existe — sinon mode observation (pas de zone). Jamais de valeur inventée.
+ */
+export async function trackNutrientAction(code: string): Promise<{ ok: boolean }> {
+  const { supabase, userId } = await getAuthContext();
+  if (!userId) return { ok: false };
+  const profile = await getNutritionProfile(supabase, userId);
+  const zones = await computeNutritionTargets(supabase, {
+    persona: 'equilibre',
+    birthYear: profile?.birthYear ?? null,
+    sex: profile?.sex ?? null,
+    weightKg: profile?.weightKg ?? null,
+    heightCm: profile?.heightCm ?? null,
+    activityLevel: profile?.activityLevel ?? null,
+  });
+  const z = zones.find((t) => t.code === code);
+  await trackNutrient(supabase, userId, { code, min: z?.min ?? null, max: z?.max ?? null });
   revalidatePath('/nutrition');
   return { ok: true };
 }

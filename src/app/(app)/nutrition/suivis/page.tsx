@@ -20,10 +20,12 @@ export default async function MesSuivisPage() {
   const { supabase, userId } = await getAuthContext();
   const profileId = userId as string;
 
-  const [profile, settings, { data: baseTypes }, facets, selectedFacets, habitTypes, activeHabits] = await Promise.all([
+  const [profile, settings, { data: allNutrientTypes }, facets, selectedFacets, habitTypes, activeHabits] = await Promise.all([
     getNutritionProfile(supabase, profileId),
     getNutritionSettings(supabase, profileId),
-    supabase.from('nutrient_type').select('code, name, unit, category').eq('is_base', true),
+    // TOUS les types : les suivis étendus (longue traîne) doivent apparaître, et la
+    // recherche du catalogue doit trouver les nutriments cachés (is_base = false).
+    supabase.from('nutrient_type').select('code, name, unit, category, is_base'),
     listFacets(supabase),
     getProfileFacets(supabase, profileId),
     listHabitTypes(supabase),
@@ -46,13 +48,19 @@ export default async function MesSuivisPage() {
 
   const trackedSet = new Set(settings.tracked);
   const goalByCode = new Map(settings.goals.map((g) => [g.code, g]));
-  const actives = (baseTypes ?? [])
+  const actives = (allNutrientTypes ?? [])
     .filter((t) => trackedSet.has(t.code))
     .filter((t) => !(childMode && t.code === 'energy_kcal'))
     .map((t) => {
       const g = goalByCode.get(t.code);
       return { code: t.code, name: t.name, unit: t.unit, min: g?.min ?? null, max: g?.max ?? null };
     });
+
+  // Longue traîne : nutriments cherchables (non suivis), base + étendus — kcal exclu enfant.
+  const searchableNutrients = (allNutrientTypes ?? [])
+    .filter((t) => !trackedSet.has(t.code))
+    .filter((t) => !(childMode && t.code === 'energy_kcal'))
+    .map((t) => ({ code: t.code, name: t.name, unit: t.unit }));
 
   const activeHabitKeys = new Set(activeHabits.map((h) => h.habitKey).filter(Boolean));
   const catalogue = habitTypes
@@ -85,6 +93,7 @@ export default async function MesSuivisPage() {
         period: h.period,
       }))}
       catalogue={catalogue}
+      searchableNutrients={searchableNutrients}
       facets={facets.map((f) => ({ key: f.key, label: f.label, groupe: f.groupe }))}
       selectedFacets={selectedFacets}
     />

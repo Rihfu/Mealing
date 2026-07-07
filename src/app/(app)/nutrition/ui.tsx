@@ -28,6 +28,7 @@ import {
   Salad,
   Soup,
   Stethoscope,
+  TrendingDown,
   TrendingUp,
   Wheat,
 } from 'lucide-react';
@@ -313,12 +314,22 @@ export function HabitCard({ data, footer }: { data: HabitCardData; footer?: Reac
           </span>
         ))}
         <span className="ml-1 text-[12.5px] font-semibold leading-tight text-ink-soft">
-          {data.upcoming > 0 ? `dont ${data.upcoming} à venir — ${data.upcomingLabel ?? 'planifié'}` : (data.doneLabel ?? 'sur le repère — tout va bien')}
+          {habitStatusLabel(data, met)}
         </span>
       </div>
       {footer}
     </div>
   );
+}
+
+/** Ligne d'état d'une habitude — ne dit JAMAIS « tout va bien » quand rien n'est fait. */
+function habitStatusLabel(data: HabitCardData, met: boolean): string {
+  if (data.upcoming > 0) return `dont ${data.upcoming} à venir — ${data.upcomingLabel ?? 'planifié'}`;
+  if (data.direction === 'max' && data.done > data.target) return 'au-dessus du repère — ça se lisse sur la semaine';
+  if (met) return data.doneLabel ?? (data.period === 'day' ? 'sur le repère aujourd’hui' : 'sur le repère — tout va bien');
+  return data.period === 'day'
+    ? 'pas encore aujourd’hui — un repas peut le combler'
+    : 'rien de planifié pour l’instant';
 }
 
 /* ----------------------------- Sparkline ----------------------------- */
@@ -383,11 +394,37 @@ export function ObservationCard({
       </div>
       <div className="flex justify-between text-[11.5px] font-semibold text-ink-soft">
         <span>{trendLabel}</span>
-        <span className="inline-flex items-center gap-1 text-sage-deep">
-          <TrendingUp className="h-[13px] w-[13px]" strokeWidth={1.75} />
-          tendance douce à la hausse
-        </span>
+        <TrendBadge points={points} />
       </div>
     </div>
   );
+}
+
+/** Tendance DÉRIVÉE des points (jamais affirmée sans données) : 2ᵉ moitié vs 1ʳᵉ. */
+function TrendBadge({ points }: { points: number[] }) {
+  const usable = points.filter((p) => Number.isFinite(p));
+  if (usable.length < 3) return <span>trop tôt pour une tendance</span>;
+  const half = Math.floor(usable.length / 2);
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
+  const first = avg(usable.slice(0, half));
+  const second = avg(usable.slice(half));
+  const base = Math.max(first, 1e-9);
+  const delta = (second - first) / base;
+  if (delta > 0.1) {
+    return (
+      <span className="inline-flex items-center gap-1 text-sage-deep">
+        <TrendingUp className="h-[13px] w-[13px]" strokeWidth={1.75} />
+        tendance douce à la hausse
+      </span>
+    );
+  }
+  if (delta < -0.1) {
+    return (
+      <span className="inline-flex items-center gap-1 text-sage-deep">
+        <TrendingDown className="h-[13px] w-[13px]" strokeWidth={1.75} />
+        tendance douce à la baisse
+      </span>
+    );
+  }
+  return <span className="text-sage-deep">plutôt stable</span>;
 }

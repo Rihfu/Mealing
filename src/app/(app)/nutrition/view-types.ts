@@ -45,6 +45,14 @@ export interface HabitCardData {
   doneLabel?: string;
 }
 
+/** Provenance : contributions par recette au nutriment vedette de la semaine. */
+export interface ProvenanceData {
+  code: string;
+  name: string;
+  unit: string;
+  items: Array<{ recipeId: string; name: string; count: number; amount: number }>;
+}
+
 export interface CoverageInfo {
   pct: number | null;
   mealsCovered: number;
@@ -63,6 +71,7 @@ export interface NutritionSnapshot {
   weekPlanned: Record<string, number>;
   cards: NutrientCard[];
   habitCards: HabitCardData[];
+  provenance: ProvenanceData | null;
   coverage: CoverageInfo;
   daysInZone: number;
   daysWithMeals: number;

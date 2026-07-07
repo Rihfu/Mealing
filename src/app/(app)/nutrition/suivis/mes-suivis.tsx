@@ -24,6 +24,7 @@ import {
   computeTargetsAction,
   removeHabitAction,
   setFacetsAction,
+  trackNutrientAction,
 } from '../actions';
 import type { Sex, ActivityLevel } from '@/lib/core/nutrition-profile';
 
@@ -56,6 +57,13 @@ interface CatalogueHabit {
   description: string;
   recommended: boolean;
 }
+interface SearchableNutrient {
+  code: string;
+  name: string;
+  unit: string;
+}
+
+const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 
 const BUILDER_TOPICS = [
   { label: 'Fermentés', tag: 'fermente' },
@@ -75,6 +83,7 @@ export function MesSuivis({
   actives,
   habits,
   catalogue,
+  searchableNutrients,
   facets,
   selectedFacets,
 }: {
@@ -83,6 +92,7 @@ export function MesSuivis({
   actives: Array<Omit<ActiveItem, 'on'>>;
   habits: ActiveHabit[];
   catalogue: CatalogueHabit[];
+  searchableNutrients: SearchableNutrient[];
   facets: FacetOption[];
   selectedFacets: string[];
 }) {
@@ -92,6 +102,7 @@ export function MesSuivis({
   const [items, setItems] = useState<ActiveItem[]>(actives.map((a) => ({ ...a, on: true })));
   const [editing, setEditing] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [search, setSearch] = useState('');
 
   const [birthYear, setBirthYear] = useState(body.birthYear?.toString() ?? '');
   const [sex, setSex] = useState<Sex | ''>(body.sex ?? '');
@@ -154,6 +165,18 @@ export function MesSuivis({
       await removeHabitAction(id);
       router.refresh();
     });
+  const trackFromSearch = (code: string) =>
+    start(async () => {
+      await trackNutrientAction(code);
+      setSearch('');
+      router.refresh();
+    });
+
+  // Recherche RÉELLE du catalogue (longue traîne § 5 bis) : habitudes filtrées +
+  // nutriments cachés (base + étendus) révélés seulement quand on cherche.
+  const q = norm(search.trim());
+  const shownHabits = q ? catalogue.filter((c) => norm(c.label).includes(q) || norm(c.description).includes(q)) : catalogue;
+  const nutrientHits = q.length >= 2 ? searchableNutrients.filter((n) => norm(n.name).includes(q) || norm(n.code).includes(q)).slice(0, 6) : [];
 
   return (
     <div className="mx-auto max-w-lg">
@@ -241,12 +264,38 @@ export function MesSuivis({
           </div>
 
           <div className="mb-2.5 mt-6 text-xs font-extrabold uppercase tracking-wide text-ink-soft">Catalogue</div>
-          <div className="mb-3 flex h-[46px] items-center gap-2.5 rounded-xl border border-line bg-surface px-3.5 text-sm font-semibold text-ink-soft">
-            <Search className="h-[17px] w-[17px]" strokeWidth={1.75} />
-            Chercher un repère…
+          <div className="mb-3 flex h-[46px] items-center gap-2.5 rounded-xl border border-line bg-surface px-3.5">
+            <Search className="h-[17px] w-[17px] shrink-0 text-ink-soft" strokeWidth={1.75} />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Chercher un repère… (fer, potassium, poisson…)"
+              className="w-full bg-transparent text-sm font-semibold outline-none"
+            />
           </div>
-          {catalogue.length === 0 && <p className="mb-2.5 text-sm text-ink-soft">Toutes les habitudes proposées sont déjà suivies.</p>}
-          {catalogue.map((c) => {
+          {/* Longue traîne : nutriments cachés révélés par la recherche, zone de référence si connue. */}
+          {nutrientHits.map((n) => (
+            <div key={n.code} className="mb-2.5 rounded-2xl border border-line bg-surface p-3.5" style={{ boxShadow: 'var(--shadow-sm)' }}>
+              <div className="flex items-center gap-3">
+                <IconTile Icon={nutrientVisual(n.code).Icon} tint={nutrientVisual(n.code).tint} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[14.5px] font-bold">{n.name}</div>
+                  <div className="text-xs leading-snug text-ink-soft">
+                    Suivi chiffré ({n.unit}) — repère de référence si connu, sinon en observation.
+                  </div>
+                </div>
+                <button type="button" onClick={() => trackFromSearch(n.code)} disabled={pending} aria-label="Suivre" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-[1.5px] border-sage bg-surface text-green-strong disabled:opacity-50">
+                  <Plus className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                </button>
+              </div>
+            </div>
+          ))}
+          {shownHabits.length === 0 && nutrientHits.length === 0 && (
+            <p className="mb-2.5 text-sm text-ink-soft">
+              {q ? 'Rien ne correspond — l’assistant peut créer un repère avec toi.' : 'Toutes les habitudes proposées sont déjà suivies.'}
+            </p>
+          )}
+          {shownHabits.map((c) => {
             const { Icon, tint } = nutrientVisual(c.key);
             return (
               <div key={c.key} className="mb-2.5 rounded-2xl border border-line bg-surface p-3.5" style={{ boxShadow: 'var(--shadow-sm)' }}>

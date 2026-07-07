@@ -2,6 +2,7 @@ import type { DB } from './types';
 import { unwrap } from './types';
 import { computeRecipeNutrition } from './recipes';
 import { loadRecipeStockScores } from './shopping';
+import { loadRelevantWeekMeals } from './habits';
 import { mapLimit } from '@/lib/async';
 
 /**
@@ -110,4 +111,59 @@ export async function suggestRecipesForHabit(
     }))
     .sort((a, b) => b.stockPct - a.stockPct || a.name.localeCompare(b.name))
     .slice(0, limit);
+}
+
+/* ----------------------------- Provenance ----------------------------- */
+
+export interface ProvenanceItem {
+  recipeId: string;
+  name: string;
+  /** Nombre de repas de la période portant cette recette. */
+  count: number;
+  /** Contribution PLANIFIÉE cumulée au nutriment (perServing × portions). */
+  amount: number;
+}
+
+/**
+ * « D'où viennent tes protéines cette semaine » : contributions PAR RECETTE au
+ * nutriment visé sur la période (même modèle de portions que l'agrégation :
+ * repas de foyer = 1 portion/profil, individuel = servings). Dérivé, jamais saisi.
+ */
+export async function computeNutrientProvenance(
+  db: DB,
+  params: { householdId: string; profileId: string; from: string; to: string; nutrientCode: string; limit?: number },
+): Promise<ProvenanceItem[]> {
+  const meals = await loadRelevantWeekMeals(db, params);
+  const byRecipe = new Map<string, { portions: number; count: number }>();
+  for (const m of meals) {
+    if (!m.recipeId) continue;
+    const portions = m.isIndividual && m.servings != null && m.servings > 0 ? m.servings : 1;
+    const acc = byRecipe.get(m.recipeId) ?? { portions: 0, count: 0 };
+    acc.portions += portions;
+    acc.count += 1;
+    byRecipe.set(m.recipeId, acc);
+  }
+  if (byRecipe.size === 0) return [];
+
+  const ids = Array.from(byRecipe.keys());
+  const [namesRes, nutritions] = await Promise.all([
+    db.from('recipe').select('id, name').in('id', ids),
+    mapLimit(ids, 4, async (id) => ({ id, nut: await computeRecipeNutrition(db, id) })),
+  ]);
+  const names = new Map(((unwrap(namesRes) ?? []) as Array<{ id: string; name: string }>).map((r) => [r.id, r.name]));
+  const perServing = new Map(nutritions.map((n) => [n.id, n.nut.perServing[params.nutrientCode] ?? 0]));
+
+  return ids
+    .map((id) => {
+      const agg = byRecipe.get(id)!;
+      return {
+        recipeId: id,
+        name: names.get(id) ?? 'Recette',
+        count: agg.count,
+        amount: Math.round((perServing.get(id) ?? 0) * agg.portions * 10) / 10,
+      };
+    })
+    .filter((p) => p.amount > 0)
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, params.limit ?? 4);
 }

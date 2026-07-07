@@ -25,6 +25,21 @@ const USDA_NUTRIENT_MAP: Record<string, string> = {
   '418': 'vitamin_b12', // Vitamin B-12 (µg)
   '304': 'magnesium', // Magnesium, Mg (mg)
   '309': 'zinc', // Zinc, Zn (mg)
+  // Longue traîne (nutriments étendus is_base=false, migration 0035)
+  '306': 'potassium', // Potassium, K (mg)
+  '401': 'vitamin_c', // Vitamin C (mg)
+  '323': 'vitamin_e', // Vitamin E, alpha-tocopherol (mg)
+  '430': 'vitamin_k', // Vitamin K, phylloquinone (µg)
+  '320': 'vitamin_a', // Vitamin A, RAE (µg)
+  '415': 'vitamin_b6', // Vitamin B-6 (mg)
+  '417': 'folate', // Folate, total (µg)
+  '317': 'selenium', // Selenium, Se (µg)
+  '314': 'iodine', // Iodine, I (µg)
+  '312': 'copper', // Copper, Cu (mg)
+  '315': 'manganese', // Manganese, Mn (mg)
+  '305': 'phosphorus', // Phosphorus, P (mg)
+  '606': 'saturated_fat', // Fatty acids, total saturated (g)
+  '601': 'cholesterol', // Cholesterol (mg)
 };
 
 /** Normalise les unités USDA ('KCAL','G','MG','UG') vers les nôtres. */

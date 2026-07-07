@@ -115,7 +115,7 @@ export function NutritionDashboard({ snapshot }: { snapshot: NutritionSnapshot }
             ))}
           </div>
 
-          <SourcesAndAssistant />
+          <SourcesAndAssistant provenance={snapshot.provenance} />
         </>
       ) : (
         <DayView
@@ -226,39 +226,43 @@ function CompactCoverageCard({ snapshot }: { snapshot: NutritionSnapshot }) {
 
 /* ----------------------------- Provenance ----------------------------- */
 
-function SourcesAndAssistant() {
+function SourcesAndAssistant({ provenance }: { provenance: NutritionSnapshot['provenance'] }) {
   const [open, setOpen] = useState(true);
+  const maxAmount = Math.max(...(provenance?.items.map((i) => i.amount) ?? [1]), 1);
   return (
-    <div className="grid items-start gap-4 lg:grid-cols-[1.2fr_1fr]">
-      <div className="rounded-2xl border border-line bg-surface p-5" style={{ boxShadow: 'var(--shadow-sm)' }}>
-        <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2.5 text-[15px] font-bold">
-          <Sparkles className="h-[17px] w-[17px] text-sage-deep" strokeWidth={1.75} />
-          D’où viennent tes protéines cette semaine
-          {open ? (
-            <ChevronUp className="ml-auto h-[17px] w-[17px] text-ink-soft" strokeWidth={1.75} />
-          ) : (
-            <ChevronDown className="ml-auto h-[17px] w-[17px] text-ink-soft" strokeWidth={1.75} />
+    <div className={`grid items-start gap-4 ${provenance ? 'lg:grid-cols-[1.2fr_1fr]' : ''}`}>
+      {provenance && (
+        <div className="rounded-2xl border border-line bg-surface p-5" style={{ boxShadow: 'var(--shadow-sm)' }}>
+          <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2.5 text-[15px] font-bold">
+            <Sparkles className="h-[17px] w-[17px] text-sage-deep" strokeWidth={1.75} />
+            D’où viennent tes {provenance.name.toLowerCase()} cette semaine
+            {open ? (
+              <ChevronUp className="ml-auto h-[17px] w-[17px] text-ink-soft" strokeWidth={1.75} />
+            ) : (
+              <ChevronDown className="ml-auto h-[17px] w-[17px] text-ink-soft" strokeWidth={1.75} />
+            )}
+          </button>
+          {open && (
+            <div className="mt-3.5 flex flex-col gap-2.5">
+              {provenance.items.map((r) => (
+                <div key={r.recipeId} className="flex items-center gap-3 text-[13.5px] font-semibold">
+                  <Link href={`/recettes/${r.recipeId}`} className="flex-1 truncate hover:text-green-strong">
+                    {r.name}
+                    {r.count > 1 ? ` (×${r.count})` : ''}
+                  </Link>
+                  <span className="h-[9px] w-[180px] max-w-[40%] rounded-full border border-line bg-paper">
+                    <span className="block h-full rounded-full bg-sage" style={{ width: `${Math.round((r.amount / maxAmount) * 100)}%` }} />
+                  </span>
+                  <span className="w-14 text-right text-ink-soft">
+                    {r.amount} {provenance.unit}
+                  </span>
+                </div>
+              ))}
+              <p className="mt-1 text-[11px] text-ink-soft">Contributions planifiées de la semaine, dérivées des recettes.</p>
+            </div>
           )}
-        </button>
-        {open && (
-          <div className="mt-3.5 flex flex-col gap-2.5">
-            {[
-              { name: 'Chili sin carne (×2)', pct: 78, g: 148 },
-              { name: 'Saumon rôti, riz', pct: 42, g: 64 },
-              { name: 'Dahl de lentilles', pct: 33, g: 51 },
-            ].map((r) => (
-              <div key={r.name} className="flex items-center gap-3 text-[13.5px] font-semibold">
-                <span className="flex-1 truncate">{r.name}</span>
-                <span className="h-[9px] w-[180px] max-w-[40%] rounded-full border border-line bg-paper">
-                  <span className="block h-full rounded-full bg-sage" style={{ width: `${r.pct}%` }} />
-                </span>
-                <span className="w-11 text-right text-ink-soft">{r.g} g</span>
-              </div>
-            ))}
-            <p className="mt-1 text-[11px] text-ink-soft">Aperçu indicatif — le détail par recette arrive avec les suivis d’habitudes.</p>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
       <div className="flex flex-col gap-3">
         <Link
           href="/assistant"

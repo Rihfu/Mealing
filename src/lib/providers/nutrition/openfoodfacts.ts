@@ -40,6 +40,21 @@ const OFF_NUTRIENT_MAP: OffNutrientMapEntry[] = [
   { offKey: 'vitamin-b12', code: 'vitamin_b12', factor: 1_000_000, unit: 'µg' }, // OFF en g -> µg
   { offKey: 'magnesium', code: 'magnesium', factor: 1000, unit: 'mg' }, // OFF en g -> mg
   { offKey: 'zinc', code: 'zinc', factor: 1000, unit: 'mg' }, // OFF en g -> mg
+  // Longue traîne (0035) — best-effort : rarement renseignés sur OFF, USDA reste la source riche.
+  { offKey: 'potassium', code: 'potassium', factor: 1000, unit: 'mg' },
+  { offKey: 'vitamin-c', code: 'vitamin_c', factor: 1000, unit: 'mg' },
+  { offKey: 'vitamin-e', code: 'vitamin_e', factor: 1000, unit: 'mg' },
+  { offKey: 'vitamin-k', code: 'vitamin_k', factor: 1_000_000, unit: 'µg' },
+  { offKey: 'vitamin-a', code: 'vitamin_a', factor: 1_000_000, unit: 'µg' },
+  { offKey: 'vitamin-b6', code: 'vitamin_b6', factor: 1000, unit: 'mg' },
+  { offKey: 'folates', code: 'folate', factor: 1_000_000, unit: 'µg' },
+  { offKey: 'selenium', code: 'selenium', factor: 1_000_000, unit: 'µg' },
+  { offKey: 'iodine', code: 'iodine', factor: 1_000_000, unit: 'µg' },
+  { offKey: 'copper', code: 'copper', factor: 1000, unit: 'mg' },
+  { offKey: 'manganese', code: 'manganese', factor: 1000, unit: 'mg' },
+  { offKey: 'phosphorus', code: 'phosphorus', factor: 1000, unit: 'mg' },
+  { offKey: 'saturated-fat', code: 'saturated_fat', factor: 1, unit: 'g' },
+  { offKey: 'cholesterol', code: 'cholesterol', factor: 1000, unit: 'mg' },
 ];
 
 interface OffProduct {

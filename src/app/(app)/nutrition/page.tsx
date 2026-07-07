@@ -1,6 +1,8 @@
 import { getAuthContext } from '@/lib/auth';
 import {
   aggregatePeriodNutrition,
+  computeChildWeek,
+  computeNutrientProvenance,
   countHabitOccurrences,
   getNutritionProfile,
   getNutritionSettings,
@@ -30,10 +32,12 @@ export default async function NutritionPage() {
   const householdId = profile?.household_id as string;
   const profileId = userId as string;
 
-  const [nutritionProfile, settings, { data: baseTypes }] = await Promise.all([
+  const [nutritionProfile, settings, { data: allNutrientTypes }] = await Promise.all([
     getNutritionProfile(supabase, profileId),
     getNutritionSettings(supabase, profileId),
-    supabase.from('nutrient_type').select('code, name, unit, category').eq('is_base', true),
+    // TOUS les types (base + étendus) : un nutriment de la longue traîne SUIVI doit
+    // avoir sa carte ; les non suivis restent cachés (filtre plus bas).
+    supabase.from('nutrient_type').select('code, name, unit, category, is_base'),
   ]);
 
   // Non activé → hero d'activation (jamais un tableau de zéros).
@@ -71,12 +75,13 @@ export default async function NutritionPage() {
   // Nutriments suivis → cartes. Avec objectif = jauge, sinon = observation.
   const goalByCode = new Map(settings.goals.map((g) => [g.code, g]));
   const order = ['energy', 'macro', 'micro'];
-  const allTypes = (baseTypes ?? [])
+  const allTypes = (allNutrientTypes ?? [])
     .slice()
     .sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
   const trackedSet = new Set(settings.tracked);
   const cards: NutrientCard[] = allTypes
-    .filter((t) => (trackedSet.size > 0 ? trackedSet.has(t.code) : true))
+    // Suivis explicites (base OU étendus) ; sans aucun suivi → les nutriments de base.
+    .filter((t) => (trackedSet.size > 0 ? trackedSet.has(t.code) : t.is_base))
     .filter((t) => !(childMode && t.code === 'energy_kcal'))
     .map((t) => {
       const g = goalByCode.get(t.code);
@@ -152,6 +157,21 @@ export default async function NutritionPage() {
     }
   }
 
+  // Provenance : le nutriment « vedette » = protéines si suivies en jauge, sinon la
+  // première jauge. Contributions réelles par recette de la semaine (jamais de démo).
+  let provenance = null;
+  const starCard = gaugeCards.find((c) => c.code === 'protein') ?? gaugeCards[0];
+  if (!childMode && starCard) {
+    const items = await computeNutrientProvenance(supabase, {
+      householdId,
+      profileId,
+      from: dayDates[0],
+      to: dayDates[6],
+      nutrientCode: starCard.code,
+    });
+    if (items.length > 0) provenance = { code: starCard.code, name: starCard.name, unit: starCard.unit, items };
+  }
+
   const weekEnd = addDays(monday, 6);
   const weekLabel =
     monday.getMonth() === weekEnd.getMonth()
@@ -167,8 +187,16 @@ export default async function NutritionPage() {
     weekPlanned,
     cards,
     habitCards,
+    provenance,
     coverage: {
-      pct: coverage.mealsTotal > 0 ? Math.round((coverage.mealsCovered / coverage.mealsTotal) * 100) : null,
+      // Honnêteté (handoff) : le % est basé sur les INGRÉDIENTS avec données —
+      // « 100 % des repas ont un chiffre » masquerait des fiches très incomplètes.
+      pct:
+        coverage.ingredientsTotal > 0
+          ? Math.round((coverage.ingredientsWithData / coverage.ingredientsTotal) * 100)
+          : coverage.mealsTotal > 0
+            ? Math.round((coverage.mealsCovered / coverage.mealsTotal) * 100)
+            : null,
       ...coverage,
     },
     daysInZone: days.filter((d) => d.status === 'in').length,
@@ -177,7 +205,15 @@ export default async function NutritionPage() {
   };
 
   if (childMode) {
-    return <ChildNutrition childName={profile?.display_name ?? null} />;
+    // Vue enfant RÉELLE : variété/découverte/familles depuis le planning + tags.
+    const [week, habits] = await Promise.all([
+      computeChildWeek(supabase, { householdId, profileId, from: dayDates[0], to: dayDates[6], today: todayIso }),
+      getProfileHabits(supabase, profileId),
+    ]);
+    const variety = habits.find((h) => h.habitKey === 'variete_legumes' && h.enabled);
+    return (
+      <ChildNutrition childName={profile?.display_name ?? null} week={week} varietyTarget={variety?.targetCount ?? 4} />
+    );
   }
 
   return <NutritionDashboard snapshot={snapshot} />;

@@ -23,12 +23,13 @@ export default async function ActivateNutritionPage() {
     aggregatePeriodNutrition(supabase, { householdId, profileId, from, to }),
     listFacets(supabase),
   ]);
-  const { mealsCovered, mealsTotal, ingredientsWithData, ingredientsTotal } = week.coverage;
+  const { ingredientsWithData, ingredientsTotal } = week.coverage;
 
   return (
     <Onboarding
       facets={facets.map((f) => ({ key: f.key, label: f.label, groupe: f.groupe }))}
-      coveragePct={mealsTotal > 0 ? Math.round((mealsCovered / mealsTotal) * 100) : null}
+      // Même convention que le dashboard : % basé sur les INGRÉDIENTS avec données.
+      coveragePct={ingredientsTotal > 0 ? Math.round((ingredientsWithData / ingredientsTotal) * 100) : null}
       ingredientsWithData={ingredientsWithData}
       ingredientsTotal={ingredientsTotal}
     />
