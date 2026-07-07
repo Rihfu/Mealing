@@ -65,6 +65,71 @@ export async function moveMealAction(mealId: string, date: string, slot: MealSlo
   revalidatePath('/planning');
 }
 
+/** Un plat de l'HISTORIQUE du planning (repas passés, dédupliqués par plat). */
+export interface PastMeal {
+  /** Nom affiché (recette ou texte libre). */
+  name: string;
+  recipeId: string | null;
+  /** Dernière date où il a été mangé (YYYY-MM-DD). */
+  lastDate: string;
+  /** Créneau du dernier passage (pour la reconduction). */
+  lastSlot: MealSlot;
+  /** Nombre de fois planifié sur la fenêtre. */
+  count: number;
+}
+
+/**
+ * Historique des plats (B2) : repas PASSÉS des ~12 dernières semaines, dédupliqués
+ * par plat (recette liée, sinon libellé), du plus récent au plus ancien — pour
+ * revoir ce qu'on a mangé et RECONDUIRE en 1 geste. Lecture seule, RLS foyer.
+ */
+export async function pastMealsAction(): Promise<PastMeal[]> {
+  const { supabase, householdId } = await requireContext();
+  const today = new Date();
+  const from = new Date(today);
+  from.setDate(from.getDate() - 84);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+  const { data } = await supabase
+    .from('planned_meal')
+    .select('meal_date, slot, recipe_id, free_text, leftover_source_meal_id, recipe:recipe_id(name)')
+    .eq('household_id', householdId)
+    .gte('meal_date', iso(from))
+    .lt('meal_date', iso(today))
+    .order('meal_date', { ascending: false })
+    .limit(400);
+
+  const rows = (data ?? []) as Array<{
+    meal_date: string;
+    slot: string;
+    recipe_id: string | null;
+    free_text: string | null;
+    leftover_source_meal_id: string | null;
+    recipe: { name: string } | { name: string }[] | null;
+  }>;
+
+  const byDish = new Map<string, PastMeal>();
+  for (const r of rows) {
+    const recipeName = Array.isArray(r.recipe) ? r.recipe[0]?.name : r.recipe?.name;
+    const name = (recipeName ?? r.free_text ?? '').trim();
+    if (!name) continue; // restes sans nom propre : rien d'actionnable
+    const key = r.recipe_id ?? `txt:${name.toLowerCase()}`;
+    const existing = byDish.get(key);
+    if (existing) {
+      existing.count += 1; // rows déjà triées du plus récent au plus ancien
+    } else {
+      byDish.set(key, {
+        name,
+        recipeId: r.recipe_id,
+        lastDate: r.meal_date,
+        lastSlot: r.slot as MealSlot,
+        count: 1,
+      });
+    }
+  }
+  return Array.from(byDish.values());
+}
+
 export async function markDayOffAction(date: string): Promise<void> {
   const { supabase, householdId } = await requireContext();
   await markDayOffPlan(supabase, { householdId, date, scope: 'household' });

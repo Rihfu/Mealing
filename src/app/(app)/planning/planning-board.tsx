@@ -1,13 +1,17 @@
 'use client';
 
-import { useEffect, useState, useTransition, type ReactNode } from 'react';
+import { useEffect, useState, useTransition, type CSSProperties, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { DndContext, useDraggable, useDroppable, pointerWithin, type DragEndEvent } from '@dnd-kit/core';
+import { useDndSensors } from '@/components/sortable';
 import { addDays, isoDate } from '@/lib/dates';
 import type { MealSlot } from '@/lib/core';
 import {
   addMealAction,
   deleteMealAction,
   markDayOffAction,
+  moveMealAction,
+  pastMealsAction,
   unmarkDayOffAction,
   recordDeviationAction,
   clearDeviationAction,
@@ -15,8 +19,56 @@ import {
   setMealLeftoverAction,
   copyWeekAction,
   suggestRecipesAction,
+  type PastMeal,
   type RecipeSuggestion,
 } from './actions';
+
+// ---------------------------------------------------------------------------
+// Glisser-déposer des REPAS (B3) : une tuile se déplace vers un autre jour /
+// créneau d'un geste (souris 6 px, appui long tactile ~220 ms — capteurs
+// partagés avec Courses/Stock). Le dépôt appelle moveMealAction.
+// ---------------------------------------------------------------------------
+
+/** Tuile repas déplaçable (le clic normal reste possible grâce aux contraintes d'activation). */
+function DragMeal({ mealId, children }: { mealId: string; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `meal:${mealId}` });
+  const style: CSSProperties = {
+    touchAction: 'manipulation',
+    ...(transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : {}),
+    ...(isDragging ? { zIndex: 50, position: 'relative', opacity: 0.92, boxShadow: '0 10px 28px rgba(52,50,44,.22)', borderRadius: 12, cursor: 'grabbing' } : {}),
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+      {children}
+    </div>
+  );
+}
+
+/** Cellule jour×créneau réceptrice : se surligne quand une tuile la survole. */
+function DropCell({
+  d,
+  slot,
+  children,
+  style,
+}: {
+  d: number;
+  slot: string;
+  children: ReactNode;
+  style?: CSSProperties;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `cell:${d}:${slot}` });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        ...style,
+        ...(isOver ? { outline: '2px dashed #45A35E', outlineOffset: 2, borderRadius: 12, background: 'rgba(220,232,212,.45)' } : {}),
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Types (snapshot sérialisable fourni par la page serveur).
@@ -165,7 +217,9 @@ type Overlay =
   | { type: 'add'; d: number; slot: SlotKey; step: 'search' | 'config'; recipe: RecipeOption | 'libre' | null }
   | { type: 'ecart'; d: number; mealId: string; name: string; step?: 'diff' }
   | { type: 'replan'; sourceMealId: string; recipeName: string }
+  | { type: 'move'; mealId: string; name: string }
   | { type: 'ai' }
+  | { type: 'history' }
   | null;
 
 export function PlanningBoard(props: BoardProps) {
@@ -175,6 +229,24 @@ export function PlanningBoard(props: BoardProps) {
   const start0 = new Date(`${weekStart}T00:00:00`);
   const dateFor = (d: number) => isoDate(addDays(start0, d));
   const refresh = () => router.refresh();
+  // Glisser-déposer des repas (B3) : capteurs partagés + dépôt → moveMealAction.
+  const dndSensors = useDndSensors();
+  function onMealDragEnd(e: DragEndEvent) {
+    const aId = String(e.active.id);
+    const oId = e.over ? String(e.over.id) : null;
+    if (!aId.startsWith('meal:') || !oId || !oId.startsWith('cell:')) return;
+    const mealId = aId.slice(5);
+    const [, dStr, slot] = oId.split(':');
+    const d = Number(dStr);
+    const meal = meals.find((m) => m.id === mealId);
+    if (!meal || Number.isNaN(d) || (meal.dayIndex === d && meal.slot === slot)) return;
+    if (isOff(d)) { showFlash('Journée hors-plan — réactive-la avant d’y déposer un repas.'); return; }
+    run(async () => {
+      await moveMealAction(mealId, dateFor(d), SLOT_TO_DB[slot as SlotKey]);
+      showFlash(`« ${meal.name} » déplacé au ${DAY_FULL[d].toLowerCase()} (${SLOT_META[slot as SlotKey].label.toLowerCase()}).`);
+    });
+  }
+
   // Une action qui échoue (réseau, 429…) ne doit PAS crasher tout le planning vers
   // l'error boundary : on informe via le toast existant et on réconcilie l'affichage.
   const run = (fn: () => Promise<unknown>) =>
@@ -293,6 +365,47 @@ export function PlanningBoard(props: BoardProps) {
     setOverlay({ type: 'replan', sourceMealId, recipeName });
   }
   const markLeftover = (mealId: string, value: boolean) => run(() => setMealLeftoverAction(mealId, value));
+
+  // ----- Déplacer un repas via un PANNEAU (complément du glisser : universel, dont
+  // mobile inter-jours où le drag ne peut cibler qu'un créneau visible). -----
+  const [moveSel, setMoveSel] = useState<{ d: number; slot: SlotKey }>({ d: 0, slot: 'dejeuner' });
+  function openMove(meal: MealView) {
+    setMoveSel({ d: meal.dayIndex, slot: meal.slot as SlotKey });
+    setOverlay({ type: 'move', mealId: meal.id, name: meal.name });
+  }
+  function confirmMove(o: Extract<Overlay, { type: 'move' }>) {
+    setOverlay(null);
+    run(async () => {
+      await moveMealAction(o.mealId, dateFor(moveSel.d), SLOT_TO_DB[moveSel.slot]);
+      showFlash(`« ${o.name} » déplacé au ${DAY_FULL[moveSel.d].toLowerCase()} (${SLOT_META[moveSel.slot].label.toLowerCase()}).`);
+    });
+  }
+
+  // ----- Historique des plats (B2) : ce qu'on a mangé, défilable, reconduisible. -----
+  const [history, setHistory] = useState<PastMeal[] | null>(null);
+  const [historyQuery, setHistoryQuery] = useState('');
+  function openHistory() {
+    setHistory(null);
+    setHistoryQuery('');
+    setOverlay({ type: 'history' });
+    pastMealsAction().then(setHistory).catch(() => setHistory([]));
+  }
+  /** Reconduit un plat de l'historique : recette encore là → config d'ajout classique ;
+   *  sinon plat libre pré-rempli. Jour = focalisé, créneau = celui du dernier passage. */
+  function reconduct(p: PastMeal) {
+    const d = focusDay;
+    const slot = (Object.entries(SLOT_TO_DB).find(([, v]) => v === p.lastSlot)?.[0] ?? 'dejeuner') as SlotKey;
+    const r = p.recipeId ? recipes.find((x) => x.id === p.recipeId) : undefined;
+    setSearch(''); setFilter('Tout'); setDraftLeftover(false); setDraftIndividual('');
+    if (r) {
+      setDraftPortions(r.serves || 2);
+      setDraftName('');
+      setOverlay({ type: 'add', d, slot, step: 'config', recipe: r });
+    } else {
+      setDraftName(p.name);
+      setOverlay({ type: 'add', d, slot, step: 'config', recipe: 'libre' });
+    }
+  }
   const [flash, setFlash] = useState<string | null>(null);
   const showFlash = (msg: string) => { setFlash(msg); window.setTimeout(() => setFlash(null), 3200); };
   // Confirmation EN PLACE (DA) — plus de window.confirm natif (P3) : si la semaine
@@ -369,6 +482,9 @@ export function PlanningBoard(props: BoardProps) {
         <button type="button" onClick={() => router.push('/courses')} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 11, border: '1px solid #E7E0D2', background: '#FFFDFA', color: '#6F6B61', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FF_SANS, minHeight: 42 }}>
           <Ic name="cart" size={16} color="#8A8472" />Voir mes courses
         </button>
+        <button type="button" onClick={openHistory} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 11, border: '1px solid #E7E0D2', background: '#FFFDFA', color: '#6F6B61', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FF_SANS, minHeight: 42 }}>
+          <Ic name="clock" size={16} color="#8A8472" />Historique des plats
+        </button>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: '#9A958A', fontSize: 12.5 }}>
           <Ic name="info" size={14} color="#B8B1A4" />Un repas prévu = mangé tel quel. Tu n’agis qu’en cas d’écart.
@@ -418,6 +534,7 @@ export function PlanningBoard(props: BoardProps) {
             ) : (
               <button type="button" onClick={() => setOverlay({ type: 'ecart', d: meal.dayIndex, mealId: meal.id, name: meal.name })} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 8, border: '1px solid #E7E0D2', background: '#fff', color: '#6F6B61', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FF_SANS }}><Ic name="alert" size={13} color="#9A958A" />Signaler un écart</button>
             )}
+            <IconBtn name="replan" onClick={() => openMove(meal)} size={30} title="Déplacer vers un autre jour / créneau" />
             <IconBtn name="trash" onClick={() => removeMeal(meal.id)} size={30} title="Supprimer" color="#B0867C" border="#EEDFD8" />
           </div>
         </div>
@@ -439,14 +556,18 @@ export function PlanningBoard(props: BoardProps) {
     const sm = SLOT_META[slot];
     const ms = mealsAt(d, slot);
     return (
-      <div key={slot} style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+      <DropCell key={slot} d={d} slot={slot} style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 2px 2px' }}>
           <span style={{ width: 9, height: 9, borderRadius: 99, background: sm.dot, flex: '0 0 auto' }} />
           <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.03em', textTransform: 'uppercase', color: '#8A8472' }}>{sm.label}</span>
         </div>
-        {ms.map((m) => mealCard(m))}
+        {ms.map((m) => (
+          <DragMeal key={m.id} mealId={m.id}>
+            {mealCard(m)}
+          </DragMeal>
+        ))}
         {addSlotBtn(d, slot, { strong: ms.length === 0, label: ms.length ? 'Ajouter' : sm.label.toLowerCase() })}
-      </div>
+      </DropCell>
     );
   }
 
@@ -556,10 +677,14 @@ export function PlanningBoard(props: BoardProps) {
                 if (isOff(d)) return <div key={d} style={{ borderRadius: 9, background: 'repeating-linear-gradient(135deg,#F4EEE2,#F4EEE2 7px,#EFE8DA 7px,#EFE8DA 14px)', border: '1px dashed #DDD4C2' }} />;
                 const ms = mealsAt(d, slot);
                 return (
-                  <div key={d} style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0, padding: 2 }}>
-                    {ms.map((m) => cellChip(m))}
+                  <DropCell key={d} d={d} slot={slot} style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0, padding: 2 }}>
+                    {ms.map((m) => (
+                      <DragMeal key={m.id} mealId={m.id}>
+                        {cellChip(m)}
+                      </DragMeal>
+                    ))}
                     {ms.length === 0 ? <button type="button" onClick={() => openAdd(d, slot)} style={{ minHeight: 30, border: '1.5px dashed #DAD2C2', background: 'transparent', borderRadius: 8, color: '#B0A99B', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic name="plus" size={14} color="#B0A99B" /></button> : null}
-                  </div>
+                  </DropCell>
                 );
               })}
             </div>
@@ -577,15 +702,25 @@ export function PlanningBoard(props: BoardProps) {
           const sm = SLOT_META[slot];
           const ms = mealsAt(d, slot);
           return (
-            <div key={slot} style={{ background: sm.tint, borderRadius: 14, padding: '14px 16px', border: `1px solid ${sm.bar}66` }}>
+            <DropCell key={slot} d={d} slot={slot} style={{ background: sm.tint, borderRadius: 14, padding: '14px 16px', border: `1px solid ${sm.bar}66` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: ms.length ? 11 : 9 }}>
                 <span style={{ width: 30, height: 30, borderRadius: 9, background: '#FFFDFA', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${sm.bar}88` }}><Ic name={sm.icon} size={17} color={sm.dot} /></span>
                 <span style={{ fontFamily: FF_DISPLAY, fontWeight: 600, fontSize: 17, color: '#34322C' }}>{sm.label}</span>
                 <span style={{ flex: 1 }} />
                 {ms.length ? <IconBtn name="plus" onClick={() => openAdd(d, slot)} size={32} title="Ajouter" bg="#FFFDFA" /> : null}
               </div>
-              {ms.length ? <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>{ms.map((m) => mealCard(m, true))}</div> : addSlotBtn(d, slot, { strong: true, label: `Ajouter un ${sm.label.toLowerCase()}`, h: 48 })}
-            </div>
+              {ms.length ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                  {ms.map((m) => (
+                    <DragMeal key={m.id} mealId={m.id}>
+                      {mealCard(m, true)}
+                    </DragMeal>
+                  ))}
+                </div>
+              ) : (
+                addSlotBtn(d, slot, { strong: true, label: `Ajouter un ${sm.label.toLowerCase()}`, h: 48 })
+              )}
+            </DropCell>
           );
         })}
       </div>
@@ -721,6 +856,7 @@ export function PlanningBoard(props: BoardProps) {
             <div style={{ fontFamily: FF_DISPLAY, fontWeight: 600, fontSize: 14.5, padding: '0 6px', whiteSpace: 'nowrap' }}>{weekLabel}</div>
             <IconBtn name="cr" onClick={() => goWeek(nextWeek)} border="transparent" bg="transparent" size={30} />
           </div>
+          <IconBtn name="clock" onClick={openHistory} size={38} title="Historique des plats" />
           {todayIndex < 0 ? <Btn label="Auj." onClick={() => goWeek(thisWeek)} v="soft" pad="8px 11px" minH={38} fs={13} /> : <Btn label={copyLabel} onClick={duplicatePrev} v={confirmCopy ? 'primary' : 'soft'} pad="8px 11px" minH={38} fs={13} icon="copy" is={14} disabled={copyPending} />}
         </div>
         <div style={{ display: 'flex', gap: 2, background: '#F1EBDD', border: '1px solid #E7E0D2', borderRadius: 11, padding: 3, marginBottom: 12 }}>{seg('Jour', 'sun', 'jour')}{seg('Semaine', 'list', 'semaine')}</div>
@@ -978,6 +1114,86 @@ export function PlanningBoard(props: BoardProps) {
     );
   }
 
+  function movePanel(o: Extract<Overlay, { type: 'move' }>) {
+    return (
+      <div>
+        {overlayHeader('Déplacer le repas', `« ${o.name} »`)}
+        <div style={{ padding: '16px 20px 4px' }}>
+          <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 9 }}>Quel jour ?</div>
+          <div style={{ display: 'flex', gap: 7, marginBottom: 18, flexWrap: 'wrap' }}>
+            {DAY_SHORT.map((s, i) => (
+              <button key={i} type="button" onClick={() => setMoveSel({ ...moveSel, d: i })} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, width: 46, padding: '8px 0', borderRadius: 11, border: `1px solid ${moveSel.d === i ? '#9CBE96' : '#E0D8C8'}`, background: moveSel.d === i ? '#DCE8D4' : '#FFFDFA', cursor: 'pointer', fontFamily: FF_SANS }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#8A8472', textTransform: 'capitalize' }}>{s}</span>
+                <span style={{ fontFamily: FF_DISPLAY, fontWeight: 600, fontSize: 16, color: moveSel.d === i ? '#2F5A2A' : '#34322C' }}>{dates[i]}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 9 }}>Quel créneau ?</div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+            {SLOT_ORDER.map((s) => { const m = SLOT_META[s]; const a = moveSel.slot === s; return (
+              <button key={s} type="button" onClick={() => setMoveSel({ ...moveSel, slot: s })} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 13px', borderRadius: 11, border: `1px solid ${a ? m.bar : '#E0D8C8'}`, background: a ? m.tint : '#FFFDFA', color: '#34322C', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FF_SANS }}><span style={{ width: 9, height: 9, borderRadius: 99, background: m.dot }} />{m.label}</button>
+            ); })}
+          </div>
+          {isOff(moveSel.d) ? <div style={{ marginTop: 10, fontSize: 12.5, color: '#B5641F', fontWeight: 600 }}>Ce jour est hors-plan — réactive-le d’abord.</div> : null}
+          <div style={{ marginTop: 8, fontSize: 12.5, color: '#9A958A' }}>Astuce : tu peux aussi glisser la tuile directement (appui long sur mobile).</div>
+        </div>
+        <div style={{ padding: '14px 20px', borderTop: '1px solid #ECE5D7', display: 'flex', gap: 10, marginTop: 14 }}>
+          <Btn label="Annuler" onClick={() => setOverlay(null)} v="ghost" /><div style={{ flex: 1 }} />
+          <Btn label="Déplacer ici" onClick={() => confirmMove(o)} v="primary" icon="replan" is={16} disabled={isOff(moveSel.d)} />
+        </div>
+      </div>
+    );
+  }
+
+  function historyPanel() {
+    const q = historyQuery.trim().toLowerCase();
+    const list = (history ?? []).filter((p) => !q || p.name.toLowerCase().includes(q));
+    const fmtDate = (isoStr: string) => {
+      const dt = new Date(`${isoStr}T00:00:00`);
+      return dt.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    };
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {overlayHeader('Historique des plats', 'Ce que vous avez mangé — reconduis un plat en 1 geste.')}
+        <div style={{ padding: '12px 20px 0', flex: '0 0 auto' }}>
+          <input
+            value={historyQuery}
+            onChange={(e) => setHistoryQuery(e.target.value)}
+            placeholder="Chercher un plat…"
+            style={{ width: '100%', padding: '10px 13px', borderRadius: 11, border: '1px solid #E0D8C8', fontSize: 14, fontFamily: FF_SANS, outline: 'none', background: '#FFFDFA' }}
+          />
+        </div>
+        <div style={{ padding: '12px 20px 18px', overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {history === null ? (
+            <div style={{ color: '#9A958A', fontSize: 13.5, padding: '18px 0', textAlign: 'center' }}>Je fouille les semaines passées…</div>
+          ) : list.length === 0 ? (
+            <div style={{ color: '#9A958A', fontSize: 13.5, padding: '18px 0', textAlign: 'center' }}>
+              {q ? 'Aucun plat ne correspond.' : 'Rien encore — les repas passés apparaîtront ici au fil des semaines.'}
+            </div>
+          ) : (
+            list.map((p) => {
+              const stillThere = !p.recipeId || recipes.some((r) => r.id === p.recipeId);
+              return (
+                <div key={`${p.recipeId ?? p.name}`} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#FFFDFA', border: '1px solid #ECE5D7', borderRadius: 12, padding: '10px 12px' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 9, background: '#E2ECDB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FF_DISPLAY, fontWeight: 600, fontSize: 15, color: '#6F6B61', flex: '0 0 auto' }}>
+                    {(p.name[0] || '?').toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                    <div style={{ color: '#9A958A', fontSize: 12, marginTop: 1 }}>
+                      dernier : {fmtDate(p.lastDate)}{p.count > 1 ? ` · ${p.count}× sur 12 sem.` : ''}{!p.recipeId ? ' · plat libre' : !stillThere ? ' · recette supprimée' : ''}
+                    </div>
+                  </div>
+                  <Btn label="Reconduire" onClick={() => reconduct(p)} v="soft" pad="7px 11px" minH={34} fs={12.5} icon="repeat" is={13} />
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  }
+
   function renderOverlay() {
     if (!overlay && !menu) return null;
     const menuCatcher = menu ? <div onClick={() => setMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} /> : null;
@@ -986,8 +1202,10 @@ export function PlanningBoard(props: BoardProps) {
     if (overlay.type === 'add') panel = addPanel(overlay);
     else if (overlay.type === 'ecart') panel = ecartPanel(overlay);
     else if (overlay.type === 'replan') panel = replanPanel(overlay);
+    else if (overlay.type === 'move') panel = movePanel(overlay);
+    else if (overlay.type === 'history') panel = historyPanel();
     else if (overlay.type === 'ai') panel = aiPanel();
-    const wide = overlay.type === 'ai' ? 560 : 580;
+    const wide = overlay.type === 'ai' ? 560 : overlay.type === 'history' ? 520 : 580;
     return (
       <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center' }}>
         <div onClick={() => setOverlay(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(52,50,44,.32)', animation: 'mealing-fade .2s ease both' }} />
@@ -1017,7 +1235,9 @@ export function PlanningBoard(props: BoardProps) {
         {isMobile ? null : weekControls()}
       </div>
       {isMobile ? null : toolbar()}
-      {renderBoard()}
+      <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={onMealDragEnd}>
+        {renderBoard()}
+      </DndContext>
       {renderOverlay()}
       {flash ? (
         <div style={{ position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 70, background: '#34322C', color: '#FBF7EF', padding: '11px 18px', borderRadius: 999, fontSize: 13.5, fontWeight: 600, boxShadow: '0 10px 28px rgba(52,50,44,.28)', maxWidth: '90vw' }}>{flash}</div>
