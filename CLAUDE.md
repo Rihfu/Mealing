@@ -149,6 +149,20 @@ Une nouvelle session n'a **aucune mémoire** de la précédente. Pour reprendre 
 
 **Vérifier le rendu** : `npm run dev` (`http://localhost:3000`) ou la prod `https://mealings.netlify.app` ; extension **Claude in Chrome** connectée pour piloter un onglet (lire console/réseau). Compte de test : foyer « Maison » / profil **SAWADA** (`d4bc16e7-19fa-4976-92f9-c6b6d1662e90`). ⚠️ Piège outil constaté : en pilotant le navigateur, le **1er clic juste après une navigation est souvent absorbé** (hydratation du composant client) — re-cliquer ; et préférer les clics par coordonnées si une `ref` semble périmée.
 
+### ⚠️ SESSION EN COURS (2026-07-07) — peaufinage anti-friction + améliorations Planning/Assistant
+
+**Contexte** : après la refonte Nutrition (N0→N3 + peaufinage, commits `a1bf0b8`→`651adfd`), 2 réglages Recettes (`cd784f1` : brouillon IA éditable + « Ajouter aux courses » sans redirection) et une **revue anti-friction** des 4 sections (`cbd7114` : error boundary global `(app)/error.tsx` — il n'en existait AUCUN —, actions recettes qui préservent la saisie sur échec, `saveGeneratedRecipeAction` à état, `run()` du planning + `useToggle` des courses catchés). L'utilisateur a validé le rapport et demandé de TOUT corriger + 3 améliorations. **Si cette session s'est arrêtée en plein milieu, reprendre la liste ci-dessous dans l'ordre (statuts à jour au fil de l'eau)** :
+
+1. ☐ **P5+P4 — feedbacks** : (a) `/recettes/generer` : le textarea « Demande » garde la requête après génération (variante facile) ; (b) `add-article.tsx` (Courses) et `add-stock.tsx` (Stock) : message « X ajouté ✓ » après ajout + catch local (pattern extras Nutrition).
+2. ☐ **P1+P6 — shopping-list.tsx robuste** : helper `safe()` autour des ~7 handlers async sans catch (épingler essentiel L296, quantité L310, retirer+undo L778, essentiels/ranger en masse L790/802, glisser rayon L871, ranger L896, réordre L898) → toast d'erreur ; + états pending anti double-clic sur `updateManualItemAction`/`promoteToEssentialAction`.
+3. ☐ **P3 — planning** : remplacer le `window.confirm` de `duplicatePrev` (planning-board.tsx ~L299) par une confirmation en place dans la DA.
+4. ☐ **B3 — drag & drop des repas du planning** : glisser une tuile repas vers un autre jour/créneau (`moveMealAction` existe déjà, actions.ts) via `@dnd-kit` (capteurs partagés `src/components/sortable.tsx` : appui long mobile + souris desktop, comme Courses/Stock). Vues agenda + grille (+ mobile si faisable). Demande explicite : « déplacer un plat du lundi au mardi d'un simple mouvement de doigt, ou du déjeuner au dîner ».
+5. ☐ **B2 — historique des plats dans le Planning** : panneau « Historique » = liste DÉFILABLE des plats des repas PASSÉS (dérivée de `planned_meal` passé ~8-12 semaines, dédupliquée par recette, date du dernier), avec bouton **« Reconduire »** → ouvre la config d'ajout du planning avec la recette pré-choisie.
+6. ☐ **B1 — bulle assistant flottante = parité section Assistant** : `(app)/assistant-bubble.tsx` doit permettre de **choisir une conversation existante / en créer une nouvelle** + afficher la **jauge de messages max** (reprendre les mécanismes de `assistant/agent-chat.tsx` : actions de `assistant/actions.ts`, `core/conversations.ts`, limite + reprise par brief).
+7. ☐ **P2 — liste `/courses` offline-aware** (gros, en dernier) : étendre la file offline du mode magasin (`src/lib/offline/queue.ts`, `courses/sync-replay.ts`) à la coche de la LISTE (aujourd'hui seule la vue magasin est offline).
+
+Méthode : tsc/eslint/build + vérif Chrome (SAWADA) après chaque bloc, commit par bloc sur `dev` (jamais `main`). Cocher ☑ ici au fur et à mesure.
+
 ### Prochaine session — actions à effectuer
 
 1. **Poursuivre l'optimisation de la section Liste de courses** (chantier principal — beaucoup de détails restent à ajuster ; voir `docs/courses-ux-refonte.md`).
