@@ -37,6 +37,7 @@ import {
   reassignLeftover,
   setMealLeftover,
   copyPlannedWeek,
+  reconductPlannedMeals,
   recordConsumption,
   upsertStockItem,
   setStockLocation,
@@ -73,6 +74,15 @@ import {
   trackNutrient,
   untrackNutrient,
   addFoodExtra,
+  // nutrition (lecture riche — agrégats/habitudes/extras : valeurs LUES en base, jamais calculées par l'IA)
+  aggregatePeriodNutrition,
+  countHabitOccurrences,
+  listExtras,
+  removeExtra,
+  suggestRecipesForNutrient,
+  suggestRecipesForHabit,
+  backfillRecipeIngredientLinks,
+  completeMissingFoodNutrition,
 } from '@/lib/core';
 import { categoryDef, categoryLabel, CATEGORY_ORDER } from '@/lib/product-assets';
 import { isoDate, mondayOf, addDays } from '@/lib/dates';
@@ -127,6 +137,15 @@ const WRITE_SCHEMAS = {
   reassign_leftover: z.object({ mealId: z.string().min(1), date: z.string(), slot: slotEnum, name: z.string().optional() }),
   set_meal_leftover: z.object({ mealId: z.string().min(1), produces: z.boolean() }),
   copy_week: z.object({ fromWeekStart: z.string(), toWeekStart: z.string() }),
+  reconduct_meals: z
+    .object({
+      mealIds: z.array(z.string().min(1)).min(1),
+      offsetDays: z.number().int().optional(),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    })
+    .refine((v) => !!v.date || (v.offsetDays != null && v.offsetDays !== 0), {
+      message: 'offsetDays ou date requis',
+    }),
   add_stock_item: z.object({ label: z.string().min(1), location: z.string().optional(), quantity: z.number().optional(), unit: z.string().optional() }),
   remove_stock_item: z.object({ id: z.string().min(1) }),
   discard_stock_item: z.object({ id: z.string().min(1) }),
@@ -178,12 +197,14 @@ const WRITE_SCHEMAS = {
   }),
   remove_habit: z.object({ idOrLabel: z.string().min(1) }),
   log_extra: z.object({ label: z.string().min(1), quantity: z.number().positive() }),
+  remove_extra: z.object({ idOrLabel: z.string().min(1) }),
+  repair_nutrition_data: z.object({}),
 } as const;
 
 type WriteName = keyof typeof WRITE_SCHEMAS;
 const WRITE_NAMES = Object.keys(WRITE_SCHEMAS) as WriteName[];
 // Actions « singleton » : une seule occurrence sensée par plan (on remplace si répétée).
-const SINGLETON_WRITES = new Set<WriteName>(['reorder_rayons', 'checkout', 'estimate_conservation']);
+const SINGLETON_WRITES = new Set<WriteName>(['reorder_rayons', 'checkout', 'estimate_conservation', 'repair_nutrition_data']);
 
 export interface ProposedAction {
   name: WriteName;
@@ -222,7 +243,12 @@ const READ_TOOLS: ToolDefinition[] = [
   { name: 'recommend_recipes', description: 'Recettes RECOMMANDÉES selon le stock actuel (les plus réalisables d’abord : score de couverture + ingrédients manquants). Pour « que puis-je cuisiner ? ».', parameters: obj({ limit: num() }) },
   { name: 'get_recipe', description: 'Détail d’une recette (par nom) : ingrédients + couverture stock (en stock / insuffisant / absent).', parameters: obj({ recipeName: str() }, ['recipeName']) },
   { name: 'list_recipe_groups', description: 'Groupes de recettes du foyer (nom + nombre de recettes).', parameters: obj({}) },
-  { name: 'get_planning', description: 'Repas planifiés d’une semaine avec leur `id` (pour agir : déplacer/retirer/écart/reste). weekStart optionnel (YYYY-MM-DD, un jour de la semaine voulue) — défaut = semaine en cours. Renvoie aussi les jours hors-plan.', parameters: obj({ weekStart: str('YYYY-MM-DD (optionnel)') }) },
+  { name: 'get_planning', description: 'Repas planifiés d’une semaine avec leur `id` (pour agir : déplacer/retirer/reconduire/écart/reste). weekStart optionnel (YYYY-MM-DD, un jour de la semaine voulue, PASSÉE ou FUTURE) — défaut = semaine en cours. Renvoie aussi : portions, restes, repas individuels (avec le prénom), écarts déjà signalés (sauté/différent) et jours hors-plan.', parameters: obj({ weekStart: str('YYYY-MM-DD (optionnel)') }) },
+  { name: 'get_past_meals', description: 'Historique des PLATS des 12 dernières semaines, dédupliqué (nom, nb de fois, dernier passage + créneau). Pour « qu’a-t-on mangé récemment ? » / retrouver un plat à replanifier.', parameters: obj({}) },
+  { name: 'get_nutrition_summary', description: 'Bilan NUTRITION personnel de l’utilisateur : planifié vs réel par nutriment suivi (avec zone min/max et statut), sur un jour ou une semaine + couverture des données. period = "day"|"week" (défaut week), date optionnelle (YYYY-MM-DD, défaut aujourd’hui). Valeurs LUES en base — jamais calculées par toi.', parameters: obj({ period: { type: 'string', enum: ['day', 'week'] }, date: str('YYYY-MM-DD (optionnel)') }) },
+  { name: 'get_habits_progress', description: 'Progression des HABITUDES suivies sur la semaine en cours (fait / à venir / cible, prochaine occurrence). Pour « où j’en suis sur le poisson gras ? ».', parameters: obj({}) },
+  { name: 'get_extras', description: 'Extras HORS-PLAN notés par l’utilisateur (aliment, quantité, date) sur une période. from/to optionnels (YYYY-MM-DD, défaut aujourd’hui).', parameters: obj({ from: str('YYYY-MM-DD (optionnel)'), to: str('YYYY-MM-DD (optionnel)') }) },
+  { name: 'suggest_recipe_ideas', description: 'Idées de recettes DU FOYER pour combler un manque : nutrientCode (ex. protein, fiber) → les plus riches par portion ; OU habitKey (ex. poisson_gras, legumineuse) → celles qui contiennent un aliment concerné. Réalisabilité stock annotée. Enchaîne avec add_meal si l’utilisateur veut planifier.', parameters: obj({ nutrientCode: str('code du nutriment (optionnel)'), habitKey: str('clé ou libellé d’habitude (optionnel)') }) },
   { name: 'get_tracking_plan', description: 'Plan de suivi NUTRITION personnel de l’utilisateur : facettes cochées, nutriments suivis (avec zones), habitudes suivies (avec id), habitudes disponibles au catalogue et recommandations non suivies (avec leur pourquoi). À lire AVANT de configurer un suivi.', parameters: obj({}) },
 ];
 
@@ -248,6 +274,7 @@ const WRITE_TOOLS: ToolDefinition[] = [
   { name: 'reassign_leftover', description: 'Replanifie un RESTE d’un repas (qui produit un reste) vers un créneau ; `name` optionnel = plat improvisé (sinon « Reste : … »). Aucun nouveau besoin de courses. mealId = repas-source de get_planning.', parameters: obj({ mealId: str(), date: str('YYYY-MM-DD'), slot: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack'] }, name: str() }, ['mealId', 'date', 'slot']) },
   { name: 'set_meal_leftover', description: 'Marque (produces=true) ou non (false) qu’un repas produit un reste replanifiable. mealId de get_planning.', parameters: obj({ mealId: str(), produces: { type: 'boolean' } }, ['mealId', 'produces']) },
   { name: 'copy_week', description: 'Duplique les repas d’une semaine vers une autre (réutilisation). fromWeekStart/toWeekStart = un jour de chaque semaine (YYYY-MM-DD).', parameters: obj({ fromWeekStart: str('YYYY-MM-DD'), toWeekStart: str('YYYY-MM-DD') }, ['fromWeekStart', 'toWeekStart']) },
+  { name: 'reconduct_meals', description: 'RECONDUIT (copie) des repas existants vers une autre date : offsetDays (lendemain = 1, semaine suivante = 7) OU date fixe (YYYY-MM-DD) — le créneau est conservé, les copies repartent propres (ni reste ni écart). mealIds = ids de get_planning.', parameters: obj({ mealIds: { type: 'array', items: str() }, offsetDays: num('décalage en jours (ex. 1, 7)'), date: str('YYYY-MM-DD (sinon offsetDays)') }, ['mealIds']) },
   { name: 'add_stock_item', description: 'Ajoute un article au stock (label requis ; location = clé de list_locations, quantity/unit optionnels).', parameters: obj({ label: str(), location: str(), quantity: num(), unit: str() }, ['label']) },
   { name: 'remove_stock_item', description: 'Retire un article du stock SANS gaspillage (correction/doublon). id de get_stock.', parameters: obj({ id: str() }, ['id']) },
   { name: 'discard_stock_item', description: 'JETER un article (périmé/gâché) — compte comme GASPILLAGE. id de get_stock.', parameters: obj({ id: str() }, ['id']) },
@@ -270,6 +297,8 @@ const WRITE_TOOLS: ToolDefinition[] = [
   { name: 'add_custom_habit', description: 'Crée une habitude PERSONNALISÉE comptée depuis le planning : direction (min = au moins / max = au plus), N fois par jour/semaine, sur des groupes d’aliments (tags : poisson_gras, legumineuse, fruit, legume, noix_graine, source_collagene, fermente).', parameters: obj({ label: str(), direction: { type: 'string', enum: ['min', 'max'] }, targetCount: num(), period: { type: 'string', enum: ['day', 'week'] }, matchTags: { type: 'array', items: str() } }, ['label', 'direction', 'targetCount', 'period', 'matchTags']) },
   { name: 'remove_habit', description: 'Retire une habitude suivie (id OU libellé de get_tracking_plan).', parameters: obj({ idOrLabel: str() }, ['idOrLabel']) },
   { name: 'log_extra', description: 'Enregistre un EXTRA hors-plan mangé par l’utilisateur (aliment + quantité en g/ml) — compté dans son réel estimé. Pour « j’ai mangé un yaourt » / « j’ai grignoté 50 g de chips ».', parameters: obj({ label: str(), quantity: num('quantité en unité de base (g/ml)') }, ['label', 'quantity']) },
+  { name: 'remove_extra', description: 'Retire un extra noté par erreur (id de get_extras, ou libellé de l’aliment — le plus récent des 7 derniers jours est retiré).', parameters: obj({ idOrLabel: str() }, ['idOrLabel']) },
+  { name: 'repair_nutrition_data', description: 'Répare la chaîne de données nutrition : relie au catalogue les ingrédients de recettes en texte libre + complète les valeurs manquantes depuis USDA/OFF (jamais l’IA). À proposer si la couverture (get_nutrition_summary) est faible. Relançable.', parameters: obj({}) },
 ];
 
 /* --------------------------- Lectures (exécutées) --------------------------- */
@@ -455,34 +484,227 @@ async function runReadTool(ctx: Ctx, name: string, args: Record<string, unknown>
       const [mealsRes, offRes] = await Promise.all([
         ctx.db
           .from('planned_meal')
-          .select('id, meal_date, slot, recipe_id, free_text, servings, produces_leftover, leftover_source_meal_id')
+          .select('id, meal_date, slot, recipe_id, free_text, servings, produces_leftover, leftover_source_meal_id, is_individual, individual_profile_id')
           .eq('household_id', ctx.householdId)
           .gte('meal_date', from)
           .lte('meal_date', to)
           .order('meal_date', { ascending: true }),
         ctx.db.from('day_off_plan').select('off_date').eq('household_id', ctx.householdId).eq('scope', 'household').gte('off_date', from).lte('off_date', to),
       ]);
-      const rows = (mealsRes.data ?? []) as Array<{ id: string; meal_date: string; slot: string; recipe_id: string | null; free_text: string | null; servings: number | null; produces_leftover: boolean; leftover_source_meal_id: string | null }>;
+      const rows = (mealsRes.data ?? []) as Array<{ id: string; meal_date: string; slot: string; recipe_id: string | null; free_text: string | null; servings: number | null; produces_leftover: boolean; leftover_source_meal_id: string | null; is_individual: boolean; individual_profile_id: string | null }>;
       const recipeIds = [...new Set(rows.map((r) => r.recipe_id).filter((x): x is string => !!x))];
+      const profileIds = [...new Set(rows.map((r) => r.individual_profile_id).filter((x): x is string => !!x))];
+      const mealIds = rows.map((r) => r.id);
       const names = new Map<string, string>();
-      if (recipeIds.length) {
-        const { data } = await ctx.db.from('recipe').select('id, name').in('id', recipeIds);
-        for (const r of (data ?? []) as Array<{ id: string; name: string }>) names.set(r.id, r.name);
-      }
+      const profileNames = new Map<string, string>();
+      // Écarts déjà signalés (sauté / mangé autre chose) — ceux visibles sous RLS.
+      const deviationByMeal = new Map<string, { status: string; ate: string | null }>();
+      await Promise.all([
+        (async () => {
+          if (!recipeIds.length) return;
+          const { data } = await ctx.db.from('recipe').select('id, name').in('id', recipeIds);
+          for (const r of (data ?? []) as Array<{ id: string; name: string }>) names.set(r.id, r.name);
+        })(),
+        (async () => {
+          if (!profileIds.length) return;
+          const { data } = await ctx.db.from('profile').select('id, display_name').in('id', profileIds);
+          for (const p of (data ?? []) as Array<{ id: string; display_name: string | null }>) profileNames.set(p.id, p.display_name ?? 'un membre');
+        })(),
+        (async () => {
+          if (!mealIds.length) return;
+          const { data } = await ctx.db
+            .from('real_consumption')
+            .select('planned_meal_id, status, actual_free_text')
+            .in('planned_meal_id', mealIds)
+            .in('status', ['skipped', 'different']);
+          for (const d of (data ?? []) as Array<{ planned_meal_id: string | null; status: string; actual_free_text: string | null }>) {
+            if (d.planned_meal_id) deviationByMeal.set(d.planned_meal_id, { status: d.status, ate: d.actual_free_text });
+          }
+        })(),
+      ]);
       return JSON.stringify({
         semaine: `${from} → ${to}`,
-        repas: rows.map((r) => ({
-          id: r.id,
-          date: r.meal_date,
-          creneau: SLOT_LABEL_FR[r.slot] ?? r.slot,
-          slot: r.slot,
-          nom: r.recipe_id ? names.get(r.recipe_id) ?? 'Recette' : r.free_text ?? (r.leftover_source_meal_id ? 'Reste' : 'Repas libre'),
-          portions: r.servings,
-          produit_reste: !!r.produces_leftover,
-          est_reste: !!r.leftover_source_meal_id,
-        })),
+        repas: rows.map((r) => {
+          const dev = deviationByMeal.get(r.id);
+          return {
+            id: r.id,
+            date: r.meal_date,
+            creneau: SLOT_LABEL_FR[r.slot] ?? r.slot,
+            slot: r.slot,
+            nom: r.recipe_id ? names.get(r.recipe_id) ?? 'Recette' : r.free_text ?? (r.leftover_source_meal_id ? 'Reste' : 'Repas libre'),
+            portions: r.servings,
+            produit_reste: !!r.produces_leftover,
+            est_reste: !!r.leftover_source_meal_id,
+            individuel: r.is_individual ? (r.individual_profile_id ? profileNames.get(r.individual_profile_id) ?? 'un membre' : true) : false,
+            ecart: dev ? (dev.status === 'skipped' ? 'sauté' : `différent${dev.ate ? ` (${dev.ate})` : ''}`) : null,
+          };
+        }),
         jours_hors_plan: ((offRes.data ?? []) as Array<{ off_date: string }>).map((o) => o.off_date),
       });
+    }
+    case 'get_past_meals': {
+      // Même logique que l'historique des plats du planning : 12 semaines passées,
+      // dédupliqué par recette/libellé, dernier passage + compteur.
+      const today = new Date();
+      const { data } = await ctx.db
+        .from('planned_meal')
+        .select('meal_date, slot, recipe_id, free_text, leftover_source_meal_id, recipe:recipe_id(name)')
+        .eq('household_id', ctx.householdId)
+        .gte('meal_date', isoDate(addDays(today, -84)))
+        .lt('meal_date', isoDate(today))
+        .order('meal_date', { ascending: false })
+        .limit(400);
+      const past = (data ?? []) as Array<{ meal_date: string; slot: string; recipe_id: string | null; free_text: string | null; leftover_source_meal_id: string | null; recipe: { name: string } | { name: string }[] | null }>;
+      const byDish = new Map<string, { nom: string; fois: number; dernier: string; creneau: string }>();
+      for (const r of past) {
+        const recipeName = Array.isArray(r.recipe) ? r.recipe[0]?.name : r.recipe?.name;
+        const nom = (recipeName ?? r.free_text ?? '').trim();
+        if (!nom) continue; // restes sans nom propre : rien d'actionnable
+        const key = r.recipe_id ?? `txt:${nom.toLowerCase()}`;
+        const existing = byDish.get(key);
+        if (existing) existing.fois += 1; // lignes triées du plus récent au plus ancien
+        else byDish.set(key, { nom, fois: 1, dernier: r.meal_date, creneau: SLOT_LABEL_FR[r.slot] ?? r.slot });
+      }
+      return JSON.stringify([...byDish.values()].slice(0, 60));
+    }
+    case 'get_nutrition_summary': {
+      // Bilan PERSONNEL (RLS) — valeurs agrégées depuis la base, jamais calculées par l'IA (n°3).
+      if (!ctx.profileId) return JSON.stringify({ erreur: 'profil inconnu' });
+      const period = args.period === 'day' ? 'day' : 'week';
+      const ref = typeof args.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.date) ? args.date : isoDate(new Date());
+      let from: string, to: string;
+      if (period === 'day') {
+        from = ref;
+        to = ref;
+      } else {
+        const monday = mondayOf(ref);
+        from = isoDate(monday);
+        to = isoDate(addDays(monday, 6));
+      }
+      const [agg, settings, nutritionProfile, typesRes] = await Promise.all([
+        aggregatePeriodNutrition(ctx.db, { householdId: ctx.householdId, profileId: ctx.profileId, from, to }),
+        getNutritionSettings(ctx.db, ctx.profileId),
+        getNutritionProfile(ctx.db, ctx.profileId),
+        ctx.db.from('nutrient_type').select('code, name, unit, is_base'),
+      ]);
+      const childMode = nutritionProfile?.isChild ?? false;
+      const types = (typesRes.data ?? []) as Array<{ code: string; name: string; unit: string; is_base: boolean }>;
+      const trackedSet = new Set(settings.tracked);
+      const goalByCode = new Map(settings.goals.map((g) => [g.code, g]));
+      const r1 = (n: number) => Math.round(n * 10) / 10;
+      const nutriments = types
+        // Suivis explicites, sinon les nutriments de base (même règle que la page Nutrition).
+        .filter((t) => (trackedSet.size > 0 ? trackedSet.has(t.code) : t.is_base))
+        // Mode ENFANT : l'énergie n'est JAMAIS exposée (éthique, non négociable).
+        .filter((t) => !(childMode && t.code === 'energy_kcal'))
+        .map((t) => {
+          const g = goalByCode.get(t.code);
+          const reel = agg.real[t.code] ?? 0;
+          const statut =
+            g == null || (g.min == null && g.max == null)
+              ? null
+              : g.max != null && reel > g.max
+                ? 'au-dessus'
+                : g.min != null && reel < g.min
+                  ? 'en dessous'
+                  : 'dans la zone';
+          return {
+            code: t.code,
+            nom: t.name,
+            unite: t.unit,
+            planifie: r1(agg.planned[t.code] ?? 0),
+            reel: r1(reel),
+            zone_min: g?.min ?? null,
+            zone_max: g?.max ?? null,
+            statut,
+          };
+        });
+      const cov = agg.coverage;
+      return JSON.stringify({
+        periode: period === 'day' ? from : `${from} → ${to}`,
+        mode_enfant: childMode,
+        nutriments,
+        couverture: {
+          pct:
+            cov.ingredientsTotal > 0
+              ? Math.round((cov.ingredientsWithData / cov.ingredientsTotal) * 100)
+              : cov.mealsTotal > 0
+                ? Math.round((cov.mealsCovered / cov.mealsTotal) * 100)
+                : null,
+          repas_couverts: `${cov.mealsCovered}/${cov.mealsTotal}`,
+          ingredients_avec_donnees: `${cov.ingredientsWithData}/${cov.ingredientsTotal}`,
+        },
+      });
+    }
+    case 'get_habits_progress': {
+      if (!ctx.profileId) return JSON.stringify({ erreur: 'profil inconnu' });
+      const monday = mondayOf();
+      const weekStart = isoDate(monday);
+      const weekEnd = isoDate(addDays(monday, 6));
+      const habits = (await getProfileHabits(ctx.db, ctx.profileId)).filter((h) => h.enabled);
+      if (habits.length === 0) return JSON.stringify({ habitudes: [], note: 'Aucune habitude suivie — voir get_tracking_plan pour en proposer.' });
+      const counts = await countHabitOccurrences(ctx.db, {
+        householdId: ctx.householdId,
+        profileId: ctx.profileId,
+        weekStart,
+        weekEnd,
+        today: isoDate(new Date()),
+        habits: habits.map((h) => ({ key: h.id, matchTags: h.matchTags, matchFoodIds: h.matchFoodIds, distinctMode: h.distinctMode })),
+      });
+      return JSON.stringify({
+        semaine: `${weekStart} → ${weekEnd}`,
+        habitudes: habits.map((h) => {
+          const c = counts.get(h.id);
+          const fait = h.period === 'day' ? (c?.todayDone ?? 0) : (c?.weekDone ?? 0);
+          return {
+            libelle: h.label,
+            habitKey: h.habitKey,
+            objectif: `${h.direction === 'min' ? 'au moins' : 'au plus'} ${h.targetCount}×/${h.period === 'week' ? 'semaine' : 'jour'}`,
+            fait,
+            a_venir: h.period === 'day' ? 0 : (c?.weekUpcoming ?? 0),
+            prochaine: c?.nextLabel ?? null,
+            atteint: h.direction === 'min' ? fait >= h.targetCount : fait <= h.targetCount,
+          };
+        }),
+      });
+    }
+    case 'get_extras': {
+      if (!ctx.profileId) return JSON.stringify({ erreur: 'profil inconnu' });
+      const today = isoDate(new Date());
+      const from = typeof args.from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.from) ? args.from : today;
+      const to = typeof args.to === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.to) ? args.to : from;
+      const items = await listExtras(ctx.db, ctx.profileId, { from, to });
+      return JSON.stringify(items.map((e) => ({ id: e.id, aliment: e.foodName, qte: e.quantity, unite: e.unit, date: e.date })));
+    }
+    case 'suggest_recipe_ideas': {
+      const nutrientCode = typeof args.nutrientCode === 'string' ? args.nutrientCode.trim() : '';
+      const habitKey = typeof args.habitKey === 'string' ? args.habitKey.trim() : '';
+      if (nutrientCode) {
+        const s = await suggestRecipesForNutrient(ctx.db, { householdId: ctx.householdId, nutrientCode, limit: 5 });
+        return JSON.stringify(s.map((x) => ({ recette: x.name, apport_par_portion: x.amountPerServing, realisable_pct: x.stockPct })));
+      }
+      if (habitKey) {
+        // Résolution : habitude suivie du profil (perso incluse) → catalogue → la clé comme tag brut.
+        let matchTags: string[] = [habitKey];
+        let matchFoodIds: string[] = [];
+        const q = normName(habitKey);
+        if (ctx.profileId) {
+          const mine = (await getProfileHabits(ctx.db, ctx.profileId)).find(
+            (h) => h.habitKey === habitKey || normName(h.label).includes(q) || q.includes(normName(h.label)),
+          );
+          if (mine) {
+            matchTags = mine.matchTags.length ? mine.matchTags : matchTags;
+            matchFoodIds = mine.matchFoodIds;
+          }
+        }
+        if (matchTags.length === 1 && matchTags[0] === habitKey) {
+          const cat = (await listHabitTypes(ctx.db)).find((h) => h.key === habitKey || normName(h.label).includes(q));
+          if (cat?.match_tags.length) matchTags = cat.match_tags;
+        }
+        const s = await suggestRecipesForHabit(ctx.db, { householdId: ctx.householdId, matchTags, matchFoodIds, limit: 5 });
+        return JSON.stringify(s.map((x) => ({ recette: x.name, aliments_concernes: x.matchedFoods, realisable_pct: x.stockPct })));
+      }
+      return JSON.stringify({ erreur: 'nutrientCode ou habitKey requis' });
     }
     case 'get_tracking_plan': {
       // Plan de suivi PERSONNEL (RLS) — l'agent lit, propose, ne calcule rien (n°3).
@@ -586,6 +808,17 @@ function summarize(name: WriteName, a: Record<string, unknown>): string {
       return a.produces ? `Marquer un repas comme produisant un reste` : `Retirer le reste d’un repas`;
     case 'copy_week':
       return `Copier les repas de la semaine du ${a.fromWeekStart} vers celle du ${a.toWeekStart}`;
+    case 'reconduct_meals': {
+      const n = (a.mealIds as string[]).length;
+      const dest = a.date
+        ? `au ${a.date}`
+        : a.offsetDays === 1
+          ? 'au lendemain'
+          : a.offsetDays === 7
+            ? 'à la semaine suivante'
+            : `à +${a.offsetDays} jour(s)`;
+      return `Reconduire ${n} repas ${dest} (créneau conservé)`;
+    }
     case 'add_stock_item': {
       const qty = a.quantity != null ? ` ${a.quantity}${a.unit ? ` ${a.unit}` : ''}` : '';
       return `Ajouter « ${a.label}${qty} » au stock${a.location ? ` (${a.location})` : ''}`;
@@ -640,13 +873,17 @@ function summarize(name: WriteName, a: Record<string, unknown>): string {
       return `Retirer l’habitude « ${a.idOrLabel} »`;
     case 'log_extra':
       return `Noter un extra : « ${a.label} » (${a.quantity} g/ml)`;
+    case 'remove_extra':
+      return `Retirer l’extra « ${a.idOrLabel} »`;
+    case 'repair_nutrition_data':
+      return `Réparer les données nutrition (relier les ingrédients au catalogue + compléter les valeurs manquantes)`;
   }
 }
 
 /* --------------------------------- Boucle ----------------------------------- */
 
 const SYSTEM_PROMPT = `Tu es l'assistant de Mealing (COURSES, STOCK, RECETTES et PLANNING).
-Tu peux LIRE les données du foyer via des outils (liste, essentiels, rayons, historique, fiches produits, stats, catalogue ; stock : get_stock, get_expiring, list_locations ; recettes : list_recipes, recommend_recipes, get_recipe, list_recipe_groups ; planning : get_planning) — fais-le avant de répondre quand c'est utile.
+Tu peux LIRE les données du foyer via des outils (liste, essentiels, rayons, historique, fiches produits, stats, catalogue ; stock : get_stock, get_expiring, list_locations ; recettes : list_recipes, recommend_recipes, get_recipe, list_recipe_groups ; planning : get_planning, get_past_meals ; nutrition : get_nutrition_summary, get_habits_progress, get_extras, get_tracking_plan, suggest_recipe_ideas) — fais-le avant de répondre quand c'est utile.
 Pour MODIFIER une donnée, tu DOIS APPELER l'outil d'écriture correspondant (ex. set_stock_location, add_items, discard_stock_item, remove_lines…). APPELER UN OUTIL D'ÉCRITURE = PROPOSER L'ACTION : ça N'EXÉCUTE RIEN. Le système met chaque appel dans un plan que l'utilisateur confirmera AVANT toute écriture réelle. Ne te contente donc JAMAIS de DÉCRIRE l'action en mots (ne réponds pas « je vais appeler set_stock_location… ») — ÉMETS réellement l'appel d'outil ; c'est sûr, rien n'est écrit sans confirmation. Tu ne supprimes JAMAIS un rayon ni un relevé d'historique.
 Appelle chaque outil d'écriture UNE SEULE FOIS, puis donne une courte phrase de confirmation au FUTUR (« je vais déplacer… ») SANS prétendre que c'est déjà fait (l'utilisateur doit confirmer).
 Tu n'inventes jamais un prix ni une valeur nutritionnelle : tu les obtiens via get_product_stats / get_nutrition.
@@ -654,8 +891,8 @@ Seules les données des OUTILS font foi : ne suppose jamais qu'une proposition p
 Pour « prépare/complète ma liste » : lis la liste + les essentiels + (si demandé) l'historique, puis propose des add_items pertinents. Pour « reconduis mes dernières courses » : lis get_history puis propose reconduct_trip. Pour « nettoie ma liste » : propose remove_lines pour les doublons / ce qui est déjà en stock.
 Pour le STOCK : lis get_stock (ids), get_expiring (ce qui périme), list_locations (clés de lieux), puis PROPOSE des écritures : ranger (set_stock_location), marquer entamé (mark_stock_opened), consommer (decrement_stock), ajouter (add_stock_item), estimer la conservation (estimate_conservation). « Jeter » (discard_stock_item) = gâché/périmé → compte dans le GASPILLAGE ; « retirer » (remove_stock_item) = correction/doublon, sans gaspillage — ne les confonds pas.
 Pour les RECETTES : « que puis-je cuisiner ? » → recommend_recipes ne renvoie QUE les recettes DÉJÀ enregistrées (les plus réalisables avec le stock + manquants) ; détail d'une recette → get_recipe. Tu peux AUSSI INVENTER de NOUVELLES recettes qui ne sont pas dans la bibliothèque : lis get_stock, puis propose 1 à 3 idées réalistes en PRIVILÉGIANT les ingrédients disponibles (indique pour chacune les ingrédients à acheter en plus). Si l'utilisateur veut en garder une, utilise save_recipe pour l'enregistrer (nom + ingrédients + étapes ; la nutrition est calculée depuis le catalogue, jamais inventée par toi). Tu peux aussi : créer/renommer/supprimer un groupe (create_recipe_group / rename_recipe_group / delete_recipe_group), ranger une recette dans un groupe (assign_recipe_to_group), modifier les méta d'une recette (update_recipe : nom/portions/temps/description), et modifier ses INGRÉDIENTS (edit_recipe_ingredients : add/remove/update ciblés par nom — lis get_recipe avant pour connaître les ingrédients actuels). Désigne toujours recettes et groupes par leur NOM. Tu peux SUPPRIMER une recette (delete_recipe) — action destructive, mais comme toute écriture elle est confirmée avant d'être appliquée ; ne le fais que si c'est clairement demandé.
-Pour le PLANNING : lis get_planning (ids des repas + jours hors-plan ; weekStart optionnel pour une autre semaine), puis PROPOSE : planifier (add_meal : recette OU description, servings = portions, producesLeftover si batch), déplacer (move_meal), retirer (remove_meal), signaler un écart (set_meal_deviation : sauté / différent+ate) ou l'annuler (clear_meal_deviation), marquer/réactiver une journée hors-plan (mark_day_off / unmark_day_off), gérer les restes (set_meal_leftover puis reassign_leftover : « tel quel » sans name, ou plat improvisé avec name — aucun achat généré), dupliquer une semaine (copy_week). Pour « que planifier cette semaine ? » : croise recommend_recipes (réalisables avec le stock) avec get_planning (créneaux vides) et propose des add_meal. Toute écriture sur un repas précis (déplacer/retirer/écart/reste) exige son \`id\` EXACT renvoyé par get_planning — appelle-le d'abord ; n'invente jamais un id.
-Pour la NUTRITION : lis get_tracking_plan (facettes, nutriments suivis + zones, habitudes suivies, catalogue, recommandations avec leur pourquoi), puis PROPOSE : suivre/arrêter un nutriment (track_nutrient / untrack_nutrient — n'invente JAMAIS une cible chiffrée : reprends celle des recommandations ou celle que l'utilisateur te donne, ex. son médecin), suivre une habitude du catalogue (add_habit), créer un repère personnalisé compté depuis le planning (add_custom_habit : « fermentés au moins 3×/semaine »), retirer une habitude (remove_habit), mettre à jour les facettes (set_facets). Si l'utilisateur dit avoir mangé quelque chose HORS planning (« j'ai pris un yaourt »), propose log_extra (quantité en g/ml — demande-la si absente). Une donnée introuvable (collagène en mg…) : explique honnêtement qu'aucune base ne la couvre et propose l'équivalent en HABITUDE. Le plan de suivi est STRICTEMENT PERSONNEL — n'en parle jamais comme d'une donnée du foyer.
+Pour le PLANNING : lis get_planning (ids des repas, portions, restes, repas individuels, écarts, jours hors-plan ; weekStart optionnel pour une semaine PASSÉE ou FUTURE) et get_past_meals (les plats des 12 dernières semaines : « qu'a-t-on mangé récemment ? », retrouver un plat à remettre), puis PROPOSE : planifier (add_meal : recette OU description, servings = portions, producesLeftover si batch), déplacer (move_meal), retirer (remove_meal), RECONDUIRE des repas existants (reconduct_meals : mealIds de get_planning + offsetDays 1 = lendemain / 7 = semaine suivante OU date fixe — créneau conservé, copies propres), signaler un écart (set_meal_deviation : sauté / différent+ate) ou l'annuler (clear_meal_deviation), marquer/réactiver une journée hors-plan (mark_day_off / unmark_day_off), gérer les restes (set_meal_leftover puis reassign_leftover : « tel quel » sans name, ou plat improvisé avec name — aucun achat généré), dupliquer une semaine (copy_week). Pour « que planifier cette semaine ? » : croise recommend_recipes (réalisables avec le stock) avec get_planning (créneaux vides) et propose des add_meal ; pense aussi à get_past_meals pour reproposer ce que le foyer aime. Toute écriture sur un repas précis (déplacer/retirer/reconduire/écart/reste) exige son \`id\` EXACT renvoyé par get_planning — appelle-le d'abord ; n'invente jamais un id.
+Pour la NUTRITION : « où j'en suis ? » → get_nutrition_summary (planifié vs réel par nutriment suivi + zones min/max + statut + COUVERTURE des données, sur un jour ou la semaine) ; progression des habitudes → get_habits_progress (fait / à venir / prochaine occurrence) ; extras notés → get_extras. Ces chiffres viennent de la BASE — tu ne calcules jamais une valeur nutritionnelle toi-même (tu peux seulement les additionner/commenter). Pour la CONFIGURATION, lis get_tracking_plan (facettes, nutriments suivis + zones, habitudes suivies, catalogue, recommandations avec leur pourquoi), puis PROPOSE : suivre/arrêter un nutriment (track_nutrient / untrack_nutrient — n'invente JAMAIS une cible chiffrée : reprends celle des recommandations ou celle que l'utilisateur te donne, ex. son médecin), suivre une habitude du catalogue (add_habit), créer un repère personnalisé compté depuis le planning (add_custom_habit : « fermentés au moins 3×/semaine »), retirer une habitude (remove_habit), mettre à jour les facettes (set_facets). Pour AGIR sur un manque (« je suis bas en protéines », « 0/2 poisson gras ») : suggest_recipe_ideas (nutrientCode OU habitKey) → recettes du foyer les plus pertinentes avec réalisabilité stock, puis propose add_meal si l'utilisateur veut planifier. Si la couverture est faible (beaucoup d'ingrédients sans données), propose repair_nutrition_data. Si l'utilisateur dit avoir mangé quelque chose HORS planning (« j'ai pris un yaourt »), propose log_extra (quantité en g/ml — demande-la si absente) ; noté par erreur → remove_extra. Une donnée introuvable (collagène en mg…) : explique honnêtement qu'aucune base ne la couvre et propose l'équivalent en HABITUDE. Le plan de suivi et le bilan sont STRICTEMENT PERSONNELS — n'en parle jamais comme d'une donnée du foyer. MODE ENFANT : si get_nutrition_summary ou get_tracking_plan indique mode_enfant=true, ne mentionne JAMAIS les calories/kcal (ni chiffre ni objectif) — parle variété, familles d'aliments, découvertes.
 IMPORTANT : toute écriture visant un article précis du stock (jeter/retirer/ranger/consommer/marquer entamé) exige son \`id\` EXACT (un UUID) renvoyé par get_stock ou get_expiring. Appelle TOUJOURS get_stock juste avant pour récupérer cet id ; n'invente JAMAIS un id et n'utilise pas le nom de l'article comme id.
 N'ÉCRIS JAMAIS l'id (UUID) dans tes réponses à l'utilisateur : il sert uniquement aux appels d'outils, en interne. Dans le chat, désigne toujours les articles par leur NOM (« le saumon »), jamais par leur UUID — c'est plus naturel.
 Réponds en français, de façon concise. Si une action te manque d'info, demande-la plutôt que d'inventer.
@@ -1010,6 +1247,18 @@ async function executeOne(ctx: Ctx, action: ProposedAction): Promise<string> {
       const n = await copyPlannedWeek(db, { householdId, fromWeekStart: String(a.fromWeekStart), toWeekStart: String(a.toWeekStart) });
       return n > 0 ? `${n} repas copié(s) vers la semaine du ${a.toWeekStart}.` : `Rien à copier dans la semaine source.`;
     }
+    case 'reconduct_meals': {
+      // Ids scellés côté foyer par reconductPlannedMeals (filtre household_id) — pas de fuite inter-foyers.
+      const ids = (a.mealIds as string[]).filter((id) => UUID_RE.test(id.trim()));
+      if (ids.length === 0) return NO_MEAL_ROW;
+      const n = await reconductPlannedMeals(db, {
+        householdId,
+        mealIds: ids,
+        offsetDays: a.offsetDays as number | undefined,
+        date: a.date as string | undefined,
+      });
+      return n > 0 ? `${n} repas reconduit(s).` : NO_MEAL_ROW;
+    }
     case 'add_stock_item': {
       // Rattachement au catalogue (comme addStockAction) → fiche produit + conservation
       // intelligente possibles. Sans ça, l'article reste en food_id null (non estimable).
@@ -1217,6 +1466,35 @@ async function executeOne(ctx: Ctx, action: ProposedAction): Promise<string> {
       if (!foodId) return `Aliment « ${label} » introuvable.`;
       await addFoodExtra(db, ctx.profileId, { foodId, quantity: a.quantity as number });
       return `Extra « ${label} » noté (${a.quantity} g/ml) — compté dans ton réel.`;
+    }
+    case 'remove_extra': {
+      if (!ctx.profileId) return 'Profil inconnu — impossible de retirer un extra.';
+      const now = new Date();
+      // Fenêtre 7 jours, triée du plus récent au plus ancien : sur un libellé, on
+      // retire l'occurrence la plus récente (l'intention naturelle de « annule mon yaourt »).
+      const extras = await listExtras(db, ctx.profileId, { from: isoDate(addDays(now, -7)), to: isoDate(now) });
+      const q = String(a.idOrLabel).trim();
+      let match = extras.find((e) => e.id === q);
+      if (!match) {
+        const nq = normName(q);
+        match = extras.find((e) => {
+          const nf = normName(e.foodName);
+          return nf === nq || (nq.length >= 3 && (nf.includes(nq) || nq.includes(nf)));
+        });
+      }
+      if (!match) return `Extra « ${q} » introuvable sur les 7 derniers jours.`;
+      await removeExtra(db, ctx.profileId, match.id);
+      return `Extra « ${match.foodName} » (${match.date}) retiré.`;
+    }
+    case 'repair_nutrition_data': {
+      // Même passe bornée que le bouton « Compléter les données » (N0) : liens
+      // ingrédients→catalogue + valeurs fournisseur USDA/OFF (jamais l'IA, n°3).
+      const linked = await backfillRecipeIngredientLinks(db);
+      const { data: rows } = await db.from('recipe_ingredient').select('food_id').not('food_id', 'is', null);
+      const foodIds = Array.from(new Set((rows ?? []).map((r) => r.food_id as string)));
+      const res = await completeMissingFoodNutrition(db, foodIds, { max: 12, concurrency: 3 });
+      const remaining = Math.max(0, res.missing - res.completed);
+      return `Données nutrition réparées : ${linked} ingrédient(s) relié(s), ${res.completed} aliment(s) complété(s)${remaining > 0 ? ` — ${remaining} restant(s), relance possible` : ''}.`;
     }
   }
 }
