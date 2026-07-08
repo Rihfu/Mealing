@@ -27,7 +27,7 @@ export default async function PlanningPage({
   const fromIso = isoDate(weekStart);
   const toIso = isoDate(weekEnd);
 
-  const [{ data: meals }, { data: offDays }, { data: recipes }, { data: profiles }, imagePaths] = await Promise.all([
+  const [{ data: meals }, { data: offDays }, { data: recipes }, { data: profiles }, imagePaths, { data: household }] = await Promise.all([
     supabase
       .from('planned_meal')
       .select('id, meal_date, slot, recipe_id, free_text, servings, produces_leftover, leftover_source_meal_id, is_individual, individual_profile_id')
@@ -37,6 +37,7 @@ export default async function PlanningPage({
     supabase.from('recipe').select('id, name, servings, prep_time_min, cook_time_min').order('name', { ascending: true }),
     supabase.from('profile').select('id, display_name').eq('household_id', householdId),
     loadRecipeImagePaths(supabase, householdId),
+    supabase.from('household').select('default_servings').eq('id', householdId).maybeSingle(),
   ]);
 
   const mealRows = meals ?? [];
@@ -168,6 +169,7 @@ export default async function PlanningPage({
           ? { recipeId: planRecipe, d: Number(planD), slot: planSlot }
           : null
       }
+      defaultServings={household?.default_servings ?? null}
     />
   );
 }

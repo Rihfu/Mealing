@@ -108,6 +108,8 @@ interface BoardProps {
   profiles: ProfileOption[];
   /** Recette tout juste créée à rattacher (retour du flux « + Créer une recette »). */
   pending: { recipeId: string; d: number; slot: string } | null;
+  /** Portions par défaut d'un repas de foyer (réglage Foyer) — sinon celles de la recette. */
+  defaultServings: number | null;
 }
 
 // Police (next/font → variables CSS).
@@ -228,7 +230,7 @@ type Overlay =
   | null;
 
 export function PlanningBoard(props: BoardProps) {
-  const { weekStart, weekLabel, dates, dateLabels, todayIndex, prevWeek, nextWeek, thisWeek, meals, offDates, recipes, profiles, pending } = props;
+  const { weekStart, weekLabel, dates, dateLabels, todayIndex, prevWeek, nextWeek, thisWeek, meals, offDates, recipes, profiles, pending, defaultServings } = props;
   const router = useRouter();
   const [, startT] = useTransition();
   const start0 = new Date(`${weekStart}T00:00:00`);
@@ -300,7 +302,7 @@ export function PlanningBoard(props: BoardProps) {
     const r = recipes.find((x) => x.id === pending.recipeId);
     const raf = requestAnimationFrame(() => {
       if (r) {
-        setDraftPortions(r.serves || 2);
+        setDraftPortions(defaultServings ?? (r.serves || 2));
         setDraftLeftover(false);
         setDraftIndividual('');
         setOverlay({ type: 'add', d: pending.d, slot: pending.slot as SlotKey, step: 'config', recipe: r });
@@ -308,7 +310,7 @@ export function PlanningBoard(props: BoardProps) {
       router.replace(`/planning?week=${weekStart}`);
     });
     return () => cancelAnimationFrame(raf);
-  }, [pending, recipes, weekStart, router]);
+  }, [pending, recipes, weekStart, router, defaultServings]);
 
   // ---- données dérivées ----
   const mealsAt = (d: number, slot: SlotKey) => meals.filter((m) => m.dayIndex === d && m.slot === slot);
@@ -325,7 +327,7 @@ export function PlanningBoard(props: BoardProps) {
     setOverlay({ type: 'add', d, slot, step: 'search', recipe: null });
   }
   function chooseRecipe(r: RecipeOption) {
-    setDraftPortions(r.serves || 2);
+    setDraftPortions(defaultServings ?? (r.serves || 2));
     setOverlay((o) => (o && o.type === 'add' ? { ...o, step: 'config', recipe: r } : o));
   }
   function createRecipeFor(d: number, slot: SlotKey) {
@@ -403,7 +405,7 @@ export function PlanningBoard(props: BoardProps) {
     const r = p.recipeId ? recipes.find((x) => x.id === p.recipeId) : undefined;
     setSearch(''); setFilter('Tout'); setDraftLeftover(false); setDraftIndividual('');
     if (r) {
-      setDraftPortions(r.serves || 2);
+      setDraftPortions(defaultServings ?? (r.serves || 2));
       setDraftName('');
       setOverlay({ type: 'add', d, slot, step: 'config', recipe: r });
     } else {

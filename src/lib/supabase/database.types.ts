@@ -329,30 +329,44 @@ export type Database = {
       }
       household: {
         Row: {
+          admin_profile_id: string | null
           created_at: string
           created_by: string | null
+          default_servings: number | null
           id: string
           name: string
           shopping_horizon_days: number
           updated_at: string
         }
         Insert: {
+          admin_profile_id?: string | null
           created_at?: string
           created_by?: string | null
+          default_servings?: number | null
           id?: string
           name: string
           shopping_horizon_days?: number
           updated_at?: string
         }
         Update: {
+          admin_profile_id?: string | null
           created_at?: string
           created_by?: string | null
+          default_servings?: number | null
           id?: string
           name?: string
           shopping_horizon_days?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "household_admin_profile_id_fkey"
+            columns: ["admin_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       household_food_pref: {
         Row: {
@@ -411,6 +425,7 @@ export type Database = {
           accepted_by: string | null
           created_at: string
           email: string
+          expires_at: string
           household_id: string
           id: string
           invited_by: string | null
@@ -422,6 +437,7 @@ export type Database = {
           accepted_by?: string | null
           created_at?: string
           email: string
+          expires_at?: string
           household_id: string
           id?: string
           invited_by?: string | null
@@ -433,6 +449,7 @@ export type Database = {
           accepted_by?: string | null
           created_at?: string
           email?: string
+          expires_at?: string
           household_id?: string
           id?: string
           invited_by?: string | null
@@ -1141,6 +1158,7 @@ export type Database = {
           actual_recipe_id: string | null
           consumed_at: string
           created_at: string
+          food_id: string | null
           id: string
           planned_meal_id: string | null
           profile_id: string
@@ -1153,6 +1171,7 @@ export type Database = {
           actual_recipe_id?: string | null
           consumed_at?: string
           created_at?: string
+          food_id?: string | null
           id?: string
           planned_meal_id?: string | null
           profile_id: string
@@ -1165,6 +1184,7 @@ export type Database = {
           actual_recipe_id?: string | null
           consumed_at?: string
           created_at?: string
+          food_id?: string | null
           id?: string
           planned_meal_id?: string | null
           profile_id?: string
@@ -1178,6 +1198,13 @@ export type Database = {
             columns: ["actual_recipe_id"]
             isOneToOne: false
             referencedRelation: "recipe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "real_consumption_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: false
+            referencedRelation: "food"
             referencedColumns: ["id"]
           },
           {
@@ -1932,7 +1959,31 @@ export type Database = {
     Functions: {
       can_view_profile_nutrition: { Args: { target: string }; Returns: boolean }
       current_household_id: { Args: never; Returns: string }
+      is_household_admin: { Args: { hid: string }; Returns: boolean }
       is_household_member: { Args: { hid: string }; Returns: boolean }
+      leave_household: {
+        Args: { p_leave_recipes: boolean }
+        Returns: undefined
+      }
+      remove_household_member: {
+        Args: { p_member: string }
+        Returns: undefined
+      }
+      rename_household: {
+        Args: { p_household: string; p_name: string }
+        Returns: undefined
+      }
+      shared_nutrition_flags: {
+        Args: { target: string }
+        Returns: {
+          is_child: boolean
+          onboarded: boolean
+        }[]
+      }
+      transfer_household_admin: {
+        Args: { p_new_admin: string }
+        Returns: undefined
+      }
       unaccent: { Args: { "": string }; Returns: string }
     }
     Enums: {

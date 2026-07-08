@@ -74,6 +74,13 @@ import {
   trackNutrient,
   untrackNutrient,
   addFoodExtra,
+  // foyer (section Foyer — lecture + réglages/invitations confirmés)
+  getHouseholdOverview,
+  renameHousehold,
+  setHouseholdSettings,
+  inviteToHousehold,
+  getNotificationPref,
+  setNotificationPref,
   // nutrition (lecture riche — agrégats/habitudes/extras : valeurs LUES en base, jamais calculées par l'IA)
   aggregatePeriodNutrition,
   countHabitOccurrences,
@@ -199,12 +206,26 @@ const WRITE_SCHEMAS = {
   log_extra: z.object({ label: z.string().min(1), quantity: z.number().positive() }),
   remove_extra: z.object({ idOrLabel: z.string().min(1) }),
   repair_nutrition_data: z.object({}),
+  // foyer — l'agent ne retire JAMAIS un membre, ne transfère pas l'admin, ne quitte pas.
+  rename_household: z.object({ name: z.string().min(1).max(80) }),
+  invite_member: z.object({ email: z.string().email() }),
+  cancel_invitation: z.object({ email: z.string().min(3) }),
+  set_household_settings: z
+    .object({
+      shoppingHorizonDays: z.number().int().min(1).max(30).optional(),
+      defaultServings: z.number().int().min(0).max(24).optional(),
+      expiryThresholdDays: z.number().int().min(1).max(60).optional(),
+    })
+    .refine(
+      (v) => v.shoppingHorizonDays !== undefined || v.defaultServings !== undefined || v.expiryThresholdDays !== undefined,
+      { message: 'aucun réglage fourni' },
+    ),
 } as const;
 
 type WriteName = keyof typeof WRITE_SCHEMAS;
 const WRITE_NAMES = Object.keys(WRITE_SCHEMAS) as WriteName[];
 // Actions « singleton » : une seule occurrence sensée par plan (on remplace si répétée).
-const SINGLETON_WRITES = new Set<WriteName>(['reorder_rayons', 'checkout', 'estimate_conservation', 'repair_nutrition_data']);
+const SINGLETON_WRITES = new Set<WriteName>(['reorder_rayons', 'checkout', 'estimate_conservation', 'repair_nutrition_data', 'rename_household', 'set_household_settings']);
 
 export interface ProposedAction {
   name: WriteName;
@@ -250,6 +271,7 @@ const READ_TOOLS: ToolDefinition[] = [
   { name: 'get_extras', description: 'Extras HORS-PLAN notés par l’utilisateur (aliment, quantité, date) sur une période. from/to optionnels (YYYY-MM-DD, défaut aujourd’hui).', parameters: obj({ from: str('YYYY-MM-DD (optionnel)'), to: str('YYYY-MM-DD (optionnel)') }) },
   { name: 'suggest_recipe_ideas', description: 'Idées de recettes DU FOYER pour combler un manque : nutrientCode (ex. protein, fiber) → les plus riches par portion ; OU habitKey (ex. poisson_gras, legumineuse) → celles qui contiennent un aliment concerné. Réalisabilité stock annotée. Enchaîne avec add_meal si l’utilisateur veut planifier.', parameters: obj({ nutrientCode: str('code du nutriment (optionnel)'), habitKey: str('clé ou libellé d’habitude (optionnel)') }) },
   { name: 'get_tracking_plan', description: 'Plan de suivi NUTRITION personnel de l’utilisateur : facettes cochées, nutriments suivis (avec zones), habitudes suivies (avec id), habitudes disponibles au catalogue et recommandations non suivies (avec leur pourquoi). À lire AVANT de configurer un suivi.', parameters: obj({}) },
+  { name: 'get_household', description: 'Le FOYER : nom, membres (prénom, admin, moi), invitations en attente (email + expiration) et réglages (cadence de courses, portions par défaut d’un repas, seuil d’alerte péremption). À lire avant toute action foyer.', parameters: obj({}) },
 ];
 
 const WRITE_TOOLS: ToolDefinition[] = [
@@ -299,6 +321,10 @@ const WRITE_TOOLS: ToolDefinition[] = [
   { name: 'log_extra', description: 'Enregistre un EXTRA hors-plan mangé par l’utilisateur (aliment + quantité en g/ml) — compté dans son réel estimé. Pour « j’ai mangé un yaourt » / « j’ai grignoté 50 g de chips ».', parameters: obj({ label: str(), quantity: num('quantité en unité de base (g/ml)') }, ['label', 'quantity']) },
   { name: 'remove_extra', description: 'Retire un extra noté par erreur (id de get_extras, ou libellé de l’aliment — le plus récent des 7 derniers jours est retiré).', parameters: obj({ idOrLabel: str() }, ['idOrLabel']) },
   { name: 'repair_nutrition_data', description: 'Répare la chaîne de données nutrition : relie au catalogue les ingrédients de recettes en texte libre + complète les valeurs manquantes depuis USDA/OFF (jamais l’IA). À proposer si la couverture (get_nutrition_summary) est faible. Relançable.', parameters: obj({}) },
+  { name: 'rename_household', description: 'Renomme le foyer (réservé à l’admin — la base refuse sinon).', parameters: obj({ name: str('nouveau nom') }, ['name']) },
+  { name: 'invite_member', description: 'Invite quelqu’un dans le foyer par email (admin). Le lien d’invitation (valable 7 jours) apparaît sur la page Foyer.', parameters: obj({ email: str() }, ['email']) },
+  { name: 'cancel_invitation', description: 'Annule une invitation en attente (admin), désignée par l’email invité (voir get_household).', parameters: obj({ email: str() }, ['email']) },
+  { name: 'set_household_settings', description: 'Règle le foyer : shoppingHorizonDays (courses pour N jours, 1-30), defaultServings (portions par défaut d’un repas de foyer, 1-24 ; 0 = revenir aux portions de la recette), expiryThresholdDays (alerte péremption à ≤ N jours, 1-60). Fournis seulement les réglages à changer.', parameters: obj({ shoppingHorizonDays: num(), defaultServings: num(), expiryThresholdDays: num() }) },
 ];
 
 /* --------------------------- Lectures (exécutées) --------------------------- */
@@ -706,6 +732,28 @@ async function runReadTool(ctx: Ctx, name: string, args: Record<string, unknown>
       }
       return JSON.stringify({ erreur: 'nutrientCode ou habitKey requis' });
     }
+    case 'get_household': {
+      const [ov, pref] = await Promise.all([
+        getHouseholdOverview(ctx.db, ctx.householdId),
+        getNotificationPref(ctx.db, ctx.householdId),
+      ]);
+      return JSON.stringify({
+        nom: ov.name,
+        je_suis_admin: ov.isAdmin,
+        membres: ov.members.map((m) => ({
+          nom: m.displayName,
+          admin: m.isAdmin,
+          moi: m.id === ctx.profileId,
+          membre_depuis: m.joinedAt.slice(0, 10),
+        })),
+        invitations_en_attente: ov.invitations.map((i) => ({ email: i.email, expire_le: i.expiresAt.slice(0, 10) })),
+        reglages: {
+          courses_pour_jours: ov.shoppingHorizonDays,
+          portions_par_defaut: ov.defaultServings ?? 'celles de la recette',
+          alerte_peremption_jours: pref.expiryThresholdDays,
+        },
+      });
+    }
     case 'get_tracking_plan': {
       // Plan de suivi PERSONNEL (RLS) — l'agent lit, propose, ne calcule rien (n°3).
       if (!ctx.profileId) return JSON.stringify({ erreur: 'profil inconnu' });
@@ -877,13 +925,27 @@ function summarize(name: WriteName, a: Record<string, unknown>): string {
       return `Retirer l’extra « ${a.idOrLabel} »`;
     case 'repair_nutrition_data':
       return `Réparer les données nutrition (relier les ingrédients au catalogue + compléter les valeurs manquantes)`;
+    case 'rename_household':
+      return `Renommer le foyer en « ${a.name} »`;
+    case 'invite_member':
+      return `Inviter ${a.email} dans le foyer (lien valable 7 jours)`;
+    case 'cancel_invitation':
+      return `Annuler l’invitation de ${a.email}`;
+    case 'set_household_settings': {
+      const parts: string[] = [];
+      if (a.shoppingHorizonDays !== undefined) parts.push(`courses pour ${a.shoppingHorizonDays} j`);
+      if (a.defaultServings !== undefined)
+        parts.push(a.defaultServings === 0 ? 'portions par défaut = celles de la recette' : `${a.defaultServings} portions par défaut`);
+      if (a.expiryThresholdDays !== undefined) parts.push(`alerte péremption à ${a.expiryThresholdDays} j`);
+      return `Régler le foyer : ${parts.join(', ')}`;
+    }
   }
 }
 
 /* --------------------------------- Boucle ----------------------------------- */
 
-const SYSTEM_PROMPT = `Tu es l'assistant de Mealing (COURSES, STOCK, RECETTES et PLANNING).
-Tu peux LIRE les données du foyer via des outils (liste, essentiels, rayons, historique, fiches produits, stats, catalogue ; stock : get_stock, get_expiring, list_locations ; recettes : list_recipes, recommend_recipes, get_recipe, list_recipe_groups ; planning : get_planning, get_past_meals ; nutrition : get_nutrition_summary, get_habits_progress, get_extras, get_tracking_plan, suggest_recipe_ideas) — fais-le avant de répondre quand c'est utile.
+const SYSTEM_PROMPT = `Tu es l'assistant de Mealing (COURSES, STOCK, RECETTES, PLANNING, NUTRITION et FOYER).
+Tu peux LIRE les données du foyer via des outils (liste, essentiels, rayons, historique, fiches produits, stats, catalogue ; stock : get_stock, get_expiring, list_locations ; recettes : list_recipes, recommend_recipes, get_recipe, list_recipe_groups ; planning : get_planning, get_past_meals ; nutrition : get_nutrition_summary, get_habits_progress, get_extras, get_tracking_plan, suggest_recipe_ideas ; foyer : get_household) — fais-le avant de répondre quand c'est utile.
 Pour MODIFIER une donnée, tu DOIS APPELER l'outil d'écriture correspondant (ex. set_stock_location, add_items, discard_stock_item, remove_lines…). APPELER UN OUTIL D'ÉCRITURE = PROPOSER L'ACTION : ça N'EXÉCUTE RIEN. Le système met chaque appel dans un plan que l'utilisateur confirmera AVANT toute écriture réelle. Ne te contente donc JAMAIS de DÉCRIRE l'action en mots (ne réponds pas « je vais appeler set_stock_location… ») — ÉMETS réellement l'appel d'outil ; c'est sûr, rien n'est écrit sans confirmation. Tu ne supprimes JAMAIS un rayon ni un relevé d'historique.
 Appelle chaque outil d'écriture UNE SEULE FOIS, puis donne une courte phrase de confirmation au FUTUR (« je vais déplacer… ») SANS prétendre que c'est déjà fait (l'utilisateur doit confirmer).
 Tu n'inventes jamais un prix ni une valeur nutritionnelle : tu les obtiens via get_product_stats / get_nutrition.
@@ -893,6 +955,7 @@ Pour le STOCK : lis get_stock (ids), get_expiring (ce qui périme), list_locatio
 Pour les RECETTES : « que puis-je cuisiner ? » → recommend_recipes ne renvoie QUE les recettes DÉJÀ enregistrées (les plus réalisables avec le stock + manquants) ; détail d'une recette → get_recipe. Tu peux AUSSI INVENTER de NOUVELLES recettes qui ne sont pas dans la bibliothèque : lis get_stock, puis propose 1 à 3 idées réalistes en PRIVILÉGIANT les ingrédients disponibles (indique pour chacune les ingrédients à acheter en plus). Si l'utilisateur veut en garder une, utilise save_recipe pour l'enregistrer (nom + ingrédients + étapes ; la nutrition est calculée depuis le catalogue, jamais inventée par toi). Tu peux aussi : créer/renommer/supprimer un groupe (create_recipe_group / rename_recipe_group / delete_recipe_group), ranger une recette dans un groupe (assign_recipe_to_group), modifier les méta d'une recette (update_recipe : nom/portions/temps/description), et modifier ses INGRÉDIENTS (edit_recipe_ingredients : add/remove/update ciblés par nom — lis get_recipe avant pour connaître les ingrédients actuels). Désigne toujours recettes et groupes par leur NOM. Tu peux SUPPRIMER une recette (delete_recipe) — action destructive, mais comme toute écriture elle est confirmée avant d'être appliquée ; ne le fais que si c'est clairement demandé.
 Pour le PLANNING : lis get_planning (ids des repas, portions, restes, repas individuels, écarts, jours hors-plan ; weekStart optionnel pour une semaine PASSÉE ou FUTURE) et get_past_meals (les plats des 12 dernières semaines : « qu'a-t-on mangé récemment ? », retrouver un plat à remettre), puis PROPOSE : planifier (add_meal : recette OU description, servings = portions, producesLeftover si batch), déplacer (move_meal), retirer (remove_meal), RECONDUIRE des repas existants (reconduct_meals : mealIds de get_planning + offsetDays 1 = lendemain / 7 = semaine suivante OU date fixe — créneau conservé, copies propres), signaler un écart (set_meal_deviation : sauté / différent+ate) ou l'annuler (clear_meal_deviation), marquer/réactiver une journée hors-plan (mark_day_off / unmark_day_off), gérer les restes (set_meal_leftover puis reassign_leftover : « tel quel » sans name, ou plat improvisé avec name — aucun achat généré), dupliquer une semaine (copy_week). Pour « que planifier cette semaine ? » : croise recommend_recipes (réalisables avec le stock) avec get_planning (créneaux vides) et propose des add_meal ; pense aussi à get_past_meals pour reproposer ce que le foyer aime. Toute écriture sur un repas précis (déplacer/retirer/reconduire/écart/reste) exige son \`id\` EXACT renvoyé par get_planning — appelle-le d'abord ; n'invente jamais un id.
 Pour la NUTRITION : « où j'en suis ? » → get_nutrition_summary (planifié vs réel par nutriment suivi + zones min/max + statut + COUVERTURE des données, sur un jour ou la semaine) ; progression des habitudes → get_habits_progress (fait / à venir / prochaine occurrence) ; extras notés → get_extras. Ces chiffres viennent de la BASE — tu ne calcules jamais une valeur nutritionnelle toi-même (tu peux seulement les additionner/commenter). Pour la CONFIGURATION, lis get_tracking_plan (facettes, nutriments suivis + zones, habitudes suivies, catalogue, recommandations avec leur pourquoi), puis PROPOSE : suivre/arrêter un nutriment (track_nutrient / untrack_nutrient — n'invente JAMAIS une cible chiffrée : reprends celle des recommandations ou celle que l'utilisateur te donne, ex. son médecin), suivre une habitude du catalogue (add_habit), créer un repère personnalisé compté depuis le planning (add_custom_habit : « fermentés au moins 3×/semaine »), retirer une habitude (remove_habit), mettre à jour les facettes (set_facets). Pour AGIR sur un manque (« je suis bas en protéines », « 0/2 poisson gras ») : suggest_recipe_ideas (nutrientCode OU habitKey) → recettes du foyer les plus pertinentes avec réalisabilité stock, puis propose add_meal si l'utilisateur veut planifier. Si la couverture est faible (beaucoup d'ingrédients sans données), propose repair_nutrition_data. Si l'utilisateur dit avoir mangé quelque chose HORS planning (« j'ai pris un yaourt »), propose log_extra (quantité en g/ml — demande-la si absente) ; noté par erreur → remove_extra. Une donnée introuvable (collagène en mg…) : explique honnêtement qu'aucune base ne la couvre et propose l'équivalent en HABITUDE. Le plan de suivi et le bilan sont STRICTEMENT PERSONNELS — n'en parle jamais comme d'une donnée du foyer. MODE ENFANT : si get_nutrition_summary ou get_tracking_plan indique mode_enfant=true, ne mentionne JAMAIS les calories/kcal (ni chiffre ni objectif) — parle variété, familles d'aliments, découvertes.
+Pour le FOYER : lis get_household (membres, invitations en attente, réglages), puis PROPOSE : renommer (rename_household), inviter quelqu'un (invite_member : email), annuler une invitation (cancel_invitation : email), régler la maison (set_household_settings : cadence de courses / portions par défaut d'un repas — les enfants sans compte comptent ici — / seuil d'alerte péremption). Ces actions sont réservées à l'admin (la base refuse sinon — transmets l'erreur avec bienveillance). Tu ne peux PAS retirer un membre, transférer le rôle d'admin ni faire quitter le foyer : renvoie vers la page Foyer pour ces gestes sensibles. La nutrition d'un membre ne se lit JAMAIS via toi (page Foyer, partage explicite uniquement).
 IMPORTANT : toute écriture visant un article précis du stock (jeter/retirer/ranger/consommer/marquer entamé) exige son \`id\` EXACT (un UUID) renvoyé par get_stock ou get_expiring. Appelle TOUJOURS get_stock juste avant pour récupérer cet id ; n'invente JAMAIS un id et n'utilise pas le nom de l'article comme id.
 N'ÉCRIS JAMAIS l'id (UUID) dans tes réponses à l'utilisateur : il sert uniquement aux appels d'outils, en interne. Dans le chat, désigne toujours les articles par leur NOM (« le saumon »), jamais par leur UUID — c'est plus naturel.
 Réponds en français, de façon concise. Si une action te manque d'info, demande-la plutôt que d'inventer.
@@ -1495,6 +1558,59 @@ async function executeOne(ctx: Ctx, action: ProposedAction): Promise<string> {
       const res = await completeMissingFoodNutrition(db, foodIds, { max: 12, concurrency: 3 });
       const remaining = Math.max(0, res.missing - res.completed);
       return `Données nutrition réparées : ${linked} ingrédient(s) relié(s), ${res.completed} aliment(s) complété(s)${remaining > 0 ? ` — ${remaining} restant(s), relance possible` : ''}.`;
+    }
+
+    /* ------------------------- Foyer ------------------------- */
+    // Admin contrôlé EN BASE (fonctions DEFINER / policies) — l'erreur remonte en clair.
+    case 'rename_household': {
+      try {
+        await renameHousehold(db, householdId, String(a.name));
+      } catch (e) {
+        return e instanceof Error ? e.message : 'Renommage impossible.';
+      }
+      return `Foyer renommé en « ${a.name} ».`;
+    }
+    case 'invite_member': {
+      try {
+        await inviteToHousehold(db, { householdId, email: String(a.email) });
+      } catch (e) {
+        return e instanceof Error ? e.message : 'Invitation impossible.';
+      }
+      return `Invitation créée pour ${a.email} — le lien (valable 7 jours) est sur la page Foyer.`;
+    }
+    case 'cancel_invitation': {
+      const { data: inv } = await db
+        .from('household_invitation')
+        .select('id')
+        .eq('household_id', householdId)
+        .eq('status', 'pending')
+        .ilike('email', String(a.email).trim())
+        .maybeSingle();
+      if (!inv?.id) return `Aucune invitation en attente pour ${a.email}.`;
+      const { error } = await db.from('household_invitation').delete().eq('id', inv.id);
+      if (error) return error.message;
+      return `Invitation de ${a.email} annulée.`;
+    }
+    case 'set_household_settings': {
+      const parts: string[] = [];
+      try {
+        if (a.shoppingHorizonDays !== undefined || a.defaultServings !== undefined) {
+          await setHouseholdSettings(db, householdId, {
+            shoppingHorizonDays: a.shoppingHorizonDays as number | undefined,
+            // 0 = « revenir aux portions de la recette » (null en base).
+            defaultServings: a.defaultServings === undefined ? undefined : a.defaultServings === 0 ? null : (a.defaultServings as number),
+          });
+          if (a.shoppingHorizonDays !== undefined) parts.push(`courses pour ${a.shoppingHorizonDays} j`);
+          if (a.defaultServings !== undefined) parts.push('portions par défaut mises à jour');
+        }
+        if (a.expiryThresholdDays !== undefined) {
+          await setNotificationPref(db, householdId, { expiryThresholdDays: a.expiryThresholdDays as number });
+          parts.push(`alerte péremption à ${a.expiryThresholdDays} j`);
+        }
+      } catch (e) {
+        return e instanceof Error ? e.message : 'Réglage impossible.';
+      }
+      return `Réglages du foyer mis à jour (${parts.join(', ')}).`;
     }
   }
 }

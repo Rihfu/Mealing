@@ -15,6 +15,7 @@ export * from './facets';
 export * from './habits';
 export * from './nutrition-suggest';
 export * from './nutrition-extras';
+export * from './nutrition-shared';
 export * from './shopping';
 export * from './shopping-history';
 export * from './shopping-stats';
