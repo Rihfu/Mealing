@@ -42,7 +42,7 @@ export async function sendTestPushAction(): Promise<{ sent: number; configured: 
     tag: 'mealing-test',
   };
   if (profile?.household_id) {
-    const digest = await getExpiryDigest(supabase, profile.household_id as string);
+    const digest = await getExpiryDigest(supabase, profile.household_id as string, userId);
     const real = buildExpiryDigestPayload(digest);
     if (real) payload = real;
   }

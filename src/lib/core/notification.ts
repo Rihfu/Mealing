@@ -61,6 +61,65 @@ export async function setNotificationPref(
   if (error) throw new Error(error.message);
 }
 
+/* ---------------------- Préférences PAR MEMBRE (Foyer V2) ---------------------- */
+
+/**
+ * Préférences de notification PERSONNELLES (RLS self, table profile_notification_pref).
+ * `expiryThresholdDays: null` = hériter du réglage foyer (qui reste la valeur par défaut).
+ * notifyCourses / notifyReminders : colonnes réservées (principe n°8), pas encore consommées.
+ */
+export interface ProfileNotificationPref {
+  expiryThresholdDays: number | null;
+  notifyExpiry: boolean;
+  notifyCourses: boolean;
+  notifyReminders: boolean;
+}
+
+const DEFAULT_PROFILE_PREF: ProfileNotificationPref = {
+  expiryThresholdDays: null,
+  notifyExpiry: true,
+  notifyCourses: true,
+  notifyReminders: true,
+};
+
+/** Préférences personnelles d'un profil (valeurs par défaut si aucune ligne). */
+export async function getProfileNotificationPref(
+  db: DB,
+  profileId: string,
+): Promise<ProfileNotificationPref> {
+  // maybeSingle() → data null tant que le membre n'a rien réglé (cas normal, pas d'unwrap).
+  const { data } = await db
+    .from('profile_notification_pref')
+    .select('expiry_threshold_days, notify_expiry, notify_courses, notify_reminders')
+    .eq('profile_id', profileId)
+    .maybeSingle();
+  if (!data) return DEFAULT_PROFILE_PREF;
+  return {
+    expiryThresholdDays: data.expiry_threshold_days,
+    notifyExpiry: data.notify_expiry ?? true,
+    notifyCourses: data.notify_courses ?? true,
+    notifyReminders: data.notify_reminders ?? true,
+  };
+}
+
+/** Met à jour (upsert) MES préférences. Les champs absents gardent leur valeur. */
+export async function setProfileNotificationPref(
+  db: DB,
+  profileId: string,
+  patch: Partial<ProfileNotificationPref>,
+): Promise<void> {
+  const row: Record<string, unknown> = { profile_id: profileId, updated_at: new Date().toISOString() };
+  if (patch.expiryThresholdDays !== undefined) {
+    row.expiry_threshold_days =
+      patch.expiryThresholdDays === null ? null : clampInt(patch.expiryThresholdDays, 1, 60);
+  }
+  if (patch.notifyExpiry !== undefined) row.notify_expiry = patch.notifyExpiry;
+  if (patch.notifyCourses !== undefined) row.notify_courses = patch.notifyCourses;
+  if (patch.notifyReminders !== undefined) row.notify_reminders = patch.notifyReminders;
+  const { error } = await db.from('profile_notification_pref').upsert(row, { onConflict: 'profile_id' });
+  if (error) throw new Error(error.message);
+}
+
 export type ExpirySeverity = 'expired' | 'urgent' | 'soon';
 
 export interface ExpiryDigestItem {
@@ -90,10 +149,25 @@ export interface ExpiryDigest {
  * Digest de péremption d'un foyer : articles à ≤ seuil jours (ou déjà périmés), classés
  * par sévérité, triés par péremption croissante. Dérivé de getStockWithExpiry (cache de
  * conservation, AUCUN appel IA). Sert la cloche in-app (Phase A) et le push (Phase B).
+ * `profileId` (Foyer V2) : applique le seuil PERSONNEL du membre s'il en a un,
+ * sinon le seuil du foyer (valeur par défaut).
  */
-export async function getExpiryDigest(db: DB, householdId: string): Promise<ExpiryDigest> {
-  const pref = await getNotificationPref(db, householdId);
-  const threshold = pref.expiryThresholdDays;
+export async function getExpiryDigest(
+  db: DB,
+  householdId: string,
+  profileId?: string,
+): Promise<ExpiryDigest> {
+  const [pref, personal] = await Promise.all([
+    getNotificationPref(db, householdId),
+    profileId ? getProfileNotificationPref(db, profileId) : Promise.resolve(null),
+  ]);
+  const threshold = personal?.expiryThresholdDays ?? pref.expiryThresholdDays;
+
+  // Alertes de péremption coupées par le membre → digest vide (cloche muette, pas de push).
+  if (personal && !personal.notifyExpiry) {
+    return { threshold, total: 0, expired: [], urgent: [], soon: [] };
+  }
+
   const items = await getStockWithExpiry(db, householdId); // déjà trié par daysRemaining asc
 
   const expired: ExpiryDigestItem[] = [];

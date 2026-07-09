@@ -15,6 +15,7 @@ import {
   setDisplayNameAction,
   setExpiryThresholdAction,
   setHouseholdSettingsAction,
+  setMyNotificationPrefAction,
   sharedNutritionAction,
   toggleNutritionShareAction,
   transferAdminAction,
@@ -45,12 +46,15 @@ function Flash({ text, tone }: { text: string; tone: 'ok' | 'error' }) {
 export function FoyerView({
   overview,
   expiryThresholdDays,
+  myPref,
   baseUrl,
   meId,
   welcome = false,
 }: {
   overview: HouseholdOverview;
   expiryThresholdDays: number;
+  /** MES préférences (perso) : seuil péremption (null = comme le foyer) + alertes. */
+  myPref: { expiryThresholdDays: number | null; notifyExpiry: boolean };
   baseUrl: string;
   meId: string;
   /** Vrai juste après l'acceptation d'une invitation (bandeau d'accueil). */
@@ -473,8 +477,8 @@ export function FoyerView({
               </label>
               <label className="flex items-center justify-between gap-3">
                 <span className="text-ink-soft">
-                  Alerte péremption
-                  <span className="block text-[11px]">articles à ≤ N jours</span>
+                  Alerte péremption (défaut)
+                  <span className="block text-[11px]">pour les membres sans réglage perso</span>
                 </span>
                 <select
                   className="field-input max-w-[11rem] py-1.5"
@@ -490,6 +494,62 @@ export function FoyerView({
                     </option>
                   ))}
                 </select>
+              </label>
+            </div>
+          </section>
+
+          {/* Mes préférences (perso — POV membre, Foyer V2) */}
+          <section className="rounded-2xl border border-line bg-surface p-4 shadow-soft">
+            <h2 className="mb-1 font-display text-lg font-semibold">Mes préférences</h2>
+            <p className="mb-3 text-xs text-ink-soft">Personnelles — chaque membre règle les siennes.</p>
+            {flash?.zone === 'myprefs' && <Flash text={flash.text} tone={flash.tone} />}
+            <div className="flex flex-col gap-3 text-sm">
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-ink-soft">
+                  Mon alerte péremption
+                  <span className="block text-[11px]">m&rsquo;alerter à ≤ N jours</span>
+                </span>
+                <select
+                  className="field-input max-w-[11rem] py-1.5"
+                  value={myPref.expiryThresholdDays ?? ''}
+                  disabled={pending}
+                  onChange={(e) =>
+                    run('myprefs', 'Préférence enregistrée ✓', () =>
+                      setMyNotificationPrefAction({
+                        expiryThresholdDays: e.target.value === '' ? null : Number(e.target.value),
+                      }),
+                    )
+                  }
+                >
+                  <option value="">Comme le foyer ({expiryThresholdDays} j)</option>
+                  {[1, 2, 3, 5, 7, 10, 14].map((n) => (
+                    <option key={n} value={n}>
+                      {n} jour{n > 1 ? 's' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-ink-soft">
+                  Alertes de péremption
+                  <span className="block text-[11px]">cloche et notifications</span>
+                </span>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() =>
+                    run('myprefs', myPref.notifyExpiry ? 'Alertes désactivées.' : 'Alertes activées ✓', () =>
+                      setMyNotificationPrefAction({ notifyExpiry: !myPref.notifyExpiry }),
+                    )
+                  }
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+                    myPref.notifyExpiry
+                      ? 'bg-sage-tint text-green-strong'
+                      : 'border border-line text-ink-soft hover:bg-sage-tint/50'
+                  }`}
+                >
+                  {myPref.notifyExpiry ? 'activées ✓' : 'désactivées'}
+                </button>
               </label>
             </div>
           </section>

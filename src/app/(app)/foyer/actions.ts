@@ -14,6 +14,7 @@ import {
   setHouseholdSettings,
   setMyDisplayName,
   setNotificationPref,
+  setProfileNotificationPref,
   getSharedNutritionWeek,
   type SharedNutritionWeek,
 } from '@/lib/core';
@@ -153,6 +154,21 @@ export async function setExpiryThresholdAction(days: number): Promise<ActionResu
     await setNotificationPref(supabase, householdId, { expiryThresholdDays: days });
   } catch (e) {
     return fail(e, 'Réglage non enregistré.');
+  }
+  revalidatePath('/foyer');
+  return { ok: true };
+}
+
+/** MES préférences de notification (perso — RLS self) : seuil péremption + alertes. */
+export async function setMyNotificationPrefAction(patch: {
+  expiryThresholdDays?: number | null;
+  notifyExpiry?: boolean;
+}): Promise<ActionResult> {
+  try {
+    const { supabase, userId } = await requireHousehold();
+    await setProfileNotificationPref(supabase, userId, patch);
+  } catch (e) {
+    return fail(e, 'Préférence non enregistrée.');
   }
   revalidatePath('/foyer');
   return { ok: true };

@@ -428,7 +428,7 @@ async function runReadTool(ctx: Ctx, name: string, args: Record<string, unknown>
       );
     }
     case 'get_expiring': {
-      const d = await getExpiryDigest(ctx.db, ctx.householdId);
+      const d = await getExpiryDigest(ctx.db, ctx.householdId, ctx.profileId);
       const fmt = (arr: typeof d.expired) => arr.map((i) => ({ id: i.id, nom: i.name, jours: i.daysRemaining }));
       return JSON.stringify({ seuil: d.threshold, total: d.total, perimes: fmt(d.expired), urgents: fmt(d.urgent), bientot: fmt(d.soon) });
     }
