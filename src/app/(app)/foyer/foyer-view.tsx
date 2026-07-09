@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 // Types uniquement (erasés au build) — ne JAMAIS importer les modules core en valeur
 // depuis un composant client (chaîne server-only via le barrel, cf. convention Recettes).
 import type { HouseholdOverview } from '@/lib/core/household';
@@ -46,12 +47,17 @@ export function FoyerView({
   expiryThresholdDays,
   baseUrl,
   meId,
+  welcome = false,
 }: {
   overview: HouseholdOverview;
   expiryThresholdDays: number;
   baseUrl: string;
   meId: string;
+  /** Vrai juste après l'acceptation d'une invitation (bandeau d'accueil). */
+  welcome?: boolean;
 }) {
+  const router = useRouter();
+  const [showWelcome, setShowWelcome] = useState(welcome);
   const [pending, startTransition] = useTransition();
   const [flash, setFlash] = useState<{ zone: string; text: string; tone: 'ok' | 'error' } | null>(null);
 
@@ -98,6 +104,32 @@ export function FoyerView({
 
   return (
     <div className="flex flex-col gap-6">
+      {showWelcome && (
+        <section className="rounded-2xl border border-sage bg-sage-tint/60 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold">
+                Bienvenue dans {overview.name} 👋
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-soft">
+                Tu partages maintenant le planning des repas, le stock, la liste de courses et les
+                recettes avec {overview.members.length > 1 ? 'la maisonnée' : 'ce foyer'}. Ta
+                nutrition reste <strong>privée</strong> tant que tu ne la partages pas explicitement,
+                membre par membre — tu peux configurer ton suivi sur la page Nutrition.
+              </p>
+            </div>
+            <button
+              className="shrink-0 rounded-full border border-line px-2.5 py-1 text-xs font-bold text-ink-soft hover:bg-surface"
+              onClick={() => {
+                setShowWelcome(false);
+                router.replace('/foyer');
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </section>
+      )}
       <div>
         {editingName ? (
           <form
@@ -308,7 +340,17 @@ export function FoyerView({
                   onSubmit={(e) => {
                     e.preventDefault();
                     const email = inviteEmail;
-                    run('invite', `Invitation créée pour ${email} ✓`, () => inviteMemberAction(email));
+                    // Message adapté : email réellement parti vs repli « lien à transmettre ».
+                    startTransition(async () => {
+                      try {
+                        const res = await inviteMemberAction(email);
+                        if (!res.ok) notify('invite', res.error, 'error');
+                        else if (res.emailSent) notify('invite', `Invitation envoyée à ${email} ✓`);
+                        else notify('invite', `Invitation créée — transmets le lien à ${email}.`);
+                      } catch {
+                        notify('invite', 'Connexion impossible — réessaie.', 'error');
+                      }
+                    });
                     setInviteEmail('');
                   }}
                 >
@@ -325,8 +367,8 @@ export function FoyerView({
                   </button>
                 </form>
                 <p className="mt-3 text-xs leading-relaxed text-ink-soft">
-                  Le lien est valable 7 jours. L&rsquo;envoi automatique d&rsquo;email n&rsquo;est pas encore
-                  configuré : transmets le lien généré.
+                  Le lien est valable 7 jours. Tu peux aussi le copier ci-dessous pour le transmettre
+                  toi-même.
                 </p>
               </>
             ) : (
@@ -353,9 +395,26 @@ export function FoyerView({
                       )}
                     </div>
                     <p className="mt-1 text-[11px] text-ink-soft">expire le {fmtDate(inv.expiresAt)}</p>
-                    <p className="mt-1.5 break-all text-xs text-ink-soft">
-                      {baseUrl}/invitations/accept?token={inv.token}
-                    </p>
+                    <div className="mt-1.5 flex items-start gap-2">
+                      <p className="min-w-0 flex-1 break-all text-xs text-ink-soft">
+                        {baseUrl}/invitations/accept?token={inv.token}
+                      </p>
+                      <button
+                        className="shrink-0 rounded-full border border-line px-2.5 py-1 text-[11px] font-bold text-ink-soft hover:bg-sage-tint"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(
+                              `${baseUrl}/invitations/accept?token=${inv.token}`,
+                            );
+                            notify('invite', 'Lien copié ✓');
+                          } catch {
+                            notify('invite', 'Copie impossible — sélectionne le lien.', 'error');
+                          }
+                        }}
+                      >
+                        Copier le lien
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>

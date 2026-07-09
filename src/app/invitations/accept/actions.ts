@@ -17,5 +17,6 @@ export async function acceptInvitationAction(formData: FormData): Promise<void> 
     ok = false;
   }
 
-  redirect(ok ? '/planning' : `/invitations/accept?token=${token}&error=1`);
+  // Succès → page Foyer avec le bandeau d'accueil (qui est là, ce qui est partagé).
+  redirect(ok ? '/foyer?welcome=1' : `/invitations/accept?token=${token}&error=1`);
 }

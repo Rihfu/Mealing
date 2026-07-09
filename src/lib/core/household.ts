@@ -1,5 +1,6 @@
 import type { DB } from './types';
 import { unwrap } from './types';
+import { buildInvitationEmail, getEmailProvider, resolveSiteOrigin } from '@/lib/providers/email';
 
 /** Identifiant de l'utilisateur courant (lève si non authentifié). */
 async function requireUserId(db: DB): Promise<string> {
@@ -33,13 +34,15 @@ export async function createHousehold(db: DB, params: { name: string }): Promise
 }
 
 /**
- * Crée une invitation réelle au foyer (email + acceptation), specs 3.6.
- * Le token retourné est destiné au lien d'invitation envoyé par email.
+ * Crée une invitation réelle au foyer (email + acceptation), specs 3.6, puis tente
+ * l'ENVOI de l'email d'invitation (best-effort via EmailProvider : sans clé configurée
+ * ou en cas d'échec, l'invitation reste valide et le lien reste à transmettre à la main).
+ * `origin` = origine publique du site (headers de la requête) ; repli env sinon.
  */
 export async function inviteToHousehold(
   db: DB,
-  params: { householdId: string; email: string },
-): Promise<{ invitationId: string; token: string }> {
+  params: { householdId: string; email: string; origin?: string },
+): Promise<{ invitationId: string; token: string; emailSent: boolean }> {
   const userId = await requireUserId(db);
 
   const row = unwrap(
@@ -54,7 +57,25 @@ export async function inviteToHousehold(
       .single(),
   ) as { id: string; token: string };
 
-  return { invitationId: row.id, token: row.token };
+  let emailSent = false;
+  const siteOrigin = resolveSiteOrigin(params.origin);
+  if (siteOrigin) {
+    // Contexte du template (best-effort : un échec de lecture n'empêche pas l'envoi).
+    const [hhRes, meRes] = await Promise.all([
+      db.from('household').select('name').eq('id', params.householdId).maybeSingle(),
+      db.from('profile').select('display_name').eq('id', userId).maybeSingle(),
+    ]);
+    const tpl = buildInvitationEmail({
+      acceptUrl: `${siteOrigin}/invitations/accept?token=${row.token}`,
+      householdName: (hhRes.data?.name as string | undefined) ?? 'notre foyer',
+      inviterName: (meRes.data?.display_name as string | null | undefined) ?? undefined,
+      siteOrigin,
+    });
+    const res = await getEmailProvider().sendTransactional({ to: params.email, ...tpl });
+    emailSent = res.sent;
+  }
+
+  return { invitationId: row.id, token: row.token, emailSent };
 }
 
 /**

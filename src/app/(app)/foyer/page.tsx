@@ -3,14 +3,19 @@ import { getAuthContext } from '@/lib/auth';
 import { getHouseholdOverview, getNotificationPref } from '@/lib/core';
 import { FoyerView } from './foyer-view';
 
-export default async function FoyerPage() {
+export default async function FoyerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ welcome?: string }>;
+}) {
   const { supabase, userId, profile } = await getAuthContext();
   const householdId = profile?.household_id as string;
   const me = userId as string;
 
-  const [overview, pref] = await Promise.all([
+  const [overview, pref, { welcome }] = await Promise.all([
     getHouseholdOverview(supabase, householdId),
     getNotificationPref(supabase, householdId),
+    searchParams,
   ]);
 
   const h = await headers();
@@ -23,6 +28,7 @@ export default async function FoyerPage() {
       expiryThresholdDays={pref.expiryThresholdDays}
       baseUrl={`${proto}://${host}`}
       meId={me}
+      welcome={welcome === '1'}
     />
   );
 }

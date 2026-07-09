@@ -322,7 +322,7 @@ const WRITE_TOOLS: ToolDefinition[] = [
   { name: 'remove_extra', description: 'Retire un extra noté par erreur (id de get_extras, ou libellé de l’aliment — le plus récent des 7 derniers jours est retiré).', parameters: obj({ idOrLabel: str() }, ['idOrLabel']) },
   { name: 'repair_nutrition_data', description: 'Répare la chaîne de données nutrition : relie au catalogue les ingrédients de recettes en texte libre + complète les valeurs manquantes depuis USDA/OFF (jamais l’IA). À proposer si la couverture (get_nutrition_summary) est faible. Relançable.', parameters: obj({}) },
   { name: 'rename_household', description: 'Renomme le foyer (réservé à l’admin — la base refuse sinon).', parameters: obj({ name: str('nouveau nom') }, ['name']) },
-  { name: 'invite_member', description: 'Invite quelqu’un dans le foyer par email (admin). Le lien d’invitation (valable 7 jours) apparaît sur la page Foyer.', parameters: obj({ email: str() }, ['email']) },
+  { name: 'invite_member', description: 'Invite quelqu’un dans le foyer par email (admin). L’email d’invitation est envoyé automatiquement si configuré ; le lien (valable 7 jours) apparaît aussi sur la page Foyer.', parameters: obj({ email: str() }, ['email']) },
   { name: 'cancel_invitation', description: 'Annule une invitation en attente (admin), désignée par l’email invité (voir get_household).', parameters: obj({ email: str() }, ['email']) },
   { name: 'set_household_settings', description: 'Règle le foyer : shoppingHorizonDays (courses pour N jours, 1-30), defaultServings (portions par défaut d’un repas de foyer, 1-24 ; 0 = revenir aux portions de la recette), expiryThresholdDays (alerte péremption à ≤ N jours, 1-60). Fournis seulement les réglages à changer.', parameters: obj({ shoppingHorizonDays: num(), defaultServings: num(), expiryThresholdDays: num() }) },
 ];
@@ -1571,12 +1571,17 @@ async function executeOne(ctx: Ctx, action: ProposedAction): Promise<string> {
       return `Foyer renommé en « ${a.name} ».`;
     }
     case 'invite_member': {
+      // Origine résolue via l'env (pas de headers ici) — repli lien sur la page Foyer.
+      let sent = false;
       try {
-        await inviteToHousehold(db, { householdId, email: String(a.email) });
+        const res = await inviteToHousehold(db, { householdId, email: String(a.email) });
+        sent = res.emailSent;
       } catch (e) {
         return e instanceof Error ? e.message : 'Invitation impossible.';
       }
-      return `Invitation créée pour ${a.email} — le lien (valable 7 jours) est sur la page Foyer.`;
+      return sent
+        ? `Invitation envoyée par email à ${a.email} (valable 7 jours).`
+        : `Invitation créée pour ${a.email} — le lien (valable 7 jours) est sur la page Foyer.`;
     }
     case 'cancel_invitation': {
       const { data: inv } = await db

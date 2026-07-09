@@ -1,7 +1,7 @@
 import 'server-only';
 import { serverEnv } from '@/lib/env.server';
 import { brevoProvider } from './brevo';
-import type { EmailProvider, SendEmailResult, TransactionalEmail } from './types';
+import type { EmailProvider, SendEmailResult } from './types';
 
 export type { EmailProvider, SendEmailResult, TransactionalEmail } from './types';
 export { buildInvitationEmail } from './templates';

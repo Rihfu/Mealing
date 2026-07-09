@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { getAuthContext } from '@/lib/auth';
@@ -52,17 +53,30 @@ export async function setDisplayNameAction(name: string): Promise<ActionResult> 
   return { ok: true };
 }
 
-export async function inviteMemberAction(email: string): Promise<ActionResult> {
+/**
+ * Invite par email. `emailSent` distingue l'envoi réel (Brevo configuré) du repli
+ * « lien à transmettre » — l'UI adapte son message, l'invitation est valide dans les 2 cas.
+ */
+export async function inviteMemberAction(
+  email: string,
+): Promise<{ ok: true; emailSent: boolean } | { ok: false; error: string }> {
   const parsed = z.string().email().safeParse(email.trim());
   if (!parsed.success) return { ok: false, error: 'Adresse email invalide.' };
   try {
     const { supabase, householdId } = await requireHousehold();
-    await inviteToHousehold(supabase, { householdId, email: parsed.data });
+    const h = await headers();
+    const host = h.get('host') ?? 'localhost:3000';
+    const proto = host.startsWith('localhost') || host.startsWith('127.') ? 'http' : 'https';
+    const { emailSent } = await inviteToHousehold(supabase, {
+      householdId,
+      email: parsed.data,
+      origin: `${proto}://${host}`,
+    });
+    revalidatePath('/foyer');
+    return { ok: true, emailSent };
   } catch (e) {
-    return fail(e, 'Invitation impossible.');
+    return { ok: false, error: e instanceof Error ? e.message : 'Invitation impossible.' };
   }
-  revalidatePath('/foyer');
-  return { ok: true };
 }
 
 export async function cancelInvitationAction(id: string): Promise<ActionResult> {
