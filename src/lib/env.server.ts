@@ -19,6 +19,14 @@ const serverSchema = z.object({
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().optional(),
+  // Email transactionnel applicatif (invitations de foyer) — OPTIONNELLES : sans clé,
+  // l'envoi est no-op et l'UI garde le repli « lien à transmettre » (zéro régression).
+  BREVO_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('no-reply@mealings.app'),
+  EMAIL_FROM_NAME: z.string().default('Mealings'),
+  // Origine publique du site (liens absolus dans les emails) — repli si la requête
+  // HTTP n'est pas disponible (agent, scripts). Ex. https://mealings.app
+  SITE_URL: z.string().optional(),
 });
 
 export const serverEnv = serverSchema.parse({
@@ -29,4 +37,8 @@ export const serverEnv = serverSchema.parse({
   VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
   VAPID_SUBJECT: process.env.VAPID_SUBJECT,
+  BREVO_API_KEY: process.env.BREVO_API_KEY,
+  EMAIL_FROM: process.env.EMAIL_FROM,
+  EMAIL_FROM_NAME: process.env.EMAIL_FROM_NAME,
+  SITE_URL: process.env.NEXT_PUBLIC_SITE_URL ?? process.env.SITE_URL,
 });

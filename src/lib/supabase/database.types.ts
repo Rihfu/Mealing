@@ -495,6 +495,90 @@ export type Database = {
           },
         ]
       }
+      household_message: {
+        Row: {
+          author_profile_id: string | null
+          body: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          household_id: string
+          id: string
+          kind: string
+          meta: Json | null
+        }
+        Insert: {
+          author_profile_id?: string | null
+          body: string
+          created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
+          household_id: string
+          id?: string
+          kind?: string
+          meta?: Json | null
+        }
+        Update: {
+          author_profile_id?: string | null
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
+          household_id?: string
+          id?: string
+          kind?: string
+          meta?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "household_message_author_profile_id_fkey"
+            columns: ["author_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "household_message_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      household_message_read: {
+        Row: {
+          household_id: string
+          last_read_at: string
+          profile_id: string
+        }
+        Insert: {
+          household_id: string
+          last_read_at?: string
+          profile_id: string
+        }
+        Update: {
+          household_id?: string
+          last_read_at?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "household_message_read_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "household"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "household_message_read_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       household_rayon_order: {
         Row: {
           household_id: string
@@ -1073,6 +1157,44 @@ export type Database = {
             foreignKeyName: "profile_habit_tracking_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profile_notification_pref: {
+        Row: {
+          created_at: string
+          expiry_threshold_days: number | null
+          notify_courses: boolean
+          notify_expiry: boolean
+          notify_reminders: boolean
+          profile_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          expiry_threshold_days?: number | null
+          notify_courses?: boolean
+          notify_expiry?: boolean
+          notify_reminders?: boolean
+          profile_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          expiry_threshold_days?: number | null
+          notify_courses?: boolean
+          notify_expiry?: boolean
+          notify_reminders?: boolean
+          profile_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_notification_pref_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
             referencedRelation: "profile"
             referencedColumns: ["id"]
           },
