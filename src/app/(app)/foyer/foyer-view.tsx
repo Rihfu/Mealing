@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 // Types uniquement (erasés au build) — ne JAMAIS importer les modules core en valeur
 // depuis un composant client (chaîne server-only via le barrel, cf. convention Recettes).
 import type { HouseholdOverview } from '@/lib/core/household';
+import type { ChatMessage } from '@/lib/core/household-chat';
 import type { SharedNutritionWeek } from '@/lib/core/nutrition-shared';
+import { HouseholdChat } from './chat';
 import {
   cancelInvitationAction,
   inviteMemberAction,
@@ -47,6 +49,7 @@ export function FoyerView({
   overview,
   expiryThresholdDays,
   myPref,
+  chatInitial,
   baseUrl,
   meId,
   welcome = false,
@@ -55,6 +58,8 @@ export function FoyerView({
   expiryThresholdDays: number;
   /** MES préférences (perso) : seuil péremption (null = comme le foyer) + alertes. */
   myPref: { expiryThresholdDays: number | null; notifyExpiry: boolean };
+  /** Amorçage du chat (le temps réel prend le relais côté client). */
+  chatInitial: { messages: ChatMessage[]; hasMore: boolean };
   baseUrl: string;
   meId: string;
   /** Vrai juste après l'acceptation d'une invitation (bandeau d'accueil). */
@@ -289,6 +294,15 @@ export function FoyerView({
               })}
             </ul>
           </section>
+
+          {/* ------------------------- Discussion ------------------------- */}
+          <HouseholdChat
+            householdId={overview.id}
+            meId={meId}
+            memberNames={Object.fromEntries(overview.members.map((m) => [m.id, m.displayName]))}
+            initialMessages={chatInitial.messages}
+            initialHasMore={chatInitial.hasMore}
+          />
 
           {/* ------------------------- Qui voit quoi ------------------------- */}
           <section className="rounded-2xl border border-butter bg-butter-tint/60 p-4">

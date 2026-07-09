@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { FoyerUnreadBadge } from './foyer-unread-badge';
 
 const NAV = [
   ['/planning', 'Planning'],
@@ -22,6 +23,7 @@ export function NavTabs() {
         return (
           <Link key={href} href={href} className="nav-pill lg:px-4 lg:py-2 lg:text-sm" data-active={active}>
             {label}
+            {href === '/foyer' && <FoyerUnreadBadge />}
           </Link>
         );
       })}

@@ -30,4 +30,5 @@ export * from './stock-stats';
 export * from './meals';
 export * from './consumption';
 export * from './household';
+export * from './household-chat';
 export * from './conversations';
