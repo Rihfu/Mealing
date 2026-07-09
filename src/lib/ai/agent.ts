@@ -80,6 +80,7 @@ import {
   setHouseholdSettings,
   inviteToHousehold,
   getNotificationPref,
+  getChatUnreadCount,
   setNotificationPref,
   // nutrition (lecture riche — agrégats/habitudes/extras : valeurs LUES en base, jamais calculées par l'IA)
   aggregatePeriodNutrition,
@@ -271,7 +272,7 @@ const READ_TOOLS: ToolDefinition[] = [
   { name: 'get_extras', description: 'Extras HORS-PLAN notés par l’utilisateur (aliment, quantité, date) sur une période. from/to optionnels (YYYY-MM-DD, défaut aujourd’hui).', parameters: obj({ from: str('YYYY-MM-DD (optionnel)'), to: str('YYYY-MM-DD (optionnel)') }) },
   { name: 'suggest_recipe_ideas', description: 'Idées de recettes DU FOYER pour combler un manque : nutrientCode (ex. protein, fiber) → les plus riches par portion ; OU habitKey (ex. poisson_gras, legumineuse) → celles qui contiennent un aliment concerné. Réalisabilité stock annotée. Enchaîne avec add_meal si l’utilisateur veut planifier.', parameters: obj({ nutrientCode: str('code du nutriment (optionnel)'), habitKey: str('clé ou libellé d’habitude (optionnel)') }) },
   { name: 'get_tracking_plan', description: 'Plan de suivi NUTRITION personnel de l’utilisateur : facettes cochées, nutriments suivis (avec zones), habitudes suivies (avec id), habitudes disponibles au catalogue et recommandations non suivies (avec leur pourquoi). À lire AVANT de configurer un suivi.', parameters: obj({}) },
-  { name: 'get_household', description: 'Le FOYER : nom, membres (prénom, admin, moi), invitations en attente (email + expiration) et réglages (cadence de courses, portions par défaut d’un repas, seuil d’alerte péremption). À lire avant toute action foyer.', parameters: obj({}) },
+  { name: 'get_household', description: 'Le FOYER : nom, membres (prénom, admin, moi), invitations en attente (email + expiration), réglages (cadence de courses, portions par défaut d’un repas, seuil d’alerte péremption) et nombre de messages non lus dans la discussion du foyer (tu ne peux PAS y poster — renvoie vers la page Foyer). À lire avant toute action foyer.', parameters: obj({}) },
 ];
 
 const WRITE_TOOLS: ToolDefinition[] = [
@@ -733,9 +734,12 @@ async function runReadTool(ctx: Ctx, name: string, args: Record<string, unknown>
       return JSON.stringify({ erreur: 'nutrientCode ou habitKey requis' });
     }
     case 'get_household': {
-      const [ov, pref] = await Promise.all([
+      const [ov, pref, unread] = await Promise.all([
         getHouseholdOverview(ctx.db, ctx.householdId),
         getNotificationPref(ctx.db, ctx.householdId),
+        ctx.profileId
+          ? getChatUnreadCount(ctx.db, ctx.householdId, ctx.profileId).catch(() => 0)
+          : Promise.resolve(0),
       ]);
       return JSON.stringify({
         nom: ov.name,
@@ -752,6 +756,8 @@ async function runReadTool(ctx: Ctx, name: string, args: Record<string, unknown>
           portions_par_defaut: ov.defaultServings ?? 'celles de la recette',
           alerte_peremption_jours: pref.expiryThresholdDays,
         },
+        // Chat de foyer (lecture seule — l'agent ne poste jamais dans la discussion).
+        messages_non_lus: unread,
       });
     }
     case 'get_tracking_plan': {
