@@ -243,31 +243,6 @@ export function FoyerView({
                     <div className="flex flex-wrap items-center gap-2">
                       {!isMe && (
                         <>
-                          <button
-                            disabled={pending}
-                            onClick={() =>
-                              run(
-                                'members',
-                                iShareWith.has(m.id) ? 'Partage désactivé.' : 'Nutrition partagée ✓',
-                                () => toggleNutritionShareAction(m.id, !iShareWith.has(m.id)),
-                              )
-                            }
-                            className={`rounded-full px-3 py-1.5 text-xs font-bold ${
-                              iShareWith.has(m.id)
-                                ? 'bg-sage-tint text-green-strong'
-                                : 'border border-line text-ink-soft hover:bg-sage-tint/50'
-                            }`}
-                          >
-                            {iShareWith.has(m.id) ? 'nutrition partagée ✓' : 'partager ma nutrition'}
-                          </button>
-                          {sharedWithMe.has(m.id) && (
-                            <button
-                              className="rounded-full border border-sage px-3 py-1.5 text-xs font-bold text-sage-deep hover:bg-sage-tint"
-                              onClick={() => setNutriFor({ id: m.id, name: m.displayName })}
-                            >
-                              voir sa nutrition
-                            </button>
-                          )}
                           {overview.isAdmin && (
                             <>
                               <button
@@ -329,6 +304,64 @@ export function FoyerView({
                 membre par membre.
               </li>
             </ul>
+
+            {others.length > 0 && (
+              <>
+                {flash?.zone === 'shares' && <div className="mt-2"><Flash text={flash.text} tone={flash.tone} /></div>}
+                <ul className="mt-3 divide-y divide-butter/70 rounded-xl border border-butter bg-surface/70">
+                  {others.map((m) => {
+                    const iShare = iShareWith.has(m.id);
+                    const sharesBack = sharedWithMe.has(m.id);
+                    return (
+                      <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span
+                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-extrabold ${avatarStyle(m.id)}`}
+                          >
+                            {(m.displayName.trim()[0] || '?').toUpperCase()}
+                          </span>
+                          <span className="truncate text-sm font-semibold">{m.displayName}</span>
+                        </span>
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            disabled={pending}
+                            onClick={() =>
+                              run('shares', iShare ? 'Partage retiré.' : `Nutrition partagée avec ${m.displayName} ✓`, () =>
+                                toggleNutritionShareAction(m.id, !iShare),
+                              )
+                            }
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                              iShare
+                                ? 'bg-sage-tint text-green-strong'
+                                : 'border border-line text-ink-soft hover:bg-sage-tint/50'
+                            }`}
+                            title="Ma nutrition — visible par ce membre ? (réversible à tout moment)"
+                          >
+                            {iShare ? 'voit ma nutrition ✓' : 'ne voit pas ma nutrition'}
+                          </button>
+                          {sharesBack ? (
+                            <button
+                              className="rounded-full border border-sage px-2.5 py-1 text-[11px] font-bold text-sage-deep hover:bg-sage-tint"
+                              onClick={() => setNutriFor({ id: m.id, name: m.displayName })}
+                            >
+                              me partage la sienne — voir
+                            </button>
+                          ) : (
+                            <span className="rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold text-ink-soft/70">
+                              ne me partage rien
+                            </span>
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-soft">
+                  Le partage se fait dans un seul sens à la fois : chacun décide pour sa propre nutrition,
+                  et peut retirer son partage à tout moment.
+                </p>
+              </>
+            )}
           </section>
         </div>
 
